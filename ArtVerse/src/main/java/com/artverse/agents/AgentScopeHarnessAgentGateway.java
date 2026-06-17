@@ -72,7 +72,8 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
 
     private HarnessAgent getOrCreateAgent(AgentRunRequest request) {
         String keySource = (request.userApiKey() != null && !request.userApiKey().isBlank()) ? "user" : "env";
-        String agentKey = "story-" + request.storyId() + "-" + request.taskType().name().toLowerCase() + "-" + keySource;
+        String agentKey = "story-" + request.storyId() + "-chapter-" + request.chapterId()
+                + "-" + request.taskType().name().toLowerCase() + "-" + keySource;
         return agentCache.computeIfAbsent(agentKey, k -> buildAgent(request));
     }
 
@@ -86,7 +87,10 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
                 .compaction(compactionConfig)
                 .build();
         if (request.taskType() == AgentTaskType.MANGA_DIRECTOR) {
-            agent.getToolkit().registerTool(mangaAgentToolFactory.create(String.valueOf(request.variables().getOrDefault("coze_api_key", ""))));
+            agent.getToolkit().registerTool(mangaAgentToolFactory.create(
+                    String.valueOf(request.variables().getOrDefault("coze_api_key", "")),
+                    request.chapterId()
+            ));
         }
         return agent;
     }

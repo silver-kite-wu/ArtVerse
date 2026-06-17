@@ -99,6 +99,7 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\StoryRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\UserApiKeyRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\UserRepository.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\prompt\MangaPromptPolicy.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\sse\SseEvent.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\storage\MinioStorageService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\storage\ObjectStorageService.java

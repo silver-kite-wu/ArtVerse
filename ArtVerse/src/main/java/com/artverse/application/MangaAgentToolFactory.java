@@ -23,14 +23,15 @@ public class MangaAgentToolFactory {
     private final MangaImageRepository mangaImageRepository;
     private final SceneService sceneService;
 
-    public Object create(String cozeApiKey) {
-        return new Tools(cozeApiKey);
+    public Object create(String cozeApiKey, Long chapterId) {
+        return new Tools(cozeApiKey, chapterId);
     }
 
     @RequiredArgsConstructor
     public class Tools {
 
         private final String cozeApiKey;
+        private final Long chapterId;
 
         @Tool(
                 name = "get_chapter_context",
@@ -38,17 +39,16 @@ public class MangaAgentToolFactory {
                 readOnly = true
         )
         @Transactional(readOnly = true)
-        public Map<String, Object> getChapterContext(
-                @ToolParam(name = "chapter_id", description = "Chapter id") Long chapterId) {
+        public Map<String, Object> getChapterContext() {
             Chapter chapter = chapterRepository.findByIdForIdempotency(chapterId)
                     .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
             List<String> scenes = sceneService.getScenes(chapterId);
             List<MangaImage> images = mangaImageRepository.findByChapterIdOrderByImageNumberAsc(chapterId);
 
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("chapter_id", chapter.getId());
-            result.put("story_id", chapter.getStory().getId());
+            result.put("story_title", chapter.getStory().getTitle());
             result.put("chapter_number", chapter.getChapterNumber());
+            result.put("chapter_display_name", "第" + chapter.getChapterNumber() + "话");
             result.put("image_count", chapter.getImageCount());
             result.put("color_mode", chapter.getColorMode().name().toLowerCase());
             result.put("manga_style", chapter.getStory().getMangaStyle());
@@ -72,11 +72,10 @@ public class MangaAgentToolFactory {
                 concurrencySafe = false
         )
         @Transactional
-        public Map<String, Object> generateStoryboard(
-                @ToolParam(name = "chapter_id", description = "Chapter id") Long chapterId) {
+        public Map<String, Object> generateStoryboard() {
             List<String> scenes = sceneService.generateScenes(chapterId, cozeApiKey);
             return Map.of(
-                    "chapter_id", chapterId,
+                    "chapter_display_name", chapterDisplayName(chapterId),
                     "scenes_count", scenes.size(),
                     "scenes", scenes
             );
@@ -89,15 +88,20 @@ public class MangaAgentToolFactory {
         )
         @Transactional
         public Map<String, Object> saveStoryboard(
-                @ToolParam(name = "chapter_id", description = "Chapter id") Long chapterId,
                 @ToolParam(name = "scenes", description = "Complete storyboard scene list") List<String> scenes) {
             List<String> updated = sceneService.updateScenes(chapterId, scenes);
             return Map.of(
-                    "chapter_id", chapterId,
+                    "chapter_display_name", chapterDisplayName(chapterId),
                     "scenes_count", updated.size(),
                     "scenes", updated
             );
         }
+    }
+
+    private String chapterDisplayName(Long chapterId) {
+        return chapterRepository.findByIdForIdempotency(chapterId)
+                .map(chapter -> "第" + chapter.getChapterNumber() + "话")
+                .orElse("当前章节");
     }
 
     private String excerpt(String text, int maxChars) {

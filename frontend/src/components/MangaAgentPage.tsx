@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Bot, BookOpenText, Loader2, Send, Sparkles } from 'lucide-react';
 import {
   getMangaAgentMessages,
@@ -39,6 +39,133 @@ function createRequestId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={index} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={index} className="rounded bg-white/10 px-1 py-0.5 text-[0.9em] text-amber-100">{part.slice(1, -1)}</code>;
+    }
+    return <Fragment key={index}>{part}</Fragment>;
+  });
+}
+
+function splitTableRow(line: string) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+}
+
+function isTableSeparator(line: string) {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function isBlockStart(line: string, nextLine?: string) {
+  return /^#{1,4}\s+/.test(line)
+    || /^\s*[-*]\s+/.test(line)
+    || /^\s*\d+\.\s+/.test(line)
+    || /^\s*---+\s*$/.test(line)
+    || (line.includes('|') && !!nextLine && isTableSeparator(nextLine));
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+  const lines = content.split(/\r?\n/);
+  const blocks: ReactNode[] = [];
+
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+
+    if (/^\s*---+\s*$/.test(line)) {
+      blocks.push(<hr key={i} className="my-4 border-white/10" />);
+      i += 1;
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      const className = level <= 2
+        ? 'mt-1 text-base font-semibold text-white'
+        : 'mt-3 text-sm font-semibold text-amber-100';
+      blocks.push(<div key={i} className={className}>{renderInlineMarkdown(heading[2])}</div>);
+      i += 1;
+      continue;
+    }
+
+    if (line.includes('|') && lines[i + 1] && isTableSeparator(lines[i + 1])) {
+      const headers = splitTableRow(line);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+        rows.push(splitTableRow(lines[i]));
+        i += 1;
+      }
+      blocks.push(
+        <div key={i} className="my-4 overflow-x-auto rounded-2xl border border-white/10">
+          <table className="w-full min-w-[520px] border-collapse text-left text-xs">
+            <thead className="bg-white/10 text-amber-100">
+              <tr>
+                {headers.map((header, idx) => (
+                  <th key={idx} className="border-b border-white/10 px-3 py-2 font-semibold">
+                    {renderInlineMarkdown(header)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIdx) => (
+                <tr key={rowIdx} className="odd:bg-white/[0.025]">
+                  {headers.map((_, cellIdx) => (
+                    <td key={cellIdx} className="border-t border-white/5 px-3 py-2 align-top text-gray-200">
+                      {renderInlineMarkdown(row[cellIdx] || '')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
+
+    if (/^\s*[-*]\s+/.test(line) || /^\s*\d+\.\s+/.test(line)) {
+      const ordered = /^\s*\d+\.\s+/.test(line);
+      const items: string[] = [];
+      while (i < lines.length && (ordered ? /^\s*\d+\.\s+/.test(lines[i]) : /^\s*[-*]\s+/.test(lines[i]))) {
+        items.push(lines[i].replace(ordered ? /^\s*\d+\.\s+/ : /^\s*[-*]\s+/, '').trim());
+        i += 1;
+      }
+      const ListTag = ordered ? 'ol' : 'ul';
+      blocks.push(
+        <ListTag key={i} className={(ordered ? 'list-decimal' : 'list-disc') + ' my-3 space-y-1 pl-5 text-sm text-gray-200'}>
+          {items.map((item, idx) => <li key={idx}>{renderInlineMarkdown(item)}</li>)}
+        </ListTag>,
+      );
+      continue;
+    }
+
+    const paragraph: string[] = [];
+    while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i], lines[i + 1])) {
+      paragraph.push(lines[i]);
+      i += 1;
+    }
+    blocks.push(
+      <p key={i} className="my-2 whitespace-pre-wrap text-sm leading-7 text-gray-200">
+        {renderInlineMarkdown(paragraph.join('\n'))}
+      </p>,
+    );
+  }
+
+  return <div className="space-y-1">{blocks}</div>;
+}
+
 export default function MangaAgentPage() {
   const [stories, setStories] = useState<Story[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -51,6 +178,11 @@ export default function MangaAgentPage() {
   const [chapterLoading, setChapterLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState('');
+  const chapterIdRef = useRef('');
+
+  useEffect(() => {
+    chapterIdRef.current = chapterId;
+  }, [chapterId]);
 
   useEffect(() => {
     let active = true;
@@ -106,12 +238,14 @@ export default function MangaAgentPage() {
   useEffect(() => {
     let active = true;
     const load = async () => {
+      setInput('');
+      setError('');
+      setLoading(false);
+      setMessages([]);
       if (!chapterId) {
-        setMessages([]);
         return;
       }
       setHistoryLoading(true);
-      setError('');
       try {
         const list = await getMangaAgentMessages(Number(chapterId));
         if (!active) return;
@@ -129,7 +263,8 @@ export default function MangaAgentPage() {
   }, [chapterId]);
 
   const send = async (override?: string) => {
-    const id = Number(chapterId);
+    const requestChapterId = chapterId;
+    const id = Number(requestChapterId);
     const text = (override ?? input).trim();
     if (!id || !text || loading) return;
 
@@ -141,20 +276,27 @@ export default function MangaAgentPage() {
 
     try {
       const result = await runMangaAgent(id, text, requestId);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: result.reply, requestId: result.requestId ?? result.request_id ?? requestId },
-      ]);
+      if (chapterIdRef.current === requestChapterId) {
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: result.reply, requestId: result.requestId ?? result.request_id ?? requestId },
+        ]);
+      }
     } catch (err: any) {
+      if (chapterIdRef.current !== requestChapterId) return;
       setError(err.message || '请求失败');
       try {
         const list = await getMangaAgentMessages(id);
-        setMessages(toMessages(list));
+        if (chapterIdRef.current === requestChapterId) {
+          setMessages(toMessages(list));
+        }
       } catch {
         return;
       }
     } finally {
-      setLoading(false);
+      if (chapterIdRef.current === requestChapterId) {
+        setLoading(false);
+      }
     }
   };
 
@@ -281,13 +423,13 @@ export default function MangaAgentPage() {
                   <div key={`${msg.requestId || 'msg'}-${idx}`} className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                     <div
                       className={
-                        'max-w-[85%] whitespace-pre-wrap rounded-3xl px-4 py-3 text-sm leading-7 shadow-sm ' +
+                        'max-w-[85%] rounded-3xl px-4 py-3 shadow-sm ' +
                         (msg.role === 'user'
-                          ? 'bg-amber-300 text-gray-950'
+                          ? 'whitespace-pre-wrap bg-amber-300 text-sm leading-7 text-gray-950'
                           : 'border border-white/10 bg-white/[0.04] text-gray-200')
                       }
                     >
-                      {msg.content}
+                      {msg.role === 'assistant' ? <MarkdownMessage content={msg.content} /> : msg.content}
                     </div>
                   </div>
                 ))}

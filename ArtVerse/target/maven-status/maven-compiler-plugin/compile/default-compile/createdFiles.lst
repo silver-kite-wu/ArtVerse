@@ -4,6 +4,7 @@ com\artverse\common\GlobalExceptionHandler.class
 com\artverse\config\ArtVerseProperties.class
 com\artverse\application\MangaGenerationJob.class
 com\artverse\domain\ColorMode.class
+com\artverse\prompt\MangaPromptPolicy.class
 com\artverse\persistence\ChatMessageRepository.class
 com\artverse\agents\AgentMessage.class
 com\artverse\domain\UserApiKey.class

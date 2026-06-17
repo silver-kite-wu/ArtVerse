@@ -9,6 +9,7 @@ import com.artverse.domain.*;
 import com.artverse.media.MediaStorageService;
 import com.artverse.persistence.ChapterRepository;
 import com.artverse.persistence.MangaImageRepository;
+import com.artverse.prompt.MangaPromptPolicy;
 import com.artverse.storage.ObjectStorageService;
 import com.artverse.storage.StoredObject;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -76,6 +77,7 @@ public class MangaGenerationService {
         if (scenes.size() != chapter.getImageCount()) {
             throw new BusinessException(400, "Scenes count (" + scenes.size() + ") does not match image count (" + chapter.getImageCount() + ")");
         }
+        validateScenesForMangaGeneration(scenes);
 
         // Eagerly resolve lazy proxies before handing off to background thread
         Long storyId = chapter.getStory().getId();
@@ -138,11 +140,8 @@ public class MangaGenerationService {
                         continue;
                     }
 
-                    // Build prompt with full context
-                    String prompt = buildImagePrompt(scene, profiles, mangaStyle, colorMode, hasRefImages, job.getScenes(), imageNumber);
-
-                    // Optimize prompt via DeepSeek
-                    String optimizedPrompt = optimizePrompt(prompt, deepseekApiKey);
+                    String prompt = MangaPromptPolicy.buildImagePrompt(
+                            scene, profiles, mangaStyle, colorMode, hasRefImages, job.getScenes(), imageNumber);
 
                     // Retry up to 3 times
                     Exception lastException = null;
@@ -151,7 +150,7 @@ public class MangaGenerationService {
                         if (!job.isRunning()) break;
                         try {
                             // Generate image
-                            GeneratedImage generated = generateImageForJob(chapter, imageRequestRefs, imageApiKey, optimizedPrompt);
+                            GeneratedImage generated = generateImageForJob(chapter, imageRequestRefs, imageApiKey, prompt);
 
                             // Upload to MinIO
                             String filename = mediaStorageService.generateUniqueFilename("panel_" + String.format("%02d", imageNumber), ".png");
@@ -173,7 +172,7 @@ public class MangaGenerationService {
                             mangaImage.setObjectKey(stored.objectKey());
                             mangaImage.setContentType(stored.contentType());
                             mangaImage.setSizeBytes(stored.sizeBytes());
-                            mangaImage.setPrompt(optimizedPrompt);
+                            mangaImage.setPrompt(prompt);
                             mangaImageRepository.saveAndFlush(mangaImage);
 
                             // Send progress (after successful generation)
@@ -294,8 +293,8 @@ public class MangaGenerationService {
         List<Path> imageRequestRefs = materializeMinioRefs(refImages, tempRefImages);
         boolean hasRefImages = !imageRequestRefs.isEmpty();
 
-        String fullPrompt = buildImagePrompt(prompt, profiles, mangaStyle, colorMode, hasRefImages, scenes.isEmpty() ? List.of(prompt) : scenes, imageNumber);
-        String optimizedPrompt = optimizePrompt(fullPrompt, deepseekApiKey);
+        String optimizedPrompt = MangaPromptPolicy.buildImagePrompt(
+                prompt, profiles, mangaStyle, colorMode, hasRefImages, scenes.isEmpty() ? List.of(prompt) : scenes, imageNumber);
 
         ImageGenerationRequest request = new ImageGenerationRequest(
                 optimizedPrompt,
@@ -633,6 +632,16 @@ public class MangaGenerationService {
             return objectMapper.readValue(scenesText, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
         } catch (Exception e) {
             return List.of();
+        }
+    }
+
+    private void validateScenesForMangaGeneration(List<String> scenes) {
+        for (int i = 0; i < scenes.size(); i++) {
+            String scene = scenes.get(i);
+            if (!MangaPromptPolicy.isStoryboardPage(scene) || MangaPromptPolicy.hasForbiddenStoryboardCue(scene)) {
+                throw new BusinessException(400,
+                        "第 " + (i + 1) + " 页分镜仍是单图提示词或缺少多格结构，请先重新生成分镜");
+            }
         }
     }
 }

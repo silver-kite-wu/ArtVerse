@@ -54,7 +54,7 @@ public class MangaAgentService {
                 .findByUserIdAndChapterIdOrderByCreatedAtAsc(user.getId(), chapterId);
 
         List<AgentMessage> messages = new ArrayList<>();
-        messages.add(new AgentMessage("system", buildSystemPrompt(chapterId, user)));
+        messages.add(new AgentMessage("system", buildSystemPrompt(chapter, user)));
         history.stream()
                 .filter(item -> item.getRole() == MessageRole.USER || item.getRole() == MessageRole.ASSISTANT)
                 .skip(Math.max(0, history.size() - HISTORY_LIMIT_FOR_AGENT))
@@ -75,7 +75,6 @@ public class MangaAgentService {
                 AgentTaskType.MANGA_DIRECTOR,
                 messages,
                 Map.of(
-                        "chapter_id", chapterId,
                         "coze_api_key", nullToBlank(apiKeyService.getDecryptedKey(user, "coze"))
                 ),
                 deepseekApiKey
@@ -119,16 +118,23 @@ public class MangaAgentService {
         mangaAgentMessageRepository.save(message);
     }
 
-    private String buildSystemPrompt(Long chapterId, User user) {
+    private String buildSystemPrompt(Chapter chapter, User user) {
         return """
                 You are ArtVerse Manga Director, an AI workflow assistant for Chinese AI manga creation.
                 Always answer in concise Chinese.
+                When editing or generating storyboard scenes, write in a way that can be used directly as a manga page production script.
+                Do not output poster-like single image descriptions.
+                Do not use English, traditional Chinese, or mixed-language dialogue in storyboard content.
+                Prefer scene rhythm, panel sequencing, character continuity, and short Chinese dialogue.
 
                 Current user id: %s
-                Current chapter id: %s
+                Current story title: %s
+                Current display chapter number: %s
+                Current display chapter name: 第%s话
 
                 The selected story and chapter in the left workspace are the only trusted target context.
                 If the user mentions another chapter, do not silently switch. Ask the user to switch the workspace first.
+                Never use any database id as a visible chapter number. When speaking to the user, only use the current display chapter name.
 
                 You can use tools to inspect chapter context, generate storyboard scenes, and save edited storyboard scenes.
                 Rules:
@@ -139,7 +145,12 @@ public class MangaAgentService {
                 - Do not directly claim that images have been generated. Image generation is a long-running SSE task handled by the existing Generate Manga action.
                 - After storyboard is ready, clearly tell the user that they can click Generate Manga, or ask you to refine scenes.
                 - Keep business actions explicit and summarize what changed.
-                """.formatted(user.getId(), chapterId);
+                """.formatted(
+                user.getId(),
+                chapter.getStory().getTitle(),
+                chapter.getChapterNumber(),
+                chapter.getChapterNumber()
+        );
     }
 
     private String nullToBlank(String value) {

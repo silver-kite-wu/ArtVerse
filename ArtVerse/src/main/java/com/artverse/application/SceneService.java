@@ -4,6 +4,7 @@ import com.artverse.ai.CozeClient;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.Chapter;
 import com.artverse.persistence.ChapterRepository;
+import com.artverse.prompt.MangaPromptPolicy;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -45,13 +46,17 @@ public class SceneService {
             throw new BusinessException(400, "No content to generate scenes from");
         }
 
-        List<String> scenes = cozeClient.generateScenes(material, chapter.getImageCount(), cozeApiKey);
+        List<String> scenes = cozeClient.generateScenes(
+                material,
+                chapter.getImageCount(),
+                cozeApiKey,
+                MangaPromptPolicy.storyboardInstruction(chapter.getImageCount()));
 
         if (scenes.size() != chapter.getImageCount()) {
             throw new BusinessException(502,
                     "Coze returned " + scenes.size() + " scenes but expected " + chapter.getImageCount());
         }
-
+        validateStoryboardScenes(scenes);
         chapter.setScenesText(objectMapper.valueToTree(scenes).toString());
         chapterRepository.save(chapter);
 
@@ -74,7 +79,6 @@ public class SceneService {
                 throw new BusinessException(400, "Scene " + (i + 1) + " cannot be empty");
             }
         }
-
         chapter.setScenesText(objectMapper.valueToTree(scenes).toString());
         chapterRepository.save(chapter);
 
@@ -127,6 +131,18 @@ public class SceneService {
         log.error("Failed to parse scenes. Raw text (first 2000 chars): {}",
                 text.length() > 2000 ? text.substring(0, 2000) + "..." : text);
         throw new BusinessException(502, "AI returned invalid scene JSON");
+    }
+
+    private void validateStoryboardScenes(List<String> scenes) {
+        for (int i = 0; i < scenes.size(); i++) {
+            String scene = scenes.get(i);
+            if (!MangaPromptPolicy.isStoryboardPage(scene)) {
+                throw new BusinessException(502, "第 " + (i + 1) + " 页分镜缺少多格结构，请重新生成");
+            }
+            if (MangaPromptPolicy.hasForbiddenStoryboardCue(scene)) {
+                throw new BusinessException(502, "第 " + (i + 1) + " 页分镜包含单图提示词或英文标记，请重新生成");
+            }
+        }
     }
 
     private List<String> tryParseStringArray(String text) {

@@ -2,6 +2,7 @@ package com.artverse.ai;
 
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
+import com.artverse.prompt.MangaPromptPolicy;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.cdimascio.dotenv.Dotenv;
@@ -26,12 +27,24 @@ public class CozeClient {
     private static final TypeReference<Map<String, List<String>>> RES_TYPE = new TypeReference<>() {};
 
     public List<String> generateScenes(String context, int number, String userApiKey) {
+        return generateScenes(context, number, userApiKey, MangaPromptPolicy.storyboardInstruction(number));
+    }
+
+    public List<String> generateScenes(String context, int number, String userApiKey, String promptInstruction) {
         ArtVerseProperties.Coze config = properties.getCoze();
         String apiKey = resolveApiKey(config, userApiKey);
 
+        String effectiveContext = (promptInstruction == null ? "" : promptInstruction)
+                + "\n\n【待改写的小说正文/创作素材】\n"
+                + context
+                + "\n\n【最终提醒】只输出符合上述规范的 JSON 数组，不要输出 Scene 单图提示词。";
         Map<String, Object> body = Map.of(
                 "workflow_id", config.getWorkflowId(),
-                "parameters", Map.of("context", context, "number", number)
+                "parameters", Map.of(
+                        "context", effectiveContext,
+                        "number", number,
+                        "prompt_instruction", promptInstruction == null ? "" : promptInstruction
+                )
         );
 
         String raw;

@@ -1,25 +1,29 @@
-# ========================================
-# Only allow ArtVerse/ and frontend/
-# All other root-level files are excluded
-# ========================================
-/*
-!/ArtVerse
-!/frontend
-!.gitignore
-
+# Local secrets and IDE metadata
 .env
-
+.env.*
 .idea/
 *.iml
+.vscode/
 
-target/
-dist/
-node_modules/
-
-ArtVerse/target/
-ArtVerse/.idea/
-ArtVerse/.agentscope/
-frontend/.playwright-cli/
-
+# OS junk
 .DS_Store
 Thumbs.db
+
+# Build outputs and dependency caches
+**/target/
+**/dist/
+**/node_modules/
+**/.playwright-cli/
+.m2-repo/
+.playwright-mcp/
+
+# Local AgentScope workspaces
+.agentscope/
+ArtVerse/.agentscope/
+
+# Temporary logs and generated debug files
+*.log
+frontend/build-*.txt
+frontend/build-error.txt
+sql.zip
+wechat_article_*.txt

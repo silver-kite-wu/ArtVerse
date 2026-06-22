@@ -1,5 +1,6 @@
 package com.artverse.application;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.Chapter;
@@ -39,20 +40,23 @@ public class CharacterProfileService {
 
     @Transactional(readOnly = true)
     public List<CharacterProfile> listByStory(Long storyId) {
-        storyRepository.findById(storyId)
+        Long userId = currentUserId();
+        storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
-        return profileRepository.findByStoryIdOrderByIdAsc(storyId);
+        return profileRepository.findByStoryIdAndUserIdOrderByIdAsc(storyId, userId);
     }
 
     @Transactional(readOnly = true)
     public CharacterProfile getRequired(Long id) {
-        return profileRepository.findById(id)
+        Long userId = currentUserId();
+        return profileRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new BusinessException(404, "Character profile not found"));
     }
 
     @Transactional
     public CharacterProfile create(Long storyId, String name, String description) {
-        Story story = storyRepository.findById(storyId)
+        Long userId = currentUserId();
+        Story story = storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
         CharacterProfile profile = new CharacterProfile();
         profile.setStory(story);
@@ -71,7 +75,8 @@ public class CharacterProfileService {
 
     @Transactional
     public void delete(Long storyId, Long id) {
-        storyRepository.findById(storyId)
+        Long userId = currentUserId();
+        storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
         CharacterProfile profile = getRequired(id);
         if (!profile.getStory().getId().equals(storyId)) {
@@ -204,18 +209,20 @@ public class CharacterProfileService {
 
     @Transactional(readOnly = true)
     public List<CharacterProfile> listByAssetGroup(Long groupId) {
-        StoryAssetGroup group = assetGroupRepository.findById(groupId)
+        Long userId = currentUserId();
+        StoryAssetGroup group = assetGroupRepository.findByIdAndUserId(groupId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Asset group not found"));
         return List.copyOf(group.getCharacters());
     }
 
     @Transactional
     public void setAssetGroupCharacters(Long groupId, List<Long> characterIds) {
-        StoryAssetGroup group = assetGroupRepository.findById(groupId)
+        Long userId = currentUserId();
+        StoryAssetGroup group = assetGroupRepository.findByIdAndUserId(groupId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Asset group not found"));
         Set<CharacterProfile> profiles = new LinkedHashSet<>();
         for (Long cid : characterIds) {
-            CharacterProfile profile = profileRepository.findById(cid)
+            CharacterProfile profile = profileRepository.findByIdAndUserId(cid, userId)
                     .orElseThrow(() -> new BusinessException(404, "Character profile not found: " + cid));
             if (!profile.getStory().getId().equals(group.getStory().getId())) {
                 throw new BusinessException(400, "Character does not belong to the same story");
@@ -224,4 +231,9 @@ public class CharacterProfileService {
         }
         group.setCharacters(profiles);
         assetGroupRepository.save(group);
-    }}
+    }
+
+    private Long currentUserId() {
+        return StpUtil.getLoginIdAsLong();
+    }
+}

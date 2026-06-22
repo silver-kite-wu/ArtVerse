@@ -18,6 +18,7 @@ public class ArtVerseProperties {
     private Character character = new Character();
     private Ref ref = new Ref();
     private Manga manga = new Manga();
+    private MangaGeneration mangaGeneration = new MangaGeneration();
     private DeepSeek deepseek = new DeepSeek();
     private Image image = new Image();
     private Minio minio = new Minio();
@@ -25,6 +26,7 @@ public class ArtVerseProperties {
     private RateLimit rateLimit = new RateLimit();
     private SingleFlight singleFlight = new SingleFlight();
     private Idempotency idempotency = new Idempotency();
+    private Agent agent = new Agent();
 
     @Data
     public static class Storage {
@@ -56,6 +58,11 @@ public class ArtVerseProperties {
     public static class Manga {
         private int defaultImageCount = 10;
         private List<Integer> allowedImageCounts = List.of(4, 6, 8, 10, 12, 15, 20);
+    }
+
+    @Data
+    public static class MangaGeneration {
+        private int maxConcurrentJobs = 4;
     }
 
     @Data
@@ -113,5 +120,11 @@ public class ArtVerseProperties {
         private int processingTtlSeconds = 600;
         private int followerWaitSeconds = 300;
         private int maxFollowers = 5;
+    }
+
+    @Data
+    public static class Agent {
+        private int runTimeoutSeconds = 180;
+        private int staleRunningSeconds = 600;
     }
 }

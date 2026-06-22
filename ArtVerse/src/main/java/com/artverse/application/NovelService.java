@@ -23,10 +23,16 @@ public class NovelService {
     private final ChatMessageRepository chatMessageRepository;
     private final MangaImageRepository mangaImageRepository;
     private final HarnessAgentGateway harnessAgentGateway;
+    private final AgentModelSpecFactory agentModelSpecFactory;
     private final ArtVerseProperties properties;
 
     @Transactional(readOnly = true)
     public String generateNovel(Long chapterId) {
+        return generateNovel(chapterId, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public String generateNovel(Long chapterId, Long userId, String userApiKey) {
         Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
 
@@ -42,12 +48,14 @@ public class NovelService {
         }
 
         AgentRunRequest request = new AgentRunRequest(
-                "default",
+                userId == null ? "default" : String.valueOf(userId),
                 chapter.getStory().getId(),
                 chapterId,
                 AgentTaskType.NOVEL,
                 agentMessages,
-                Map.of()
+                Map.of(),
+                agentModelSpecFactory.deepSeek(userApiKey),
+                userApiKey
         );
 
         String novelContent;

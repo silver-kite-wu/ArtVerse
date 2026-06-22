@@ -121,16 +121,16 @@ export default function ImageGenPage() {
 
   const Composer = ({ compact = false }: { compact?: boolean }) => (
     <div className={compact ? 'w-full' : 'w-full max-w-5xl mx-auto'}>
-      <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900/85 shadow-2xl shadow-black/20">
+      <div className="overflow-hidden rounded-2xl border border-ink-border bg-ink-light/85 shadow-2xl shadow-coral/5">
         <div className="p-4 sm:p-5">
           {refFiles.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
               {refFiles.map((rf, i) => (
-                <div key={i} className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-gray-700 bg-gray-800">
+                <div key={i} className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-ink-border bg-ink-lighter">
                   <img src={rf.preview} alt={'ref ' + (i + 1)} className="h-full w-full object-cover" />
                   <button
                     onClick={() => removeRef(i)}
-                    className="absolute right-0 top-0 rounded-bl-md bg-black/70 p-0.5 text-white"
+                    className="absolute right-0 top-0 rounded-bl-md bg-black/70 p-0.5 text-cream"
                   >
                     <X size={10} />
                   </button>
@@ -151,12 +151,12 @@ export default function ImageGenPage() {
             placeholder="描述你想要生成的内容"
             disabled={generating}
             rows={compact ? 4 : 5}
-            className="w-full resize-none bg-transparent text-[17px] leading-7 text-white outline-none placeholder:text-gray-500"
+            className="w-full resize-none bg-transparent text-[17px] leading-7 text-cream outline-none placeholder:text-cream-dim"
           />
         </div>
 
-        <div className="flex items-center gap-2 border-t border-gray-800 px-3 py-3 sm:px-4">
-          <label className={'flex cursor-pointer items-center gap-2 rounded-xl border border-gray-700 px-3 py-2 text-gray-300 transition-colors hover:bg-gray-800 ' + (refFiles.length >= 3 ? 'pointer-events-none opacity-40' : '')}>
+        <div className="flex items-center gap-2 border-t border-ink-border px-3 py-3 sm:px-4">
+          <label className={'flex cursor-pointer items-center gap-2 rounded-xl border border-ink-border px-3 py-2 text-cream-dim transition-colors hover:bg-ink-lighter ' + (refFiles.length >= 3 ? 'pointer-events-none opacity-40' : '')}>
             <ImagePlus size={16} />
             <span className="text-sm">图片</span>
             <input type="file" accept="image/*" multiple onChange={handleAddRef} className="hidden" />
@@ -166,7 +166,7 @@ export default function ImageGenPage() {
             type="button"
             onClick={handleSend}
             disabled={!canSend}
-            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-30"
+            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-coral text-cream transition-colors hover:bg-coral-light disabled:cursor-not-allowed disabled:opacity-30"
           >
             {generating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
@@ -177,19 +177,19 @@ export default function ImageGenPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-950">
-        <Loader2 size={28} className="animate-spin text-violet-400" />
+      <div className="flex-1 flex items-center justify-center bg-ink">
+        <Loader2 size={28} className="animate-spin text-coral" />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 min-h-0 bg-gray-950 text-gray-100 flex flex-col">
+    <div className="flex-1 min-h-0 bg-ink text-cream flex flex-col">
       {!hasMessages ? (
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="w-full max-w-5xl">
             <div className="mb-10 text-center">
-              <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">即刻创作 图片</h2>
+              <h2 className="text-4xl font-semibold tracking-tight text-cream sm:text-5xl">即刻创作 图片</h2>
             </div>
             <Composer />
           </div>
@@ -203,7 +203,7 @@ export default function ImageGenPage() {
                   return (
                     <div key={msg.id} className="flex justify-end">
                       <div className="max-w-[78%]">
-                        <div className="inline-flex items-center gap-2 rounded-2xl border border-gray-700 bg-gray-800 px-4 py-3 text-sm text-gray-100 shadow-sm">
+                        <div className="inline-flex items-center gap-2 rounded-2xl border border-ink-border bg-ink-lighter px-4 py-3 text-sm text-cream shadow-sm">
                           {msg.refThumbnails && msg.refThumbnails.length > 0 && (
                             <div className="flex gap-1">
                               {msg.refThumbnails.map((src, i) => (
@@ -223,16 +223,16 @@ export default function ImageGenPage() {
                   const imageUrl = imageGenUrl(record.image_url);
                   return (
                     <div key={msg.id} className="space-y-3">
-                      <div className="flex items-center justify-between text-xs text-gray-400">
+                      <div className="flex items-center justify-between text-xs text-cream-dim">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-200">gpt-image-2</span>
+                          <span className="font-medium text-cream">gpt-image-2</span>
                           <span>1 张图片</span>
                         </div>
                         <span>{new Date(record.created_at).toLocaleString()}</span>
                       </div>
 
                       <div className="flex justify-start">
-                        <div className="inline-flex max-w-full items-center justify-center overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 shadow-sm">
+                        <div className="inline-flex max-w-full items-center justify-center overflow-hidden rounded-2xl border border-ink-border bg-ink-light shadow-sm">
                           <img
                             src={imageUrl}
                             alt={record.prompt}
@@ -242,14 +242,14 @@ export default function ImageGenPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 text-gray-400">
-                        <button className="rounded-lg p-2 hover:bg-gray-800" title="复制">
+                      <div className="flex items-center gap-2 text-cream-dim">
+                        <button className="rounded-lg p-2 hover:bg-ink-lighter" title="复制">
                           <Copy size={14} />
                         </button>
-                        <a href={imageUrl} download className="rounded-lg p-2 hover:bg-gray-800" title="下载">
+                        <a href={imageUrl} download className="rounded-lg p-2 hover:bg-ink-lighter" title="下载">
                           <Download size={14} />
                         </a>
-                        <button onClick={() => handleDelete(record.id, msg.id)} className="rounded-lg p-2 hover:bg-gray-800" title="删除">
+                        <button onClick={() => handleDelete(record.id, msg.id)} className="rounded-lg p-2 hover:bg-ink-lighter" title="删除">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -266,8 +266,8 @@ export default function ImageGenPage() {
 
               {generating && (
                 <div className="flex justify-start">
-                  <div className="inline-flex items-center gap-2 rounded-2xl border border-gray-800 bg-gray-900 px-4 py-3 text-sm text-gray-400 shadow-sm">
-                    <Loader2 size={16} className="animate-spin text-violet-400" />
+                  <div className="inline-flex items-center gap-2 rounded-2xl border border-ink-border bg-ink-light px-4 py-3 text-sm text-cream-dim shadow-sm">
+                    <Loader2 size={16} className="animate-spin text-coral" />
                     生成中...
                   </div>
                 </div>
@@ -275,7 +275,7 @@ export default function ImageGenPage() {
             </div>
           </div>
 
-          <div className="border-t border-gray-800 bg-gray-950/95 px-4 py-5 sm:px-6 lg:px-10">
+          <div className="border-t border-ink-border glass px-4 py-5 sm:px-6 lg:px-10">
             <Composer compact />
           </div>
         </div>

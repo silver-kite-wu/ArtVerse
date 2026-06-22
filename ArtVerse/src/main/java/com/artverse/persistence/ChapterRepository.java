@@ -25,9 +25,24 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     @Query("SELECT DISTINCT c FROM Chapter c LEFT JOIN FETCH c.images LEFT JOIN FETCH c.messages WHERE c.id = :id")
     Optional<Chapter> findByIdWithDetails(@Param("id") Long id);
 
+    @Query("SELECT DISTINCT c FROM Chapter c LEFT JOIN FETCH c.images LEFT JOIN FETCH c.messages WHERE c.id = :id AND c.story.user.id = :userId")
+    Optional<Chapter> findByIdWithDetailsAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
     @Query("SELECT DISTINCT c FROM Chapter c JOIN FETCH c.story s LEFT JOIN FETCH s.user LEFT JOIN FETCH c.assetGroup LEFT JOIN FETCH c.messages WHERE c.id = :id")
     Optional<Chapter> findByIdForIdempotency(@Param("id") Long id);
 
+    @Query("SELECT DISTINCT c FROM Chapter c JOIN FETCH c.story s LEFT JOIN FETCH s.user LEFT JOIN FETCH c.assetGroup LEFT JOIN FETCH c.messages WHERE c.id = :id AND s.user.id = :userId")
+    Optional<Chapter> findByIdForIdempotencyAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
     @Query("SELECT DISTINCT c FROM Chapter c LEFT JOIN FETCH c.images LEFT JOIN FETCH c.messages WHERE c.story.id = :storyId ORDER BY c.chapterNumber ASC")
     List<Chapter> findByStoryIdWithDetails(@Param("storyId") Long storyId);
+
+    @Query("SELECT DISTINCT c FROM Chapter c LEFT JOIN FETCH c.images LEFT JOIN FETCH c.messages WHERE c.story.id = :storyId AND c.story.user.id = :userId ORDER BY c.chapterNumber ASC")
+    List<Chapter> findByStoryIdWithDetailsAndUserId(@Param("storyId") Long storyId, @Param("userId") Long userId);
+
+    @Query("SELECT DISTINCT c FROM Chapter c WHERE c.story.id = :storyId AND c.story.user.id = :userId ORDER BY c.chapterNumber ASC")
+    List<Chapter> findByStoryIdAndUserIdOrderByChapterNumberAsc(@Param("storyId") Long storyId, @Param("userId") Long userId);
+
+    @Query("SELECT COALESCE(MAX(c.chapterNumber), 0) FROM Chapter c WHERE c.story.id = :storyId AND c.story.user.id = :userId")
+    int findMaxChapterNumberByStoryIdAndUserId(@Param("storyId") Long storyId, @Param("userId") Long userId);
 }

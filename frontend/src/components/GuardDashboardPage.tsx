@@ -37,12 +37,12 @@ function StatCard({
   accent: string;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-gray-900/70 px-4 py-3">
+    <div className="rounded-lg border border-ink-border bg-ink-light/70 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</span>
+        <span className="text-xs font-medium uppercase tracking-wide text-cream-dim">{label}</span>
         <span className={accent}>{icon}</span>
       </div>
-      <div className="mt-3 text-2xl font-semibold text-gray-100">{value}</div>
+      <div className="mt-3 text-2xl font-semibold text-cream">{value}</div>
     </div>
   );
 }
@@ -50,30 +50,30 @@ function StatCard({
 function RateBar({ value, tone }: { value: number; tone: string }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-800">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-lighter">
         <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.min(100, Math.max(0, value * 100))}%` }} />
       </div>
-      <span className="w-12 text-right text-xs tabular-nums text-gray-400">{percent(value)}</span>
+      <span className="w-12 text-right text-xs tabular-nums text-cream-dim">{percent(value)}</span>
     </div>
   );
 }
 
-function MiniMetric({ label, value, tone = 'text-gray-200' }: { label: string; value: string; tone?: string }) {
+function MiniMetric({ label, value, tone = 'text-cream' }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-md bg-gray-950/60 px-2 py-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-gray-600">{label}</div>
+    <div className="rounded-md bg-ink/70 px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-warm-gray">{label}</div>
       <div className={`mt-0.5 text-sm font-medium tabular-nums ${tone}`}>{value}</div>
     </div>
   );
 }
 
 function decisionTone(decision: string): string {
-  if (decision === 'leader') return 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200';
-  if (decision === 'follower') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (decision === 'leader') return 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300';
+  if (decision === 'follower') return 'border-amber-500/40 bg-amber-accent/10 text-amber-accent-light';
   if (decision === 'success_hit' || decision === 'succeeded') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
   if (decision.includes('rejected')) return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
   if (decision.includes('failed')) return 'border-orange-500/40 bg-orange-500/10 text-orange-200';
-  return 'border-gray-600 bg-gray-800 text-gray-300';
+  return 'border-ink-muted bg-ink-lighter text-cream-dim';
 }
 
 function formatTime(value: string): string {
@@ -183,20 +183,20 @@ export default function GuardDashboardPage() {
   const historySummary = useMemo(() => bucketTotals(metrics), [metrics]);
 
   return (
-    <div className="min-h-dvh bg-gray-950 text-gray-100">
+    <div className="min-h-dvh bg-ink text-cream">
       <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-5 py-5">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-border pb-4">
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-cyan-300">
               <ShieldCheck size={17} />
               Guard Runtime
             </div>
-            <h1 className="mt-2 text-2xl font-semibold text-white">Idempotency & Single-flight Dashboard</h1>
+            <h1 className="mt-2 text-2xl font-semibold text-cream">Idempotency & Single-flight Dashboard</h1>
           </div>
           <button
             onClick={() => load(true)}
             disabled={refreshing}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/10 bg-gray-900 px-3 text-sm font-medium text-gray-200 hover:border-cyan-500/60 hover:text-cyan-200 disabled:opacity-50"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-border bg-ink-light px-3 text-sm font-medium text-cream hover:border-cyan-500/60 hover:text-cyan-300 disabled:opacity-50"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
             Refresh
@@ -213,34 +213,34 @@ export default function GuardDashboardPage() {
         <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard icon={<Activity size={18} />} label="Total" value={number(summary.total)} accent="text-cyan-300" />
           <StatCard icon={<Gauge size={18} />} label="Hit Rate" value={percent(summary.hitRate)} accent="text-emerald-300" />
-          <StatCard icon={<Zap size={18} />} label="Followers" value={number(summary.follower)} accent="text-amber-300" />
+          <StatCard icon={<Zap size={18} />} label="Followers" value={number(summary.follower)} accent="text-amber-accent-light" />
           <StatCard icon={<TimerReset size={18} />} label="Rejected" value={number(summary.rejected)} accent="text-rose-300" />
           <StatCard icon={<AlertTriangle size={18} />} label="Failed" value={number(summary.failed)} accent="text-orange-300" />
         </section>
 
         <main className="mt-5 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="overflow-hidden rounded-lg border border-white/10 bg-gray-900/50">
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <section className="overflow-hidden rounded-lg border border-ink-border bg-ink-light/50">
+            <div className="flex items-center justify-between border-b border-ink-border px-4 py-3">
               <div>
-                <h2 className="text-sm font-semibold text-gray-100">Action Metrics</h2>
-                <p className="mt-1 text-xs text-gray-500">
+                <h2 className="text-sm font-semibold text-cream">Action Metrics</h2>
+                <p className="mt-1 text-xs text-cream-dim">
                   Updated {data?.updated_at ? new Date(data.updated_at).toLocaleString() : '-'} · Auto refresh 30s
                 </p>
               </div>
             </div>
 
-            <div className="divide-y divide-white/10">
+            <div className="divide-y divide-ink-border">
               {(data?.actions || []).map((item) => (
-                <div key={item.action} className="grid gap-3 px-4 py-4 hover:bg-white/[0.03] lg:grid-cols-[170px_minmax(0,1fr)]">
+                <div key={item.action} className="grid gap-3 px-4 py-4 hover:bg-cream/[0.02] lg:grid-cols-[170px_minmax(0,1fr)]">
                   <div>
-                    <div className="font-medium text-gray-100">{ACTION_LABELS[item.action] || item.action}</div>
-                    <div className="mt-1 text-xs text-gray-500">{item.action}</div>
+                    <div className="font-medium text-cream">{ACTION_LABELS[item.action] || item.action}</div>
+                    <div className="mt-1 text-xs text-cream-dim">{item.action}</div>
                   </div>
                   <div className="grid min-w-0 gap-3">
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-7">
                       <MiniMetric label="Total" value={number(item.total)} />
                       <MiniMetric label="Leader" value={number(item.leader)} />
-                      <MiniMetric label="Follower" value={number(item.follower)} tone="text-amber-200" />
+                      <MiniMetric label="Follower" value={number(item.follower)} tone="text-amber-accent-light" />
                       <MiniMetric label="Hit" value={number(item.success_hit)} tone="text-emerald-200" />
                       <MiniMetric label="Fail Hit" value={number(item.failed_hit)} tone="text-lime-200" />
                       <MiniMetric label="Rejected" value={number(item.follower_rejected + item.processing_rejected)} tone="text-rose-200" />
@@ -248,15 +248,15 @@ export default function GuardDashboardPage() {
                     </div>
                     <div className="grid gap-2 md:grid-cols-3">
                       <div>
-                        <div className="mb-1 text-[10px] uppercase tracking-wide text-gray-600">Reuse</div>
+                        <div className="mb-1 text-[10px] uppercase tracking-wide text-warm-gray">Reuse</div>
                         <RateBar value={item.reuse_rate} tone="bg-emerald-400" />
                       </div>
                       <div>
-                        <div className="mb-1 text-[10px] uppercase tracking-wide text-gray-600">Single-flight</div>
+                        <div className="mb-1 text-[10px] uppercase tracking-wide text-warm-gray">Single-flight</div>
                         <RateBar value={item.single_flight_rate} tone="bg-amber-400" />
                       </div>
                       <div>
-                        <div className="mb-1 text-[10px] uppercase tracking-wide text-gray-600">Reject</div>
+                        <div className="mb-1 text-[10px] uppercase tracking-wide text-warm-gray">Reject</div>
                         <RateBar value={item.reject_rate} tone="bg-rose-400" />
                       </div>
                     </div>
@@ -264,23 +264,23 @@ export default function GuardDashboardPage() {
                 </div>
               ))}
               {!loading && !data?.actions?.length && (
-                <div className="px-4 py-12 text-center text-sm text-gray-500">No guard metrics yet.</div>
+                <div className="px-4 py-12 text-center text-sm text-cream-dim">No guard metrics yet.</div>
               )}
               {loading && (
-                <div className="px-4 py-12 text-center text-sm text-gray-500">Loading guard metrics...</div>
+                <div className="px-4 py-12 text-center text-sm text-cream-dim">Loading guard metrics...</div>
               )}
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-lg border border-white/10 bg-gray-900/50">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+          <section className="overflow-hidden rounded-lg border border-ink-border bg-ink-light/50">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-border px-4 py-3">
               <div>
-                <h2 className="text-sm font-semibold text-gray-100">Historical Buckets</h2>
-                <p className="mt-1 text-xs text-gray-500">
+                <h2 className="text-sm font-semibold text-cream">Historical Buckets</h2>
+                <p className="mt-1 text-xs text-cream-dim">
                   Persistent DB metrics 路 total {number(historySummary.total)} 路 hit {percent(historySummary.total ? historySummary.successHit / historySummary.total : 0)}
                 </p>
               </div>
-              <div className="flex rounded-lg border border-white/10 bg-gray-950/70 p-1">
+              <div className="flex rounded-lg border border-ink-border bg-ink/80 p-1">
                 {[
                   ['MINUTE', '60m'],
                   ['HOUR', '24h'],
@@ -290,7 +290,7 @@ export default function GuardDashboardPage() {
                     key={value}
                     onClick={() => setMetricBucket(value)}
                     className={`h-8 rounded-md px-3 text-xs font-medium ${
-                      metricBucket === value ? 'bg-cyan-500/20 text-cyan-200' : 'text-gray-400 hover:text-gray-100'
+                      metricBucket === value ? 'bg-cyan-400/15 text-cyan-300' : 'text-cream-dim hover:text-cream'
                     }`}
                   >
                     {label}
@@ -300,7 +300,7 @@ export default function GuardDashboardPage() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] text-left text-xs">
-                <thead className="bg-gray-950/70 text-gray-500">
+                <thead className="bg-ink/80 text-cream-dim">
                   <tr>
                     <th className="px-4 py-2 font-medium">Bucket</th>
                     <th className="px-3 py-2 font-medium">Action</th>
@@ -312,14 +312,14 @@ export default function GuardDashboardPage() {
                     <th className="px-3 py-2 text-right font-medium">Failed</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/10">
+                <tbody className="divide-y divide-ink-border">
                   {metrics.map((item) => (
-                    <tr key={`${item.bucket_start}-${item.action}`} className="hover:bg-white/[0.03]">
-                      <td className="whitespace-nowrap px-4 py-2 text-gray-400">{formatBucketTime(item.bucket_start, metricBucket)}</td>
-                      <td className="px-3 py-2 text-gray-200">{ACTION_LABELS[item.action] || item.action}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-200">{number(item.total)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-cyan-200">{number(item.leader)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-amber-200">{number(item.follower)}</td>
+                    <tr key={`${item.bucket_start}-${item.action}`} className="hover:bg-cream/[0.02]">
+                      <td className="whitespace-nowrap px-4 py-2 text-cream-dim">{formatBucketTime(item.bucket_start, metricBucket)}</td>
+                      <td className="px-3 py-2 text-cream">{ACTION_LABELS[item.action] || item.action}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-cream">{number(item.total)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-cyan-300">{number(item.leader)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-amber-accent-light">{number(item.follower)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-emerald-200">{number(item.success_hit)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-rose-200">{number(item.follower_rejected + item.processing_rejected)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-orange-200">{number(item.failed)}</td>
@@ -327,7 +327,7 @@ export default function GuardDashboardPage() {
                   ))}
                   {!metrics.length && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">No persisted metrics yet.</td>
+                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-cream-dim">No persisted metrics yet.</td>
                     </tr>
                   )}
                 </tbody>
@@ -335,36 +335,36 @@ export default function GuardDashboardPage() {
             </div>
           </section>
 
-          <aside className="min-h-[420px] overflow-hidden rounded-lg border border-white/10 bg-gray-900/50">
-            <div className="border-b border-white/10 px-4 py-3">
-              <h2 className="text-sm font-semibold text-gray-100">Recent Requests</h2>
-              <p className="mt-1 text-xs text-gray-500">Latest guard decisions and outcomes</p>
+          <aside className="min-h-[420px] overflow-hidden rounded-lg border border-ink-border bg-ink-light/50">
+            <div className="border-b border-ink-border px-4 py-3">
+              <h2 className="text-sm font-semibold text-cream">Recent Requests</h2>
+              <p className="mt-1 text-xs text-cream-dim">Latest guard decisions and outcomes</p>
             </div>
             <div className="max-h-[calc(100dvh-260px)] overflow-y-auto p-3">
               {events.map((event) => (
-                <div key={event.id} className="mb-3 rounded-lg border border-white/10 bg-gray-950/60 p-3">
+                <div key={event.id} className="mb-3 rounded-lg border border-ink-border bg-ink/70 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="text-sm font-medium text-gray-100">{ACTION_LABELS[event.action] || event.action}</div>
-                      <div className="mt-1 text-xs text-gray-500">{formatTime(event.time)} · {event.scope}</div>
+                      <div className="text-sm font-medium text-cream">{ACTION_LABELS[event.action] || event.action}</div>
+                      <div className="mt-1 text-xs text-cream-dim">{formatTime(event.time)} · {event.scope}</div>
                     </div>
                     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${decisionTone(event.decision)}`}>
                       {event.decision}
                     </span>
                   </div>
-                  <div className="mt-3 text-xs leading-relaxed text-gray-400">
+                  <div className="mt-3 text-xs leading-relaxed text-cream-dim">
                     {formatSummary(event.summary)}
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-cream-dim">
                     <span>result={event.result}</span>
                     <span>key={event.key_hash}</span>
                     {event.duration_ms != null && <span>{event.duration_ms}ms</span>}
                   </div>
-                  {event.message && <div className="mt-2 text-xs text-gray-500">{event.message}</div>}
+                  {event.message && <div className="mt-2 text-xs text-cream-dim">{event.message}</div>}
                 </div>
               ))}
               {!events.length && (
-                <div className="py-12 text-center text-sm text-gray-500">No request events yet.</div>
+                <div className="py-12 text-center text-sm text-cream-dim">No request events yet.</div>
               )}
             </div>
           </aside>

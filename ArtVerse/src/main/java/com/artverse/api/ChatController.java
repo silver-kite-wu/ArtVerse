@@ -29,7 +29,7 @@ public class ChatController {
 
         User user = currentUserService.requireCurrentUser();
         String deepseekApiKey = apiKeyService.getDecryptedKey(user, "deepseek");
-        return chatService.streamChat(chapterId, content, deepseekApiKey);
+        return chatService.streamChat(chapterId, content, user.getId(), deepseekApiKey);
     }
 
     @GetMapping("/messages")

@@ -56,7 +56,7 @@ public class SceneService {
             throw new BusinessException(502,
                     "Coze returned " + scenes.size() + " scenes but expected " + chapter.getImageCount());
         }
-        validateStoryboardScenes(scenes);
+        validateScenes(scenes);
         chapter.setScenesText(objectMapper.valueToTree(scenes).toString());
         chapterRepository.save(chapter);
 
@@ -133,7 +133,10 @@ public class SceneService {
         throw new BusinessException(502, "AI returned invalid scene JSON");
     }
 
-    private void validateStoryboardScenes(List<String> scenes) {
+    public void validateScenes(List<String> scenes) {
+        if (scenes == null || scenes.isEmpty()) {
+            throw new BusinessException(400, "Scenes cannot be empty");
+        }
         for (int i = 0; i < scenes.size(); i++) {
             String scene = scenes.get(i);
             if (!MangaPromptPolicy.isStoryboardPage(scene)) {

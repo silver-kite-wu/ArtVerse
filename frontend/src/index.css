@@ -1,32 +1,96 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
+
+@theme {
+  --color-ink: #0D0D0F;
+  --color-ink-light: #141418;
+  --color-ink-lighter: #1A1A20;
+  --color-ink-surface: #22222A;
+  --color-ink-border: #2A2A34;
+  --color-ink-muted: #3A3A46;
+  --color-cream: #F5EDE3;
+  --color-cream-dim: #C8BFAD;
+  --color-coral: #E8553D;
+  --color-coral-light: #F07B5F;
+  --color-coral-dark: #C93D28;
+  --color-amber-accent: #D4A04A;
+  --color-amber-accent-light: #E8C06A;
+  --color-warm-gray: #8A8690;
+}
 
 body {
   margin: 0;
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--color-ink);
+  color: var(--color-cream);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - warm & refined */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  background: rgba(232, 85, 61, 0.15);
+  border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(232, 85, 61, 0.3);
 }
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: rgba(232, 85, 61, 0.15) transparent;
 }
 
 @keyframes barbershop {
   0% { background-position: 0 0; }
   100% { background-position: 32px 0; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 85, 61, 0.2); }
+  50% { box-shadow: 0 0 12px 2px rgba(232, 85, 61, 0.15); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.glass {
+  background: rgba(13, 13, 15, 0.7);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+
+.glass-light {
+  background: rgba(26, 26, 32, 0.6);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+}
+
+.shimmer-bg {
+  background: linear-gradient(90deg, transparent, rgba(232, 85, 61, 0.06), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2.5s infinite;
+}
+
+/* Selection */
+::selection {
+  background: rgba(232, 85, 61, 0.3);
+  color: #F5EDE3;
 }

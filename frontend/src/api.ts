@@ -1,3 +1,5 @@
+import { EventType, HttpAgent, type AGUIEvent, type RunAgentInput } from '@ag-ui/client';
+
 const BASE = '';
 export const DEEPSEEK_USAGE_URL = 'https://platform.deepseek.com/usage';
 export const IMAGE2_CONSOLE_URL = 'https://api.duojie.games/console/token';
@@ -312,7 +314,7 @@ export function importStoryPackage(
           return;
         }
         const percent = Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100)));
-        onProgress?.({ phase: 'uploading', percent, message: `姝ｅ湪涓婁紶浣滃搧鍖?${percent}%` });
+        onProgress?.({ phase: 'uploading', percent, message: `正在上传作品包 ${percent}%` });
       };
 
       xhr.onload = async () => {
@@ -660,6 +662,7 @@ export interface AssetGroup {
   id: number | null;
   name: string;
   description: string;
+  is_default?: boolean;
   characters: AssetGroupCharacter[];
 }
 
@@ -906,7 +909,7 @@ export function generateMangaStream(
     if (controller.signal.aborted) return;
     reconnectAttempts += 1;
     if (reconnectAttempts > maxReconnectAttempts) {
-      onEvent({ type: 'error', data: { error: reason || '鐢熸垚杩炴帴宸叉柇寮€锛岃绋嶅悗閲嶈瘯' } });
+      onEvent({ type: 'error', data: { error: reason || '生成连接已断开，请稍后重试' } });
       return;
     }
     onEvent({
@@ -968,12 +971,12 @@ export function generateMangaStream(
       }
       if (buffer.trim()) handleLine(buffer);
       if (!receivedTerminalEvent && !controller.signal.aborted) {
-        scheduleReconnect('鐢熸垚杩炴帴宸叉柇寮€锛岃绋嶅悗閲嶈瘯');
+        scheduleReconnect('生成连接已断开，请稍后重试');
       }
     })
     .catch((err) => {
       if (err.name !== 'AbortError') {
-        scheduleReconnect(err.message || '鐢熸垚杩炴帴宸叉柇寮€锛岃绋嶅悗閲嶈瘯');
+        scheduleReconnect(err.message || '生成连接已断开，请稍后重试');
       }
     });
   };
@@ -1139,8 +1142,128 @@ export interface MangaAgentMessage {
   createdAt?: string;
 }
 
+export interface MangaAgentConversation {
+  conversationId: string;
+  title: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt?: string;
+  updatedAt?: string;
+  archivedAt?: string | null;
+}
+
+export type MangaAgentRunEvent =
+  | { type: 'status'; data: { message?: string; requestId?: string; request_id?: string } }
+  | { type: 'run_event'; data: AgentRunTimelineEvent }
+  | { type: 'tool'; data: { tool?: string; succeeded?: boolean; saved?: boolean; scenes_count?: number; error?: string } }
+  | { type: 'user_input_requested'; data: AgentUserInputRequest }
+  | { type: 'done'; data: { reply?: string; requestId?: string; request_id?: string } }
+  | { type: 'error'; data: { detail?: string; error?: string; requestId?: string; request_id?: string } }
+  | { type: 'ag_ui_event'; data: ArtVerseAgUiEvent };
+
+export type ArtVerseAgUiEvent = AGUIEvent & {
+  protocol?: 'ag-ui';
+  runId?: string;
+  rawEvent?: AgentRunTimelineEvent | Record<string, unknown>;
+  snapshot?: {
+    requestId?: string;
+    runId?: string;
+    status?: string;
+    message?: string;
+  };
+  result?: {
+    reply?: string;
+  };
+  outcome?: {
+    type?: 'success' | 'interrupt';
+    interrupts?: Array<{
+      id: string;
+      reason: string;
+      message?: string;
+      metadata?: {
+        question?: string;
+        options?: AgentUserInputOption[];
+        allowFreeText?: boolean;
+      };
+    }>;
+  };
+};
+
+export interface AgentRunTimelineEvent {
+  type: string;
+  phase?: string;
+  label?: string;
+  toolName?: string;
+  status?: string;
+  text?: string;
+  data?: Record<string, unknown>;
+  createdAt?: string;
+}
+
+export type MangaAgentRunStatus = 'RUNNING' | 'WAITING_USER' | 'SUCCEEDED' | 'DEGRADED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED';
+
+export interface AgentRunPersistedEvent {
+  eventName: MangaAgentRunEvent['type'];
+  data: MangaAgentRunEvent['data'];
+  createdAt?: string;
+}
+
+export interface MangaAgentRunSnapshot {
+  requestId: string;
+  request_id?: string;
+  status: MangaAgentRunStatus;
+  inputMessage?: string;
+  finalReply?: string;
+  errorMessage?: string;
+  userInputRequest?: AgentUserInputRequest | null;
+  events: AgentRunPersistedEvent[];
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string | null;
+}
+
+export interface AgentUserInputOption {
+  id: string;
+  label: string;
+  description?: string;
+  recommended?: boolean;
+}
+
+export interface AgentUserInputRequest {
+  requestId?: string;
+  request_id?: string;
+  question: string;
+  options: AgentUserInputOption[];
+  allowFreeText?: boolean;
+  reason?: string;
+}
+
 export async function getMangaAgentMessages(chapterId: number): Promise<MangaAgentMessage[]> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/messages`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  const data = await res.json();
+  return data.messages || [];
+}
+
+export async function listMangaAgentConversations(chapterId: number): Promise<MangaAgentConversation[]> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  const data = await res.json();
+  return data.conversations || [];
+}
+
+export async function createMangaAgentConversation(chapterId: number): Promise<MangaAgentConversation> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export async function getMangaAgentConversationMessages(
+  chapterId: number,
+  conversationId: string,
+): Promise<MangaAgentMessage[]> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/messages`);
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   const data = await res.json();
   return data.messages || [];
@@ -1154,4 +1277,305 @@ export async function runMangaAgent(chapterId: number, message: string, requestI
   });
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   return res.json();
+}
+
+export function runMangaAgentStream(
+  chapterId: number,
+  message: string,
+  requestId: string | undefined,
+  onEvent: (event: MangaAgentRunEvent) => void,
+): AbortController {
+  return startMangaAgentEventStream(
+    `${BASE}/api/chapters/${chapterId}/manga-agent/run-stream`,
+    { message, requestId },
+    requestId,
+    onEvent,
+  );
+}
+
+class ArtVerseMangaAgentHttpAgent extends HttpAgent {
+  private readonly message: string;
+  private readonly answer?: string;
+  private readonly requestId?: string;
+
+  constructor(
+    url: string,
+    message: string,
+    requestId: string | undefined,
+    abortController: AbortController,
+    answer?: string,
+  ) {
+    super({
+      url,
+      headers: apiHeaders(true) as Record<string, string>,
+    });
+    this.message = message;
+    this.answer = answer;
+    this.requestId = requestId;
+    this.abortController = abortController;
+  }
+
+  protected override requestInit(input: RunAgentInput): RequestInit {
+    return {
+      method: 'POST',
+      headers: {
+        ...this.headers,
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(this.answer === undefined
+        ? {
+          message: this.message,
+          requestId: this.requestId || input.runId,
+        }
+        : {
+          answer: this.answer,
+        }),
+      signal: this.abortController.signal,
+    };
+  }
+}
+
+export function runMangaAgentAgUiStream(
+  chapterId: number,
+  message: string,
+  requestId: string | undefined,
+  onEvent: (event: MangaAgentRunEvent) => void,
+  conversationId?: string,
+): AbortController {
+  const controller = new AbortController();
+  const agent = new ArtVerseMangaAgentHttpAgent(
+    conversationId
+      ? `${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/ag-ui/run`
+      : `${BASE}/api/chapters/${chapterId}/manga-agent/ag-ui/run`,
+    message,
+    requestId,
+    controller,
+  );
+  const subscription = agent.run({
+    threadId: conversationId ? `chapter-${chapterId}-conversation-${conversationId}` : `chapter-${chapterId}`,
+    runId: requestId || createClientRequestId(),
+    state: {},
+    messages: [{ id: `user-${requestId || Date.now()}`, role: 'user', content: message }],
+    tools: [],
+    context: [],
+    forwardedProps: {},
+  }).subscribe({
+    next: (event) => onEvent({ type: 'ag_ui_event', data: event as ArtVerseAgUiEvent }),
+    error: (err) => {
+      if (!controller.signal.aborted) {
+        onEvent({ type: 'error', data: { detail: err?.message || '智能体连接中断', requestId } });
+      }
+    },
+  });
+  controller.signal.addEventListener('abort', () => subscription.unsubscribe());
+  return controller;
+}
+
+export function resumeMangaAgentAgUiStream(
+  chapterId: number,
+  requestId: string,
+  answer: string,
+  onEvent: (event: MangaAgentRunEvent) => void,
+  conversationId?: string,
+): AbortController {
+  const controller = new AbortController();
+  const agent = new ArtVerseMangaAgentHttpAgent(
+    conversationId
+      ? `${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/ag-ui/runs/${requestId}/resume`
+      : `${BASE}/api/chapters/${chapterId}/manga-agent/ag-ui/runs/${requestId}/resume`,
+    '',
+    requestId,
+    controller,
+    answer,
+  );
+  const subscription = agent.run({
+    threadId: conversationId ? `chapter-${chapterId}-conversation-${conversationId}` : `chapter-${chapterId}`,
+    runId: requestId,
+    state: {},
+    messages: [],
+    tools: [],
+    context: [],
+    forwardedProps: {},
+  }).subscribe({
+    next: (event) => onEvent({ type: 'ag_ui_event', data: event as ArtVerseAgUiEvent }),
+    error: (err) => {
+      if (!controller.signal.aborted) {
+        onEvent({ type: 'error', data: { detail: err?.message || '智能体连接中断', requestId } });
+      }
+    },
+  });
+  controller.signal.addEventListener('abort', () => subscription.unsubscribe());
+  return controller;
+}
+
+function startMangaAgentEventStream(
+  url: string,
+  body: Record<string, unknown>,
+  requestId: string | undefined,
+  onEvent: (event: MangaAgentRunEvent) => void,
+): AbortController {
+  const controller = new AbortController();
+
+  authFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        onEvent({ type: 'error', data: { detail: parseApiError(await res.text()), requestId } });
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) {
+        onEvent({ type: 'error', data: { detail: '智能体连接不可用', requestId } });
+        return;
+      }
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEvent = 'message';
+      const handleLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(':')) return;
+        if (trimmed.startsWith('event:')) {
+          currentEvent = trimmed.slice(6).trim();
+          return;
+        }
+        if (!trimmed.startsWith('data:')) return;
+
+        const dataStr = trimmed.slice(5).trim();
+        try {
+          const data = JSON.parse(dataStr);
+          if (isAgUiEventPayload(data) && (currentEvent === 'message' || currentEvent === 'ag_ui_event')) {
+            onEvent({ type: 'ag_ui_event', data });
+          } else if (currentEvent === 'status'
+            || currentEvent === 'run_event'
+            || currentEvent === 'tool'
+            || currentEvent === 'user_input_requested'
+            || currentEvent === 'done'
+            || currentEvent === 'error') {
+            onEvent({ type: currentEvent, data } as MangaAgentRunEvent);
+          }
+        } catch {
+          // Ignore malformed stream chunks.
+        } finally {
+          currentEvent = 'message';
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          handleLine(line);
+        }
+      }
+      if (buffer.trim()) handleLine(buffer);
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') {
+        onEvent({ type: 'error', data: { detail: err.message || '智能体连接中断', requestId } });
+      }
+    });
+
+  return controller;
+}
+
+function isAgUiEventPayload(value: unknown): value is ArtVerseAgUiEvent {
+  if (!value || typeof value !== 'object') return false;
+  const type = (value as { type?: unknown }).type;
+  return typeof type === 'string' && Object.values(EventType).includes(type as EventType);
+}
+
+function createClientRequestId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export async function getOpenMangaAgentRun(chapterId: number): Promise<MangaAgentRunSnapshot | null> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/runs/open`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  const data = await res.json();
+  return data.run || null;
+}
+
+export async function getOpenMangaAgentConversationRun(
+  chapterId: number,
+  conversationId: string,
+): Promise<MangaAgentRunSnapshot | null> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/runs/open`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  const data = await res.json();
+  return data.run || null;
+}
+
+export async function getMangaAgentRunState(chapterId: number, requestId: string): Promise<MangaAgentRunSnapshot> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/runs/${requestId}`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export async function getMangaAgentConversationRunState(
+  chapterId: number,
+  conversationId: string,
+  requestId: string,
+): Promise<MangaAgentRunSnapshot> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/runs/${requestId}`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export async function cancelMangaAgentRun(chapterId: number, requestId: string): Promise<MangaAgentRunSnapshot> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/runs/${requestId}/cancel`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export async function cancelMangaAgentConversationRun(
+  chapterId: number,
+  conversationId: string,
+  requestId: string,
+): Promise<MangaAgentRunSnapshot> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/runs/${requestId}/cancel`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export async function resumeMangaAgentRun(
+  chapterId: number,
+  requestId: string,
+  answer: string,
+): Promise<{ reply: string; request_id?: string; requestId?: string }> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/runs/${requestId}/resume`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answer }),
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export function resumeMangaAgentRunStream(
+  chapterId: number,
+  requestId: string,
+  answer: string,
+  onEvent: (event: MangaAgentRunEvent) => void,
+): AbortController {
+  return startMangaAgentEventStream(
+    `${BASE}/api/chapters/${chapterId}/manga-agent/runs/${requestId}/resume-stream`,
+    { answer },
+    requestId,
+    onEvent,
+  );
 }

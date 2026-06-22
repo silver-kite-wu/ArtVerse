@@ -1,5 +1,6 @@
 package com.artverse.application;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.*;
@@ -42,7 +43,8 @@ public class ExportImportService {
     private final ObjectMapper objectMapper;
 
     public byte[] exportStory(Long storyId) {
-        Story story = storyRepository.findById(storyId)
+        Long userId = currentUserId();
+        Story story = storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -278,6 +280,10 @@ public class ExportImportService {
         }
 
         return story;
+    }
+
+    private Long currentUserId() {
+        return StpUtil.getLoginIdAsLong();
     }
 
     private void addFileToZip(ZipOutputStream zos, String relativePath, String zipEntryName) throws IOException {

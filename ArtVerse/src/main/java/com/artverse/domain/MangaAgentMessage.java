@@ -33,6 +33,11 @@ public class MangaAgentMessage {
     @JsonIgnore
     private Chapter chapter;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "conversation_id", nullable = false)
+    @JsonIgnore
+    private MangaAgentConversation conversation;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private MessageRole role;

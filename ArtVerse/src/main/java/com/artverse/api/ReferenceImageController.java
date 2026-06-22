@@ -5,7 +5,7 @@ import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.StoryAssetGroup;
 import com.artverse.media.MediaStorageService;
-import com.artverse.persistence.ChapterRepository;
+import com.artverse.application.ChapterAccessService;
 import com.artverse.persistence.StoryAssetGroupRepository;
 import com.artverse.persistence.StoryRepository;
 import com.artverse.storage.ObjectStorageService;
@@ -27,8 +27,8 @@ import java.util.Map;
 public class ReferenceImageController {
 
     private final StoryRepository storyRepository;
-    private final ChapterRepository chapterRepository;
     private final StoryAssetGroupRepository assetGroupRepository;
+    private final ChapterAccessService chapterAccessService;
     private final MediaStorageService mediaStorageService;
     private final ObjectStorageService objectStorageService;
     private final ArtVerseProperties properties;
@@ -36,7 +36,7 @@ public class ReferenceImageController {
     @Transactional(readOnly = true)
     @GetMapping("/stories/{storyId}/ref-images")
     public Map<String, Object> getStoryRefImages(@PathVariable Long storyId) {
-        storyRepository.findById(storyId)
+        storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, currentUserId())
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
 
         Map<String, Object> result = listImages(storyRefPrefix(storyId));
@@ -47,8 +47,7 @@ public class ReferenceImageController {
     @Transactional(readOnly = true)
     @GetMapping("/chapters/{chapterId}/ref-images")
     public Map<String, Object> getChapterRefImages(@PathVariable Long chapterId) {
-        Chapter chapter = chapterRepository.findById(chapterId)
-                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+        Chapter chapter = chapterAccessService.requireVisible(chapterId, currentUserId());
 
         Map<String, Object> result = listImages(chapterRefPrefix(chapter));
         if (!imagesEmpty(result)) {
@@ -88,7 +87,7 @@ public class ReferenceImageController {
 
     @PostMapping("/stories/{storyId}/ref-images")
     public Map<String, Object> addStoryRefImage(@PathVariable Long storyId, @RequestBody Map<String, String> body) {
-        storyRepository.findById(storyId)
+        storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, currentUserId())
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
         uploadRefImage(storyRefPrefix(storyId), body);
 
@@ -99,7 +98,7 @@ public class ReferenceImageController {
 
     @DeleteMapping("/stories/{storyId}/ref-images/{filename}")
     public Map<String, Object> deleteStoryRefImage(@PathVariable Long storyId, @PathVariable String filename) {
-        storyRepository.findById(storyId)
+        storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, currentUserId())
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
         deleteRefImage(storyRefPrefix(storyId), filename);
 
@@ -111,8 +110,7 @@ public class ReferenceImageController {
     @Transactional
     @PostMapping("/chapters/{chapterId}/ref-images")
     public Map<String, Object> addChapterRefImage(@PathVariable Long chapterId, @RequestBody Map<String, String> body) {
-        Chapter chapter = chapterRepository.findById(chapterId)
-                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+        Chapter chapter = chapterAccessService.requireVisible(chapterId, currentUserId());
         uploadRefImage(chapterRefPrefix(chapter), body);
 
         Map<String, Object> result = listImages(chapterRefPrefix(chapter));
@@ -123,8 +121,7 @@ public class ReferenceImageController {
     @Transactional
     @DeleteMapping("/chapters/{chapterId}/ref-images/{filename}")
     public Map<String, Object> deleteChapterRefImage(@PathVariable Long chapterId, @PathVariable String filename) {
-        Chapter chapter = chapterRepository.findById(chapterId)
-                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+        Chapter chapter = chapterAccessService.requireVisible(chapterId, currentUserId());
         deleteRefImage(chapterRefPrefix(chapter), filename);
 
         Map<String, Object> result = listImages(chapterRefPrefix(chapter));
@@ -136,7 +133,7 @@ public class ReferenceImageController {
     @PostMapping("/stories/{storyId}/asset-groups/{groupId}/ref-images")
     public Map<String, Object> addAssetGroupRefImage(@PathVariable Long storyId, @PathVariable Long groupId,
                                                      @RequestBody Map<String, String> body) {
-        StoryAssetGroup group = assetGroupRepository.findById(groupId)
+        StoryAssetGroup group = assetGroupRepository.findByIdAndUserId(groupId, currentUserId())
                 .orElseThrow(() -> new BusinessException(404, "Asset group not found"));
         if (!group.getStory().getId().equals(storyId)) {
             throw new BusinessException(400, "Asset group does not belong to this story");
@@ -153,7 +150,7 @@ public class ReferenceImageController {
     @DeleteMapping("/stories/{storyId}/asset-groups/{groupId}/ref-images/{filename}")
     public Map<String, Object> deleteAssetGroupRefImage(@PathVariable Long storyId, @PathVariable Long groupId,
                                                         @PathVariable String filename) {
-        StoryAssetGroup group = assetGroupRepository.findById(groupId)
+        StoryAssetGroup group = assetGroupRepository.findByIdAndUserId(groupId, currentUserId())
                 .orElseThrow(() -> new BusinessException(404, "Asset group not found"));
         if (!group.getStory().getId().equals(storyId)) {
             throw new BusinessException(400, "Asset group does not belong to this story");
@@ -248,5 +245,9 @@ public class ReferenceImageController {
     private boolean isImageObject(String objectKey) {
         String name = objectKey.toLowerCase();
         return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
+    }
+
+    private Long currentUserId() {
+        return cn.dev33.satoken.stp.StpUtil.getLoginIdAsLong();
     }
 }

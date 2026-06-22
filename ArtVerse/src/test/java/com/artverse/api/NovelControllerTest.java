@@ -34,7 +34,7 @@ class NovelControllerTest {
         message.setChapter(chapter);
         chapter.getMessages().add(message);
 
-        NovelService service = new NovelService(null, null, null, null, null) {
+        NovelService service = new NovelService(null, null, null, null, null, null) {
             @Override
             public Chapter importNovel(Long chapterId, String content) {
                 assertThat(chapterId).isEqualTo(7L);
@@ -42,7 +42,7 @@ class NovelControllerTest {
                 return chapter;
             }
         };
-        NovelController controller = new NovelController(service);
+        NovelController controller = new NovelController(service, null, null);
 
         Object result = controller.importNovel(7L, java.util.Map.of("content", "正文"));
 

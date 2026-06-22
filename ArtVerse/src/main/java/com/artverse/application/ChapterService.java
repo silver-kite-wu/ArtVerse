@@ -1,5 +1,6 @@
 package com.artverse.application;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.ColorMode;
@@ -28,22 +29,25 @@ public class ChapterService {
 
     @Transactional(readOnly = true)
     public List<Chapter> listByStory(Long storyId) {
-        return chapterRepository.findByStoryIdWithDetails(storyId);
+        Long userId = currentUserId();
+        return chapterRepository.findByStoryIdWithDetailsAndUserId(storyId, userId);
     }
 
     @Transactional(readOnly = true)
     public Chapter getRequired(Long id) {
-        return chapterRepository.findByIdWithDetails(id)
+        Long userId = currentUserId();
+        return chapterRepository.findByIdWithDetailsAndUserId(id, userId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
     }
 
     @Transactional
     public Chapter createNext(Long storyId) {
-        Story story = storyRepository.findById(storyId)
+        Long userId = currentUserId();
+        Story story = storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
 
         for (int attempt = 0; attempt < MAX_CREATE_RETRIES; attempt++) {
-            int maxNumber = chapterRepository.findMaxChapterNumberByStoryId(storyId);
+            int maxNumber = chapterRepository.findMaxChapterNumberByStoryIdAndUserId(storyId, userId);
             int nextNumber = maxNumber + 1;
 
             Chapter chapter = new Chapter();
@@ -97,5 +101,9 @@ public class ChapterService {
             chapter.setAssetGroup(group);
         }
         chapterRepository.save(chapter);
+    }
+
+    private Long currentUserId() {
+        return StpUtil.getLoginIdAsLong();
     }
 }

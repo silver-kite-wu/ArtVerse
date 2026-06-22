@@ -53,6 +53,8 @@ artverse:
       - 12
       - 15
       - 20
+  manga-generation:
+    max-concurrent-jobs: 4
   deepseek:
     base-url: https://api.deepseek.com
     model: deepseek-v4-flash

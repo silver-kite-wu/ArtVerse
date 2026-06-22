@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -39,8 +41,15 @@ import static org.mockito.Mockito.when;
 
 class MangaGenerationServiceTest {
 
+    private static final String STORYBOARD_SCENE = "[\""
+            + "\\u3010\\u7b2c1\\u683c\\uff08wide\\uff09\\u3011Rainy alley and distant city lights. "
+            + "\\u3010\\u7b2c2\\u683c\\uff08medium\\uff09\\u3011Protagonist opens the door. "
+            + "\\u3010\\u7b2c3\\u683c\\uff08close-up\\uff09\\u3011Hand on the old door handle. "
+            + "\\u3010\\u7b2c4\\u683c\\uff08close-up\\uff09\\u3011Reflected city lights in the eyes."
+            + "\"]";
+
     @Test
-    void generatesImagesFromNovelContentWhenScenesAreMissing() throws Exception {
+    void generatesImagesFromStoryboardScenes() throws Exception {
         ArtVerseProperties properties = new ArtVerseProperties();
         properties.getImage().setModel("gpt-image-2");
         properties.getMinio().setBucket("artverse-test");
@@ -53,41 +62,47 @@ class MangaGenerationServiceTest {
         chapter.setStory(story);
         chapter.setImageCount(1);
         chapter.setColorMode(ColorMode.BW);
-        chapter.setNovelContent("主角推开雨夜里的门，看到远处亮起的城市霓虹。");
-        chapter.setScenesText("[\"主角推开雨夜里的门，看到远处亮起的城市霓虹。\"]");
+        chapter.setNovelContent("The protagonist opens the door on a rainy night and sees city lights.");
+        chapter.setScenesText(STORYBOARD_SCENE);
 
         ChapterRepository chapterRepository = mock(ChapterRepository.class);
         MangaImageRepository mangaImageRepository = mock(MangaImageRepository.class);
         CharacterProfileService characterProfileService = mock(CharacterProfileService.class);
         CapturingImage2Client image2Client = new CapturingImage2Client();
 
-        when(chapterRepository.findById(7L)).thenReturn(Optional.of(chapter));
+        when(chapterRepository.findByIdForIdempotency(7L)).thenReturn(Optional.of(chapter));
         when(mangaImageRepository.findByChapterIdAndImageNumber(7L, 1)).thenReturn(Optional.empty());
         when(mangaImageRepository.save(any(MangaImage.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mangaImageRepository.saveAndFlush(any(MangaImage.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(characterProfileService.resolveEffective(7L)).thenReturn(Map.of("content", ""));
+
+        MangaImageStorageService imageStorageService = new MangaImageStorageService(
+                mangaImageRepository,
+                new CapturingObjectStorage(),
+                new MediaStorageService(properties),
+                properties
+        );
 
         MangaGenerationService service = new MangaGenerationService(
                 chapterRepository,
-                mangaImageRepository,
                 image2Client,
-                new CapturingObjectStorage(),
-                new MediaStorageService(properties),
+                imageStorageService,
+                directExecutor(),
                 characterProfileService,
                 properties,
                 new ObjectMapper()
         );
-        service.init();
 
         service.generateMangaStream(7L, "image-key", null);
 
         assertThat(image2Client.awaitRequest()).isTrue();
         ImageGenerationRequest request = image2Client.request.get();
         assertThat(request.model()).isEqualTo("gpt-image-2");
-        assertThat(request.prompt()).contains("主角推开雨夜里的门");
+        assertThat(request.prompt()).contains("Rainy alley");
     }
 
     @Test
-    void failsFastWhenImageGenerationDoesNotComplete() throws Exception {
+    void wrapsImageGenerationClientFailure() throws Exception {
         ArtVerseProperties properties = new ArtVerseProperties();
         properties.getImage().setModel("gpt-image-2");
         properties.getMinio().setBucket("artverse-test");
@@ -100,32 +115,41 @@ class MangaGenerationServiceTest {
         chapter.setStory(story);
         chapter.setImageCount(1);
         chapter.setColorMode(ColorMode.BW);
-        chapter.setNovelContent("主角推开雨夜里的门，看到远处亮起的城市霓虹。");
-        chapter.setScenesText("[\"主角推开雨夜里的门，看到远处亮起的城市霓虹。\"]");
+        chapter.setNovelContent("The protagonist opens the door on a rainy night and sees city lights.");
+        chapter.setScenesText(STORYBOARD_SCENE);
 
         ChapterRepository chapterRepository = mock(ChapterRepository.class);
         MangaImageRepository mangaImageRepository = mock(MangaImageRepository.class);
         CharacterProfileService characterProfileService = mock(CharacterProfileService.class);
 
-        when(chapterRepository.findById(7L)).thenReturn(Optional.of(chapter));
+        when(chapterRepository.findByIdForIdempotency(7L)).thenReturn(Optional.of(chapter));
         when(mangaImageRepository.findByChapterIdAndImageNumber(7L, 1)).thenReturn(Optional.empty());
         when(characterProfileService.resolveEffective(7L)).thenReturn(Map.of("content", ""));
 
-        MangaGenerationService service = new MangaGenerationService(
-                chapterRepository,
+        MangaImageStorageService imageStorageService = new MangaImageStorageService(
                 mangaImageRepository,
-                (request, apiKey) -> Mono.never(),
                 new CapturingObjectStorage(),
                 new MediaStorageService(properties),
+                properties
+        );
+
+        MangaGenerationService service = new MangaGenerationService(
+                chapterRepository,
+                (request, apiKey) -> Mono.error(new IllegalStateException("downstream unavailable")),
+                imageStorageService,
+                directExecutor(),
                 characterProfileService,
                 properties,
                 new ObjectMapper()
         );
-        service.init();
 
         assertThatThrownBy(() -> service.generateImageForJob(chapter, List.of(), "image-key", "test prompt"))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("Image generation timed out");
+                .hasMessageContaining("Image generation timed out or failed");
+    }
+
+    private static ExecutorService directExecutor() {
+        return Executors.newSingleThreadExecutor();
     }
 
     private static class CapturingImage2Client implements Image2Client {

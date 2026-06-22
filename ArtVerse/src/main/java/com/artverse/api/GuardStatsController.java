@@ -1,7 +1,7 @@
 package com.artverse.api;
 
-import com.artverse.application.GuardStatsService;
-import com.artverse.application.GuardEventService;
+import com.artverse.guard.GuardStatsService;
+import com.artverse.guard.GuardEventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;

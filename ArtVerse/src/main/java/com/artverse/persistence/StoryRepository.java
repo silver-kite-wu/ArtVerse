@@ -19,6 +19,12 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
     @Query("SELECT DISTINCT s FROM Story s LEFT JOIN FETCH s.chapters LEFT JOIN FETCH s.assetGroups WHERE s.id = :id")
     Optional<Story> findByIdWithChaptersAndGroups(Long id);
 
+    @Query("SELECT DISTINCT s FROM Story s LEFT JOIN FETCH s.chapters LEFT JOIN FETCH s.assetGroups WHERE s.id = :id AND s.user.id = :userId")
+    Optional<Story> findByIdAndUserIdWithChaptersAndGroups(@Param("id") Long id, @Param("userId") Long userId);
+
+    @Query("SELECT DISTINCT s FROM Story s LEFT JOIN FETCH s.chapters LEFT JOIN FETCH s.assetGroups WHERE s.user.id = :userId ORDER BY s.createdAt DESC")
+    List<Story> findByUserIdWithChaptersAndGroups(@Param("userId") Long userId);
+
     @Query("SELECT s FROM Story s LEFT JOIN FETCH s.chapters WHERE s.user.id = :userId ORDER BY s.createdAt DESC")
     List<Story> findByUserIdWithChapters(@Param("userId") Long userId);
 

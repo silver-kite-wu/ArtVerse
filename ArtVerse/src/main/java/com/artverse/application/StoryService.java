@@ -25,18 +25,20 @@ public class StoryService {
 
     @Transactional(readOnly = true)
     public List<Story> listAll() {
-        return storyRepository.findAllWithChaptersAndGroups();
+        Long userId = currentUserId();
+        return storyRepository.findByUserIdWithChaptersAndGroups(userId);
     }
 
     @Transactional(readOnly = true)
     public Story getRequired(Long id) {
-        return storyRepository.findByIdWithChaptersAndGroups(id)
+        Long userId = currentUserId();
+        return storyRepository.findByIdAndUserIdWithChaptersAndGroups(id, userId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
     }
 
     @Transactional
     public Story create(String title, String description) {
-        Long userId = StpUtil.getLoginIdAsLong();
+        Long userId = currentUserId();
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(404, "User not found"));
 
@@ -128,5 +130,9 @@ public class StoryService {
                 }
             }
         }
+    }
+
+    private Long currentUserId() {
+        return StpUtil.getLoginIdAsLong();
     }
 }

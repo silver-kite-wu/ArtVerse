@@ -6,30 +6,23 @@ import com.artverse.ai.ImageGenerationRequest;
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.*;
-import com.artverse.media.MediaStorageService;
 import com.artverse.persistence.ChapterRepository;
-import com.artverse.persistence.MangaImageRepository;
 import com.artverse.prompt.MangaPromptPolicy;
-import com.artverse.storage.ObjectStorageService;
-import com.artverse.storage.StoredObject;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -38,21 +31,15 @@ import java.util.function.Consumer;
 public class MangaGenerationService {
 
     private final ChapterRepository chapterRepository;
-    private final MangaImageRepository mangaImageRepository;
     private final Image2Client image2Client;
-    private final ObjectStorageService objectStorageService;
-    private final MediaStorageService mediaStorageService;
+    private final MangaImageStorageService mangaImageStorageService;
+    @Qualifier("mangaGenerationExecutor")
+    private final ExecutorService executor;
     private final CharacterProfileService characterProfileService;
     private final ArtVerseProperties properties;
     private final ObjectMapper objectMapper;
 
     private final Map<Long, MangaGenerationJob> activeJobs = new ConcurrentHashMap<>();
-    private ExecutorService executor;
-
-    @PostConstruct
-    void init() {
-        executor = Executors.newCachedThreadPool();
-    }
 
     @Transactional
     public SseEmitter generateMangaStream(Long chapterId, String imageApiKey, String deepseekApiKey) {
@@ -91,9 +78,13 @@ public class MangaGenerationService {
         SseEmitter emitter = new SseEmitter(0L);
         job.addSubscriber(emitter);
 
-        // Start generation in background
-        executor.submit(() -> runGenerationJob(job, chapter, storyId, mangaStyle, storyRefImage, assetGroupId,
-                imageApiKey, deepseekApiKey, onComplete, onError));
+        try {
+            executor.submit(() -> runGenerationJob(job, chapter, storyId, mangaStyle, storyRefImage, assetGroupId,
+                    imageApiKey, deepseekApiKey, onComplete, onError));
+        } catch (RuntimeException e) {
+            activeJobs.remove(chapterId);
+            throw e;
+        }
 
         return emitter;
     }
@@ -110,11 +101,10 @@ public class MangaGenerationService {
             if (mangaStyle == null || mangaStyle.isBlank()) mangaStyle = "japanese_manga";
             String colorMode = chapter.getColorMode().name().toLowerCase();
 
-            List<Path> refImages = computeEffectiveRefImages(storyId, chapter.getId(), chapter.getRefImage(),
-                    assetGroupId, storyRefImage);
-            List<Path> tempRefImages = new ArrayList<>();
-            List<Path> imageRequestRefs = materializeMinioRefs(refImages, tempRefImages);
-            boolean hasRefImages = !imageRequestRefs.isEmpty();
+            MangaImageStorageService.ReferenceImages referenceImages = mangaImageStorageService.prepareReferenceImages(
+                    storyId, chapter.getId(), chapter.getRefImage(), assetGroupId, storyRefImage);
+            List<Path> imageRequestRefs = referenceImages.requestRefs();
+            boolean hasRefImages = referenceImages.hasRefs();
 
             try {
                 for (int i = 0; i < job.getScenes().size(); i++) {
@@ -124,7 +114,7 @@ public class MangaGenerationService {
                     String scene = job.getScenes().get(i);
 
                     // Check if image already exists
-                    Optional<MangaImage> existing = mangaImageRepository.findByChapterIdAndImageNumber(chapter.getId(), imageNumber);
+                    Optional<MangaImage> existing = mangaImageStorageService.findPanel(chapter.getId(), imageNumber);
                     if (existing.isPresent()) {
                         MangaImage img = existing.get();
                         String url = "/static/manga/" + img.getImagePath();
@@ -153,27 +143,10 @@ public class MangaGenerationService {
                             GeneratedImage generated = generateImageForJob(chapter, imageRequestRefs, imageApiKey, prompt);
 
                             // Upload to MinIO
-                            String filename = mediaStorageService.generateUniqueFilename("panel_" + String.format("%02d", imageNumber), ".png");
-                            String objectKey = "stories/" + storyId + "/chapters/" + chapter.getId() + "/panels/" + filename;
-                            StoredObject stored = objectStorageService.putPng(objectKey, generated.localFile(), "image/png");
+                            MangaImage mangaImage = mangaImageStorageService.saveGeneratedPanel(
+                                    chapter, storyId, imageNumber, generated.localFile(), prompt);
 
                             // Find existing or create new — update in place to avoid dup key on retry
-                            MangaImage mangaImage = mangaImageRepository
-                                    .findByChapterIdAndImageNumber(chapter.getId(), imageNumber)
-                                    .orElseGet(() -> {
-                                        MangaImage m = new MangaImage();
-                                        m.setChapter(chapter);
-                                        m.setImageNumber(imageNumber);
-                                        return m;
-                                    });
-                            mangaImage.setImagePath(stored.objectKey());
-                            mangaImage.setStorageProvider(StorageProvider.MINIO);
-                            mangaImage.setBucket(stored.bucket());
-                            mangaImage.setObjectKey(stored.objectKey());
-                            mangaImage.setContentType(stored.contentType());
-                            mangaImage.setSizeBytes(stored.sizeBytes());
-                            mangaImage.setPrompt(prompt);
-                            mangaImageRepository.saveAndFlush(mangaImage);
 
                             // Send progress (after successful generation)
                             job.broadcastEvent("progress", objectMapper.writeValueAsString(Map.of(
@@ -190,11 +163,7 @@ public class MangaGenerationService {
                             )));
 
                             // Cleanup temp file
-                            try {
-                                Files.deleteIfExists(generated.localFile());
-                                Files.deleteIfExists(generated.localFile().getParent());
-                            } catch (Exception ignored) {
-                            }
+                            mangaImageStorageService.cleanupTempFile(generated.localFile());
                             success = true;
                             break;
                         } catch (Exception e) {
@@ -218,7 +187,7 @@ public class MangaGenerationService {
                     }
                 }
             } finally {
-                cleanupTempFiles(tempRefImages);
+                mangaImageStorageService.cleanupTempFiles(referenceImages.tempRefs());
             }
 
             // Send done
@@ -285,13 +254,12 @@ public class MangaGenerationService {
         String mangaStyle = chapter.getStory().getMangaStyle();
         if (mangaStyle == null || mangaStyle.isBlank()) mangaStyle = "japanese_manga";
         String colorMode = chapter.getColorMode().name().toLowerCase();
-        List<Path> refImages = computeEffectiveRefImages(
+        MangaImageStorageService.ReferenceImages referenceImages = mangaImageStorageService.prepareReferenceImages(
                 chapter.getStory().getId(), chapter.getId(), chapter.getRefImage(),
                 chapter.getAssetGroup() != null ? chapter.getAssetGroup().getId() : null,
                 chapter.getStory().getRefImage());
-        List<Path> tempRefImages = new ArrayList<>();
-        List<Path> imageRequestRefs = materializeMinioRefs(refImages, tempRefImages);
-        boolean hasRefImages = !imageRequestRefs.isEmpty();
+        List<Path> imageRequestRefs = referenceImages.requestRefs();
+        boolean hasRefImages = referenceImages.hasRefs();
 
         String optimizedPrompt = MangaPromptPolicy.buildImagePrompt(
                 prompt, profiles, mangaStyle, colorMode, hasRefImages, scenes.isEmpty() ? List.of(prompt) : scenes, imageNumber);
@@ -308,157 +276,17 @@ public class MangaGenerationService {
         try {
             generated = image2Client.generate(request, imageApiKey).block();
         } finally {
-            cleanupTempFiles(tempRefImages);
+            mangaImageStorageService.cleanupTempFiles(referenceImages.tempRefs());
         }
         if (generated == null) {
             throw new BusinessException(502, "Image generation returned null");
         }
 
-        // Upload to MinIO
-        String filename = mediaStorageService.generateUniqueFilename("panel_" + String.format("%02d", imageNumber), ".png");
-        String objectKey = "stories/" + chapter.getStory().getId() + "/chapters/" + chapterId + "/panels/" + filename;
-        StoredObject stored = objectStorageService.putPng(objectKey, generated.localFile(), "image/png");
-
-        // Update or create DB record
-        Optional<MangaImage> existingOpt = mangaImageRepository.findByChapterIdAndImageNumber(chapterId, imageNumber);
-
-        String oldObjectKey = null;
-        String oldBucket = null;
-
-        if (existingOpt.isPresent()) {
-            MangaImage existing = existingOpt.get();
-            oldObjectKey = existing.getObjectKey();
-            oldBucket = existing.getBucket();
-            existing.setImagePath(stored.objectKey());
-            existing.setStorageProvider(StorageProvider.MINIO);
-            existing.setBucket(stored.bucket());
-            existing.setObjectKey(stored.objectKey());
-            existing.setContentType(stored.contentType());
-            existing.setSizeBytes(stored.sizeBytes());
-            existing.setPrompt(optimizedPrompt);
-            MangaImage saved = mangaImageRepository.save(existing);
-
-            // Delete old object after successful save
-            cleanupOldObject(oldBucket, oldObjectKey);
-
-            // Cleanup temp
-            cleanupTempFile(generated.localFile());
-
-            return saved;
-        } else {
-            MangaImage mangaImage = new MangaImage();
-            mangaImage.setChapter(chapter);
-            mangaImage.setImageNumber(imageNumber);
-            mangaImage.setImagePath(stored.objectKey());
-            mangaImage.setStorageProvider(StorageProvider.MINIO);
-            mangaImage.setBucket(stored.bucket());
-            mangaImage.setObjectKey(stored.objectKey());
-            mangaImage.setContentType(stored.contentType());
-            mangaImage.setSizeBytes(stored.sizeBytes());
-            mangaImage.setPrompt(optimizedPrompt);
-            MangaImage saved = mangaImageRepository.save(mangaImage);
-
-            cleanupTempFile(generated.localFile());
-
-            return saved;
-        }
-    }
-
-    private void cleanupOldObject(String bucket, String objectKey) {
-        if (bucket != null && objectKey != null) {
-            try {
-                objectStorageService.deleteBestEffort(bucket, objectKey);
-            } catch (Exception e) {
-                log.warn("Failed to delete old MinIO object {}/{}: {}", bucket, objectKey, e.getMessage());
-            }
-        }
-    }
-
-    private void cleanupTempFile(Path tempFile) {
         try {
-            Files.deleteIfExists(tempFile);
-            Files.deleteIfExists(tempFile.getParent());
-        } catch (Exception ignored) {
+            return mangaImageStorageService.replaceGeneratedPanel(chapter, imageNumber, generated.localFile(), optimizedPrompt);
+        } finally {
+            mangaImageStorageService.cleanupTempFile(generated.localFile());
         }
-    }
-
-    private List<Path> computeEffectiveRefImages(Long storyId, Long chapterId, String chapterRefImage,
-                                                 Long assetGroupId, String storyRefImage) {
-        List<Path> refs = new ArrayList<>();
-
-        addMinioRefs(refs, "stories/" + storyId + "/chapters/" + chapterId + "/ref_images/");
-
-        // Chapter old single ref
-        if (refs.isEmpty() && chapterRefImage != null && !chapterRefImage.isBlank()) {
-            Path ref = mediaStorageService.resolveRelativePath(chapterRefImage);
-            if (ref != null && Files.exists(ref)) refs.add(ref);
-        }
-
-        if (refs.isEmpty() && assetGroupId != null) {
-            addMinioRefs(refs, "stories/" + storyId + "/asset_groups/" + assetGroupId + "/ref_images/");
-        }
-
-        if (refs.isEmpty()) {
-            addMinioRefs(refs, "stories/" + storyId + "/ref_images/");
-        }
-
-        // Story old single ref
-        if (refs.isEmpty() && storyRefImage != null && !storyRefImage.isBlank()) {
-            Path ref = mediaStorageService.resolveRelativePath(storyRefImage);
-            if (ref != null && Files.exists(ref)) refs.add(ref);
-        }
-
-        return refs;
-    }
-
-    private void addMinioRefs(List<Path> refs, String prefix) {
-        objectStorageService.list(properties.getMinio().getBucket(), prefix, 4).stream()
-                .map(stored -> Path.of(stored.objectKey()))
-                .filter(this::isImageFile)
-                .limit(4 - refs.size())
-                .forEach(refs::add);
-    }
-
-    private List<Path> materializeMinioRefs(List<Path> refs, List<Path> tempRefs) {
-        List<Path> materialized = new ArrayList<>();
-        for (Path ref : refs) {
-            if (Files.exists(ref)) {
-                materialized.add(ref);
-            } else {
-                Path temp = downloadRefObject(ref.toString().replace('\\', '/'));
-                tempRefs.add(temp);
-                materialized.add(temp);
-            }
-        }
-        return materialized;
-    }
-
-    private Path downloadRefObject(String objectKey) {
-        try (var in = objectStorageService.get(properties.getMinio().getBucket(), objectKey)) {
-            Path temp = Files.createTempFile("artverse-ref-", suffixFor(objectKey));
-            Files.copy(in, temp, StandardCopyOption.REPLACE_EXISTING);
-            return temp;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to download ref image: " + e.getMessage(), e);
-        }
-    }
-
-    private String suffixFor(String objectKey) {
-        String lower = objectKey.toLowerCase();
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return ".jpg";
-        if (lower.endsWith(".webp")) return ".webp";
-        return ".png";
-    }
-
-    private void cleanupTempFiles(List<Path> tempFiles) {
-        for (Path tempFile : tempFiles) {
-            cleanupTempFile(tempFile);
-        }
-    }
-
-    private boolean isImageFile(Path p) {
-        String name = p.getFileName().toString().toLowerCase();
-        return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
     }
 
     private String optimizePrompt(String prompt, String deepseekApiKey) {

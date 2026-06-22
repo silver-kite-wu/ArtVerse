@@ -1,5 +1,6 @@
 package com.artverse.application;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.CharacterProfile;
@@ -30,14 +31,16 @@ public class AssetGroupService {
 
     @Transactional(readOnly = true)
     public List<StoryAssetGroup> listByStory(Long storyId) {
-        List<StoryAssetGroup> groups = assetGroupRepository.findByStoryIdOrderByIdAsc(storyId);
+        Long userId = currentUserId();
+        List<StoryAssetGroup> groups = assetGroupRepository.findByStoryIdAndUserIdOrderByIdAsc(storyId, userId);
         groups.forEach(g -> g.getCharacters().size());
         return groups;
     }
 
     @Transactional(readOnly = true)
     public StoryAssetGroup getRequired(Long id) {
-        return assetGroupRepository.findById(id)
+        Long userId = currentUserId();
+        return assetGroupRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new BusinessException(404, "Asset group not found"));
     }
 
@@ -48,7 +51,8 @@ public class AssetGroupService {
 
     @Transactional
     public StoryAssetGroup create(Long storyId, String name, String description, List<Long> characterIds) {
-        Story story = storyRepository.findById(storyId)
+        Long userId = currentUserId();
+        Story story = storyRepository.findByIdAndUserIdWithChaptersAndGroups(storyId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
         StoryAssetGroup group = new StoryAssetGroup();
         group.setStory(story);
@@ -98,21 +102,23 @@ public class AssetGroupService {
 
     @Transactional(readOnly = true)
     public StoryAssetGroup getChapterAssetGroup(Long chapterId) {
-        Chapter chapter = chapterRepository.findById(chapterId)
+        Long userId = currentUserId();
+        Chapter chapter = chapterRepository.findByIdWithDetailsAndUserId(chapterId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
         return chapter.getAssetGroup();
     }
 
     @Transactional
     public StoryAssetGroup setChapterAssetGroup(Long chapterId, Long groupId) {
-        Chapter chapter = chapterRepository.findById(chapterId)
+        Long userId = currentUserId();
+        Chapter chapter = chapterRepository.findByIdWithDetailsAndUserId(chapterId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
         if (groupId == null) {
             chapter.setAssetGroup(null);
             chapterRepository.save(chapter);
             return null;
         }
-        StoryAssetGroup group = assetGroupRepository.findById(groupId)
+        StoryAssetGroup group = assetGroupRepository.findByIdAndUserId(groupId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Asset group not found"));
         if (!group.getStory().getId().equals(chapter.getStory().getId())) {
             throw new BusinessException(400, "Asset group does not belong to the same story");
@@ -124,7 +130,8 @@ public class AssetGroupService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getChapterAssetGroupData(Long chapterId) {
-        Chapter chapter = chapterRepository.findById(chapterId)
+        Long userId = currentUserId();
+        Chapter chapter = chapterRepository.findByIdWithDetailsAndUserId(chapterId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
 
         // Force init lazy collections
@@ -161,6 +168,10 @@ public class AssetGroupService {
         result.put("max", 4);
         result.put("selected_group_id", chapter.getAssetGroup() != null ? chapter.getAssetGroup().getId() : null);
         return result;
+    }
+
+    private Long currentUserId() {
+        return StpUtil.getLoginIdAsLong();
     }
 
 }

@@ -2,7 +2,7 @@ package com.artverse.api;
 
 import com.artverse.application.ImageGenService;
 import com.artverse.application.ApiKeyService;
-import com.artverse.application.GenerationGuardService;
+import com.artverse.guard.GenerationGuardService;
 import com.artverse.application.CurrentUserService;
 import com.artverse.domain.User;
 import lombok.RequiredArgsConstructor;

@@ -91,17 +91,21 @@ artverse:
 sa-token:
   # === Token 基础配置 ===
   token-name: satoken
-  timeout: 3600            # Token 硬过期（秒），60min
+  timeout: 43200           # Token 硬过期（秒），12h
   active-timeout: 1800       # 活跃续期阈值（秒），30min 内有请求则自动续期
   is-concurrent: true      # 允许多端登录
   is-share: false          # 多端不共享 token
   token-style: uuid        # uuid / 32str / random
   token-prefix: ""         # 不加 Bearer 前缀
-  is-read-cookie: false
+  is-read-cookie: true
   is-read-header: true
-  is-write-cookie: false
-  is-write-header: true    # 登录后 token 写入响应 Header
+  is-write-cookie: true
+  is-write-header: false
   is-log: true
+  cookie:
+    http-only: true
+    same-site: lax
+    secure: false
 
   # === 拦截器配置 ===
   intercept-urls:

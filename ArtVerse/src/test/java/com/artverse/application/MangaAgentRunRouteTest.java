@@ -39,6 +39,19 @@ class MangaAgentRunRouteTest {
         assertThat(snapshot.route()).isEqualTo(MangaWorkflowRoute.REVIEW);
     }
 
+    @Test
+    void snapshotCanRestoreAutoRoute() {
+        Fixture fixture = fixture();
+        MangaAgentRun run = run(fixture.user, fixture.chapter, UUID.randomUUID(), "hello");
+        run.setRoute(MangaWorkflowRoute.AUTO);
+
+        when(fixture.eventRepository.findByRunIdOrderByIdAsc(99L)).thenReturn(List.of());
+
+        MangaAgentRunService.RunSnapshot snapshot = fixture.service.snapshot(run);
+
+        assertThat(snapshot.route()).isEqualTo(MangaWorkflowRoute.AUTO);
+    }
+
     private Fixture fixture() {
         MangaAgentRunRepository runRepository = mock(MangaAgentRunRepository.class);
         MangaAgentRunEventRepository eventRepository = mock(MangaAgentRunEventRepository.class);

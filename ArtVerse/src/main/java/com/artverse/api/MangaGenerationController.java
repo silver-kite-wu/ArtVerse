@@ -23,12 +23,14 @@ public class MangaGenerationController {
     private final CurrentUserService currentUserService;
 
     @PostMapping("/generate-manga-stream")
-    public SseEmitter generateMangaStream(@PathVariable Long chapterId) {
+    public SseEmitter generateMangaStream(@PathVariable Long chapterId,
+                                          @RequestBody(required = false) Map<String, Object> body) {
         User user = currentUser();
         GenerationGuardService.MangaStreamGuard guard = generationGuardService.guardMangaStream(user.getId(), chapterId);
         String imageApiKey = apiKeyService.getDecryptedKey(user, "image2");
         String deepseekApiKey = apiKeyService.getDecryptedKey(user, "deepseek");
-        return mangaGenerationService.generateMangaStream(chapterId, imageApiKey, deepseekApiKey,
+        Long assetGroupId = optionalLong(body == null ? null : body.get("assetGroupId"));
+        return mangaGenerationService.generateMangaStream(chapterId, assetGroupId, user.getId(), imageApiKey, deepseekApiKey,
                 guard.onComplete(),
                 guard.onError());
     }
@@ -51,6 +53,14 @@ public class MangaGenerationController {
         return mapToMangaImage(result);
     }
 
+    @GetMapping("/image-request-preview")
+    public Map<String, Object> previewImageRequest(@PathVariable Long chapterId,
+                                                   @RequestParam(defaultValue = "1") int imageNumber,
+                                                   @RequestParam(required = false) Long assetGroupId) {
+        User user = currentUser();
+        return mangaGenerationService.previewImageRequest(chapterId, assetGroupId, user.getId(), imageNumber);
+    }
+
     private Map<String, Object> mangaImageToMap(MangaImage image) {
         return Map.of(
                 "id", image.getId(),
@@ -71,5 +81,13 @@ public class MangaGenerationController {
 
     private User currentUser() {
         return currentUserService.requireCurrentUser();
+    }
+
+    private Long optionalLong(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number number) return number.longValue();
+        String text = value.toString();
+        if (text.isBlank()) return null;
+        return Long.parseLong(text);
     }
 }

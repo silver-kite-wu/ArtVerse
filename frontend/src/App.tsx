@@ -118,46 +118,46 @@ function ApiKeySettingsModal({ open, onClose }: { open: boolean; onClose: () => 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={onClose}>
-      <div className="m-4 w-full max-w-md space-y-5 rounded-2xl border border-ink-border bg-ink-light p-6 shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-sumi/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="m-4 w-full max-w-md space-y-5 rounded-2xl border border-paper-border bg-paper-raised p-6 shadow-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-cream">
-            <KeyRound size={18} className="text-amber-accent" />
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-sumi">
+            <KeyRound size={18} className="text-kinpaku" />
             API 密钥
           </h2>
-          <button onClick={onClose} className="text-warm-gray hover:text-cream transition-colors" aria-label="关闭">
+          <button onClick={onClose} className="text-sumi-faint hover:text-sumi-dim transition-colors" aria-label="关闭">
             <X size={18} />
           </button>
         </div>
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm text-cream-dim">DeepSeek 密钥</label>
-            <input type="password" value={dk} onChange={(e) => setDk(e.target.value)} placeholder="sk-..." className="w-full rounded-lg border border-ink-border bg-ink px-3 py-2 text-sm text-cream placeholder-ink-muted focus:border-coral focus:outline-none transition-colors" />
-            <a href={DEEPSEEK_USAGE_URL} target="_blank" rel="noopener" className="mt-1 inline-flex items-center gap-1 text-xs text-amber-accent hover:text-amber-accent-light transition-colors">
+            <label className="mb-1 block text-sm text-sumi-dim">DeepSeek 密钥</label>
+            <input type="password" value={dk} onChange={(e) => setDk(e.target.value)} placeholder="sk-..." className="w-full rounded-md border border-paper-border bg-paper-base px-3 py-2 text-sm text-sumi placeholder-sumi-faint focus:border-vermilion focus:outline-none transition-colors" />
+            <a href={DEEPSEEK_USAGE_URL} target="_blank" rel="noopener" className="mt-1 inline-flex items-center gap-1 text-xs text-aizuri hover:text-aizuri/80 transition-colors">
               <ExternalLink size={10} />
               获取密钥
             </a>
           </div>
           <div>
-            <label className="mb-1 block text-sm text-cream-dim">绘图密钥</label>
-            <input type="password" value={ik} onChange={(e) => setIk(e.target.value)} placeholder="sk-..." className="w-full rounded-lg border border-ink-border bg-ink px-3 py-2 text-sm text-cream placeholder-ink-muted focus:border-coral focus:outline-none transition-colors" />
-            <a href={IMAGE2_CONSOLE_URL} target="_blank" rel="noopener" className="mt-1 inline-flex items-center gap-1 text-xs text-amber-accent hover:text-amber-accent-light transition-colors">
+            <label className="mb-1 block text-sm text-sumi-dim">绘图密钥</label>
+            <input type="password" value={ik} onChange={(e) => setIk(e.target.value)} placeholder="sk-..." className="w-full rounded-md border border-paper-border bg-paper-base px-3 py-2 text-sm text-sumi placeholder-sumi-faint focus:border-vermilion focus:outline-none transition-colors" />
+            <a href={IMAGE2_CONSOLE_URL} target="_blank" rel="noopener" className="mt-1 inline-flex items-center gap-1 text-xs text-aizuri hover:text-aizuri/80 transition-colors">
               <ExternalLink size={10} />
               获取密钥
             </a>
           </div>
           <div>
-            <label className="mb-1 block text-sm text-cream-dim">Coze 密钥</label>
-            <input type="password" value={ck} onChange={(e) => setCk(e.target.value)} placeholder="pat-..." className="w-full rounded-lg border border-ink-border bg-ink px-3 py-2 text-sm text-cream placeholder-ink-muted focus:border-coral focus:outline-none transition-colors" />
+            <label className="mb-1 block text-sm text-sumi-dim">Coze 密钥</label>
+            <input type="password" value={ck} onChange={(e) => setCk(e.target.value)} placeholder="pat-..." className="w-full rounded-md border border-paper-border bg-paper-base px-3 py-2 text-sm text-sumi placeholder-sumi-faint focus:border-vermilion focus:outline-none transition-colors" />
           </div>
         </div>
         <div className="flex items-center justify-between pt-2">
-          <button onClick={() => { if (!confirm('确定清空所有密钥吗？')) return; clearApiKeySettings(); setDk(''); setIk(''); setCk(''); }} disabled={!dk && !ik && !ck} className="text-xs text-coral hover:text-coral-light disabled:opacity-30 transition-colors">
+          <button onClick={() => { if (!confirm('确定清空所有密钥吗？')) return; clearApiKeySettings(); setDk(''); setIk(''); setCk(''); }} disabled={!dk && !ik && !ck} className="text-xs text-vermilion hover:text-vermilion-hover disabled:opacity-30 transition-colors">
             清空全部
           </button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-cream-dim hover:text-cream transition-colors">取消</button>
-            <button onClick={handleSave} className="rounded-lg bg-coral px-4 py-2 text-sm font-medium text-white hover:bg-coral-light transition-colors">保存</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm text-sumi-dim hover:text-sumi transition-colors">取消</button>
+            <button onClick={handleSave} className="rounded-md bg-vermilion px-4 py-2 text-sm font-medium text-white hover:bg-vermilion-hover transition-colors">保存</button>
           </div>
         </div>
       </div>
@@ -201,7 +201,7 @@ export default function App() {
   }, [view]);
 
   if (!authCheck) {
-    return <div className="flex h-dvh w-screen items-center justify-center bg-ink"><div className="h-8 w-8 animate-spin rounded-full border-2 border-ink-border border-t-coral" /></div>;
+    return <div className="flex h-dvh w-screen items-center justify-center bg-paper-base"><div className="h-8 w-8 animate-spin rounded-full border-2 border-paper-border border-t-vermilion" /></div>;
   }
 
   const loadChapters = async (storyId: number) => {
@@ -341,10 +341,10 @@ export default function App() {
     <button
       onClick={() => goView(target)}
       className={
-        'w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all duration-200 ' +
+        'relative w-full rounded-md px-3 py-2.5 text-left text-sm font-medium transition-all duration-200 ' +
         (view === target
-          ? 'bg-coral/10 text-coral border border-coral/20'
-          : 'text-cream-dim hover:bg-ink-lighter hover:text-cream border border-transparent')
+          ? 'text-vermilion bg-vermilion-light/30 border-l-[3px] border-l-vermilion pl-[9px]'
+          : 'text-sumi-dim hover:bg-paper-base hover:text-sumi border-l-[3px] border-l-transparent pl-[9px]')
       }
     >
       <span className="flex items-center gap-3">{icon}{sidebarOpen && <span>{label}</span>}</span>
@@ -352,40 +352,41 @@ export default function App() {
   );
 
   return (
-    <div className="flex h-dvh w-screen overflow-hidden bg-ink text-cream">
-      <aside className={'flex shrink-0 flex-col border-r border-ink-border bg-ink-light transition-all duration-300 ' + (sidebarOpen ? 'w-52' : 'w-14') + ' ' + (isMobile && view === 'editor' ? 'hidden' : '')}>
-        <div className="flex h-14 items-center justify-between border-b border-ink-border px-3">
+    <div className="flex h-dvh w-screen overflow-hidden bg-paper-base text-sumi">
+      <aside className={'flex shrink-0 flex-col border-r border-paper-border bg-paper-surface transition-all duration-300 ' + (sidebarOpen ? 'w-[220px]' : 'w-14') + ' ' + (isMobile && view === 'editor' ? 'hidden' : '')}>
+        <div className="flex h-14 items-center justify-between border-b border-paper-border px-3">
           {sidebarOpen && (
-            <span className="text-sm font-bold tracking-wide text-coral flex items-center gap-1.5">
-              <Sparkles size={14} />
+            <span className="font-display text-base font-bold tracking-wide text-vermilion flex items-center gap-1.5">
+              <Sparkles size={15} />
               ArtVerse
             </span>
           )}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="ml-auto text-warm-gray hover:text-cream transition-colors" aria-label="切换侧边栏">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="ml-auto text-sumi-faint hover:text-sumi-dim transition-colors" aria-label="切换侧边栏">
             {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           </button>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 px-2 py-3">
-          {navItem(<Sparkles size={18} />, '首页', 'home')}
-          {navItem(<Globe size={18} />, '广场', 'square')}
-          {navItem(<BookOpenText size={18} />, '工作区', 'workspace')}
-          {navItem(<FileText size={18} />, '作品管理', 'myworks')}
-          {navItem(<Paintbrush size={18} />, '生图', 'imagegen')}
+        {sidebarOpen && <div className="brush-divider mx-3 mt-0" />}
+        <nav className="flex flex-1 flex-col gap-0.5 px-2 py-3">
+          {navItem(<Sparkles size={18} />, '创作工坊', 'home')}
+          {navItem(<Globe size={18} />, '发现作品', 'square')}
+          {navItem(<BookOpenText size={18} />, '我的故事', 'workspace')}
+          {navItem(<FileText size={18} />, '章节管理', 'myworks')}
+          {navItem(<Paintbrush size={18} />, '生图工坊', 'imagegen')}
         </nav>
-        <div className="flex flex-col gap-1 border-t border-ink-border px-2 py-3">
+        <div className="flex flex-col gap-0.5 border-t border-paper-border px-2 py-3">
           {authenticated ? (
             <>
-              <button onClick={openSettings} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-cream-dim hover:bg-ink-lighter hover:text-cream transition-colors">
+              <button onClick={openSettings} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-sumi-dim hover:bg-paper-base hover:text-sumi transition-colors">
                 <KeyRound size={18} />
-                {sidebarOpen && <span>设置</span>}
+                {sidebarOpen && <span>API 密钥</span>}
               </button>
-              <button onClick={() => { logoutUser(); setAuthenticated(false); unloadEditor(); clearWorkspaceState(); setView('home'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-cream-dim hover:bg-ink-lighter hover:text-coral transition-colors">
+              <button onClick={() => { logoutUser(); setAuthenticated(false); unloadEditor(); clearWorkspaceState(); setView('home'); }} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-sumi-dim hover:bg-vermilion-light/30 hover:text-vermilion transition-colors">
                 <LogOut size={18} />
-                {sidebarOpen && <span>退出</span>}
+                {sidebarOpen && <span>退出登录</span>}
               </button>
             </>
           ) : (
-            <button onClick={() => requireLogin()} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-cream-dim hover:bg-ink-lighter hover:text-cream transition-colors">
+            <button onClick={() => requireLogin()} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-sumi-dim hover:bg-paper-base hover:text-sumi transition-colors">
               <LogIn size={18} />
               {sidebarOpen && <span>登录</span>}
             </button>
@@ -402,17 +403,17 @@ export default function App() {
 
         {view === 'editor' && activeStoryId && (
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex h-12 shrink-0 items-center justify-between border-b border-ink-border bg-ink-light/80 px-3 backdrop-blur-md">
-              <button onClick={() => { unloadEditor(); setView('workspace'); }} className="flex items-center gap-1.5 text-sm text-cream-dim hover:text-cream transition-colors">
+            <div className="flex h-12 shrink-0 items-center justify-between border-b border-paper-border bg-paper-surface/90 px-3 backdrop-blur-md">
+              <button onClick={() => { unloadEditor(); setView('workspace'); }} className="flex items-center gap-1.5 text-sm text-sumi-dim hover:text-vermilion transition-colors">
                 <ChevronLeft size={16} />
-                返回
+                返回故事
               </button>
               <div className="flex items-center gap-2">
                 {chapters.length > 0 && (
                   <select
                     value={currentIdx}
                     onChange={(e) => setChapterByIndex(Number(e.target.value))}
-                    className="rounded-lg border border-ink-border bg-ink px-2 py-1 text-xs text-cream focus:border-coral focus:outline-none"
+                    className="rounded-md border border-paper-border bg-paper-base px-2 py-1 text-xs text-sumi focus:border-vermilion focus:outline-none transition-colors"
                   >
                     {chapters.map((ch, i) => (
                       <option key={ch.id} value={i}>第 {ch.chapter_number} 话</option>
@@ -423,10 +424,10 @@ export default function App() {
             </div>
 
             {isMobile && chapters.length > 0 && (
-              <div className="shrink-0 overflow-x-auto border-b border-ink-border bg-ink-light px-2 py-2">
+              <div className="shrink-0 overflow-x-auto border-b border-paper-border bg-paper-surface px-2 py-2">
                 <div className="flex gap-1">
                   {chapters.map((ch: Chapter, idx: number) => (
-                    <button key={ch.id} onClick={() => setChapterByIndex(idx)} className={'shrink-0 rounded-full border px-3 py-1.5 text-xs transition-all duration-200 ' + (ch.id === currentChapter?.id ? 'border-coral bg-coral/15 text-coral' : 'border-ink-border bg-ink text-cream-dim hover:text-cream')}>
+                    <button key={ch.id} onClick={() => setChapterByIndex(idx)} className={'shrink-0 rounded-full border px-3 py-1.5 text-xs transition-all duration-200 ' + (ch.id === currentChapter?.id ? 'border-vermilion bg-vermilion-light/50 text-vermilion font-medium' : 'border-paper-border bg-paper-base text-sumi-dim hover:text-sumi')}>
                       第 {ch.chapter_number} 话
                     </button>
                   ))}
@@ -435,12 +436,12 @@ export default function App() {
             )}
 
             {isMobile && (
-              <div className="flex border-b border-ink-border bg-ink-light">
-                <button onClick={() => setMobileTab('chat')} className={'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ' + (mobileTab === 'chat' ? 'border-b-2 border-coral text-coral' : 'text-cream-dim hover:text-cream')}>
+              <div className="flex border-b border-paper-border bg-paper-surface">
+                <button onClick={() => setMobileTab('chat')} className={'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ' + (mobileTab === 'chat' ? 'border-b-2 border-vermilion text-vermilion' : 'text-sumi-dim hover:text-sumi')}>
                   <MessageSquare size={14} />
                   对话
                 </button>
-                <button onClick={() => setMobileTab('manga')} className={'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ' + (mobileTab === 'manga' ? 'border-b-2 border-coral text-coral' : 'text-cream-dim hover:text-cream')}>
+                <button onClick={() => setMobileTab('manga')} className={'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ' + (mobileTab === 'manga' ? 'border-b-2 border-vermilion text-vermilion' : 'text-sumi-dim hover:text-sumi')}>
                   <Image size={14} />
                   漫画
                 </button>
@@ -458,7 +459,7 @@ export default function App() {
               </main>
             ) : (
               <main className="flex min-h-0 flex-1">
-                <div className="w-1/2 border-r border-ink-border">
+                <div className="w-1/2 border-r border-paper-border">
                   <ChatPanel chapter={currentChapter} onMessageSent={refreshCurrentChapter} onChapterRefresh={handleChapterRefresh} />
                 </div>
                 <div className="w-1/2">
@@ -467,20 +468,20 @@ export default function App() {
               </main>
             )}
 
-            <footer className="flex h-14 shrink-0 items-center justify-center gap-2 border-t border-ink-border bg-ink-light/80 px-2 backdrop-blur-md md:gap-4">
-              <button onClick={handlePrevChapter} disabled={currentIdx === 0} className="flex items-center gap-1 rounded-lg border border-ink-border bg-ink px-3 py-2 text-sm font-medium text-cream-dim disabled:cursor-not-allowed disabled:opacity-30 hover:border-ink-muted hover:text-cream transition-colors">
+            <footer className="flex h-14 shrink-0 items-center justify-center gap-2 border-t border-paper-border bg-paper-surface/90 px-2 backdrop-blur-md md:gap-4">
+              <button onClick={handlePrevChapter} disabled={currentIdx === 0} className="flex items-center gap-1 rounded-md border border-paper-border bg-paper-base px-3 py-2 text-sm font-medium text-sumi-dim disabled:cursor-not-allowed disabled:opacity-30 hover:border-sumi-faint hover:text-sumi transition-colors">
                 <ChevronLeft size={16} />
                 {!isMobile && '上一话'}
               </button>
-              <button onClick={handleDelete} disabled={!currentChapter || chapters.length <= 1} className="flex items-center gap-1.5 rounded-lg border border-coral-dark/30 bg-coral-dark/10 px-3 py-2 text-sm font-medium text-coral disabled:cursor-not-allowed disabled:opacity-30 hover:bg-coral-dark/20 transition-colors" aria-label="删除本话">
+              <button onClick={handleDelete} disabled={!currentChapter || chapters.length <= 1} className="flex items-center gap-1.5 rounded-md border border-vermilion/20 bg-vermilion-light/20 px-3 py-2 text-sm font-medium text-vermilion disabled:cursor-not-allowed disabled:opacity-30 hover:bg-vermilion-light/40 transition-colors" aria-label="删除本话">
                 <Trash2 size={14} />
               </button>
-              <div className="flex items-center gap-1 text-xs text-ink-muted">
+              <div className="flex items-center gap-1">
                 {chapters.map((ch: Chapter, i: number) => (
-                  <button key={ch.id} onClick={() => setChapterByIndex(i)} className={'h-2 w-2 rounded-full transition-colors duration-200 ' + (i === currentIdx ? 'bg-coral' : 'bg-ink-muted hover:bg-cream-dim')} aria-label={`切换到第 ${ch.chapter_number} 话`} />
+                  <button key={ch.id} onClick={() => setChapterByIndex(i)} className={'h-2 w-2 rounded-full transition-all duration-200 ' + (i === currentIdx ? 'bg-vermilion scale-125' : 'bg-sumi-faint/30 hover:bg-sumi-faint/60')} aria-label={`切换到第 ${ch.chapter_number} 话`} />
                 ))}
               </div>
-              <button onClick={handleNextChapter} disabled={creatingChapter} className="flex items-center gap-1 rounded-lg bg-coral px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 hover:bg-coral-light transition-colors md:px-5">
+              <button onClick={handleNextChapter} disabled={creatingChapter} className="flex items-center gap-1 rounded-md bg-vermilion px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 hover:bg-vermilion-hover transition-colors md:px-5">
                 {currentIdx === chapters.length - 1 ? (<><Plus size={16} />{creatingChapter ? '创建中...' : isMobile ? '新建' : '下一话（新建）'}</>) : (<><span>{!isMobile && '下一话'}</span><ChevronRight size={16} /></>)}
               </button>
             </footer>
@@ -491,7 +492,7 @@ export default function App() {
       <ApiKeySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {loginOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md" onClick={() => setLoginOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-sumi/30 backdrop-blur-sm" onClick={() => setLoginOpen(false)}>
           <div className="w-full max-w-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <LoginPage variant="modal" message={loginMessage} onCancel={() => setLoginOpen(false)} onAuthSuccess={handleAuthSuccess} />
           </div>

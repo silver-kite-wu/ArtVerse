@@ -17,6 +17,9 @@ public interface StoryAssetGroupRepository extends JpaRepository<StoryAssetGroup
     @Query("SELECT g FROM StoryAssetGroup g WHERE g.id = :id AND g.story.user.id = :userId")
     Optional<StoryAssetGroup> findByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
+    @Query("SELECT DISTINCT g FROM StoryAssetGroup g LEFT JOIN FETCH g.characters WHERE g.id = :id AND g.story.user.id = :userId")
+    Optional<StoryAssetGroup> findByIdAndUserIdWithCharacters(@Param("id") Long id, @Param("userId") Long userId);
+
     @Query("SELECT g FROM StoryAssetGroup g WHERE g.story.id = :storyId AND g.story.user.id = :userId ORDER BY g.id ASC")
     List<StoryAssetGroup> findByStoryIdAndUserIdOrderByIdAsc(@Param("storyId") Long storyId, @Param("userId") Long userId);
 }

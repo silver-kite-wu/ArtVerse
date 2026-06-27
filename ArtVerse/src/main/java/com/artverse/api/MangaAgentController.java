@@ -53,6 +53,13 @@ public class MangaAgentController {
         );
     }
 
+    @DeleteMapping("/conversations/{conversationId}")
+    public void deleteConversation(@PathVariable Long chapterId,
+                                   @PathVariable UUID conversationId) {
+        User user = currentUserService.requireCurrentUser();
+        mangaAgentService.deleteConversation(chapterId, conversationId, user);
+    }
+
     @GetMapping("/conversations/{conversationId}/messages")
     public MangaAgentDtos.MessagesResponse conversationMessages(@PathVariable Long chapterId,
                                                                @PathVariable UUID conversationId) {
@@ -68,7 +75,7 @@ public class MangaAgentController {
     public MangaAgentDtos.RunResponse run(@PathVariable Long chapterId,
                                           @RequestBody MangaAgentDtos.RunRequest body) {
         User user = currentUserService.requireCurrentUser();
-        MangaAgentService.RunResult result = mangaAgentService.run(chapterId, body.message(), body.requestId(), user);
+        MangaAgentService.RunResult result = mangaAgentService.run(chapterId, body.message(), body.requestId(), body.route(), user);
         return new MangaAgentDtos.RunResponse(result.reply(), result.requestId());
     }
 
@@ -76,7 +83,7 @@ public class MangaAgentController {
     public SseEmitter runAgUi(@PathVariable Long chapterId,
                               @RequestBody MangaAgentDtos.RunRequest body) {
         User user = currentUserService.requireCurrentUser();
-        return mangaAgentService.runAgUiStream(chapterId, body.message(), body.requestId(), user);
+        return mangaAgentService.runAgUiStream(chapterId, body.message(), body.requestId(), body.route(), user);
     }
 
     @PostMapping("/conversations/{conversationId}/ag-ui/run")
@@ -84,7 +91,7 @@ public class MangaAgentController {
                                           @PathVariable UUID conversationId,
                                           @RequestBody MangaAgentDtos.RunRequest body) {
         User user = currentUserService.requireCurrentUser();
-        return mangaAgentService.runAgUiStream(chapterId, conversationId, body.message(), body.requestId(), user);
+        return mangaAgentService.runAgUiStream(chapterId, conversationId, body.message(), body.requestId(), body.route(), user);
     }
 
     @GetMapping("/runs/open")

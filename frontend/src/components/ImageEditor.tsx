@@ -226,19 +226,19 @@ function ImageEditor({
   } : null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md p-3 sm:p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-sumi/40 backdrop-blur-sm p-3 sm:p-4">
       <div
         ref={containerRef}
-        className="bg-ink-light border border-ink-border rounded-xl w-full max-w-4xl shadow-2xl overflow-hidden"
+        className="bg-paper-raised border border-paper-border rounded-xl w-full max-w-4xl shadow-modal overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-ink-border">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <CropIcon size={16} className="text-coral" />
+        <div className="flex items-center justify-between px-5 py-3 border-b border-paper-border">
+          <h3 className="text-sm font-semibold flex items-center gap-2 text-sumi">
+            <CropIcon size={16} className="text-vermilion" />
             编辑封面
           </h3>
-          <button onClick={onCancel} className="p-1 text-cream-dim hover:text-cream transition-colors">
+          <button onClick={onCancel} className="p-1 text-sumi-faint hover:text-sumi-dim transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -299,35 +299,35 @@ function ImageEditor({
           </div>
 
           {/* Right — Tool panel */}
-          <div className="w-full sm:w-56 shrink-0 border-t sm:border-t-0 sm:border-l border-ink-border bg-ink-lighter/50 flex flex-col">
+          <div className="w-full sm:w-56 shrink-0 border-t sm:border-t-0 sm:border-l border-paper-border bg-paper-surface/50 flex flex-col">
             {/* Rotate & Flip */}
             <div className="px-4 py-3">
-              <div className="text-[11px] font-medium text-cream-dim uppercase tracking-wider mb-2">旋转 & 翻转</div>
+              <div className="text-[11px] font-medium text-sumi-dim uppercase tracking-wider mb-2">旋转 & 翻转</div>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   onClick={() => handleRotate(-1)}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-border px-3 py-2 text-xs text-cream-dim hover:text-cream hover:bg-ink-lighter transition-colors bg-ink"
+                  className="flex items-center gap-1.5 rounded-md border border-paper-border px-3 py-2 text-xs text-sumi-dim hover:text-sumi hover:bg-paper-base transition-colors bg-paper-base"
                 >
                   <RotateCcw size={14} />
                   左旋
                 </button>
                 <button
                   onClick={() => handleRotate(1)}
-                  className="flex items-center gap-1.5 rounded-lg border border-ink-border px-3 py-2 text-xs text-cream-dim hover:text-cream hover:bg-ink-lighter transition-colors bg-ink"
+                  className="flex items-center gap-1.5 rounded-md border border-paper-border px-3 py-2 text-xs text-sumi-dim hover:text-sumi hover:bg-paper-base transition-colors bg-paper-base"
                 >
                   <RotateCw size={14} />
                   右旋
                 </button>
                 <button
                   onClick={() => setFlipH((v) => !v)}
-                  className={'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ' + (flipH ? 'border-coral/40 bg-coral/10 text-coral' : 'border-ink-border text-cream-dim hover:text-cream hover:bg-ink-lighter bg-ink')}
+                  className={'flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs transition-colors ' + (flipH ? 'border-vermilion/40 bg-vermilion-light/30 text-vermilion' : 'border-paper-border text-sumi-dim hover:text-sumi hover:bg-paper-base bg-paper-base')}
                 >
                   <FlipHorizontal size={14} />
                   翻转
                 </button>
                 <button
                   onClick={() => setFlipV((v) => !v)}
-                  className={'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ' + (flipV ? 'border-coral/40 bg-coral/10 text-coral' : 'border-ink-border text-cream-dim hover:text-cream hover:bg-ink-lighter bg-ink')}
+                  className={'flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs transition-colors ' + (flipV ? 'border-vermilion/40 bg-vermilion-light/30 text-vermilion' : 'border-paper-border text-sumi-dim hover:text-sumi hover:bg-paper-base bg-paper-base')}
                 >
                   <FlipVertical size={14} />
                   垂直
@@ -338,16 +338,16 @@ function ImageEditor({
             <div className="flex-1" />
 
             {/* Actions */}
-            <div className="px-4 py-3 border-t border-ink-border flex items-center gap-2">
+            <div className="px-4 py-3 border-t border-paper-border flex items-center gap-2">
               <button
                 onClick={onCancel}
-                className="flex-1 px-3 py-2 text-sm text-cream-dim hover:text-cream transition-colors rounded-lg border border-ink-border bg-ink"
+                className="flex-1 px-3 py-2 text-sm text-sumi-dim hover:text-sumi transition-colors rounded-md border border-paper-border bg-paper-base"
               >
                 取消
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-coral hover:bg-coral-light text-cream text-sm font-medium rounded-lg transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-vermilion hover:bg-vermilion-hover text-white text-sm font-medium rounded-md transition-colors"
               >
                 <Check size={14} />
                 应用

@@ -6,6 +6,7 @@ import com.artverse.domain.MangaImage;
 import com.artverse.domain.StorageProvider;
 import com.artverse.media.MediaStorageService;
 import com.artverse.persistence.MangaImageRepository;
+import com.artverse.persistence.ChapterRepository;
 import com.artverse.storage.ObjectStorageService;
 import com.artverse.storage.StoredObject;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ import java.util.Optional;
 public class MangaImageStorageService {
 
     private final MangaImageRepository mangaImageRepository;
+    private final ChapterRepository chapterRepository;
     private final ObjectStorageService objectStorageService;
     private final MediaStorageService mediaStorageService;
     private final ArtVerseProperties properties;
@@ -37,21 +39,28 @@ public class MangaImageStorageService {
         return new ReferenceImages(materialized, tempRefs);
     }
 
+    public List<String> previewReferenceImageKeys(Long storyId, Long chapterId, String chapterRefImage,
+                                                  Long assetGroupId, String storyRefImage) {
+        return computeEffectiveRefImages(storyId, chapterId, chapterRefImage, assetGroupId, storyRefImage).stream()
+                .map(path -> path.toString().replace('\\', '/'))
+                .toList();
+    }
+
     public Optional<MangaImage> findPanel(Long chapterId, int imageNumber) {
         return mangaImageRepository.findByChapterIdAndImageNumber(chapterId, imageNumber);
     }
 
-    public MangaImage saveGeneratedPanel(Chapter chapter, Long storyId, int imageNumber, Path generatedFile,
+    public MangaImage saveGeneratedPanel(Long chapterId, Long storyId, int imageNumber, Path generatedFile,
                                          String prompt) {
         String filename = mediaStorageService.generateUniqueFilename("panel_" + String.format("%02d", imageNumber), ".png");
-        String objectKey = "stories/" + storyId + "/chapters/" + chapter.getId() + "/panels/" + filename;
+        String objectKey = "stories/" + storyId + "/chapters/" + chapterId + "/panels/" + filename;
         StoredObject stored = objectStorageService.putPng(objectKey, generatedFile, "image/png");
 
         MangaImage mangaImage = mangaImageRepository
-                .findByChapterIdAndImageNumber(chapter.getId(), imageNumber)
+                .findByChapterIdAndImageNumber(chapterId, imageNumber)
                 .orElseGet(() -> {
                     MangaImage m = new MangaImage();
-                    m.setChapter(chapter);
+                    m.setChapter(chapterRepository.getReferenceById(chapterId));
                     m.setImageNumber(imageNumber);
                     return m;
                 });

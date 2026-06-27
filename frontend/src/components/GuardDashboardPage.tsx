@@ -68,12 +68,12 @@ function MiniMetric({ label, value, tone = 'text-cream' }: { label: string; valu
 }
 
 function decisionTone(decision: string): string {
-  if (decision === 'leader') return 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300';
-  if (decision === 'follower') return 'border-amber-500/40 bg-amber-accent/10 text-amber-accent-light';
-  if (decision === 'success_hit' || decision === 'succeeded') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
-  if (decision.includes('rejected')) return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
-  if (decision.includes('failed')) return 'border-orange-500/40 bg-orange-500/10 text-orange-200';
-  return 'border-ink-muted bg-ink-lighter text-cream-dim';
+  if (decision === 'leader') return 'border-aizuri/30 bg-aizuri-light/50 text-aizuri';
+  if (decision === 'follower') return 'border-kinpaku/30 bg-kinpaku-light/50 text-kinpaku';
+  if (decision === 'success_hit' || decision === 'succeeded') return 'border-success/30 bg-success/10 text-success';
+  if (decision.includes('rejected')) return 'border-vermilion/30 bg-vermilion-light/30 text-vermilion';
+  if (decision.includes('failed')) return 'border-warning/30 bg-warning/10 text-warning';
+  return 'border-paper-border bg-paper-surface text-sumi-dim';
 }
 
 function formatTime(value: string): string {
@@ -187,7 +187,7 @@ export default function GuardDashboardPage() {
       <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-5 py-5">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-border pb-4">
           <div>
-            <div className="flex items-center gap-2 text-sm font-medium text-cyan-300">
+            <div className="flex items-center gap-2 text-sm font-medium text-aizuri">
               <ShieldCheck size={17} />
               Guard Runtime
             </div>
@@ -196,7 +196,7 @@ export default function GuardDashboardPage() {
           <button
             onClick={() => load(true)}
             disabled={refreshing}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-border bg-ink-light px-3 text-sm font-medium text-cream hover:border-cyan-500/60 hover:text-cyan-300 disabled:opacity-50"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-paper-border bg-paper-surface px-3 text-sm font-medium text-sumi-dim hover:border-aizuri/60 hover:text-aizuri disabled:opacity-50"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
             Refresh
@@ -204,18 +204,18 @@ export default function GuardDashboardPage() {
         </header>
 
         {error && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-vermilion/20 bg-vermilion-light/20 px-4 py-3 text-sm text-vermilion">
             <AlertTriangle size={16} />
             {error}
           </div>
         )}
 
         <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard icon={<Activity size={18} />} label="Total" value={number(summary.total)} accent="text-cyan-300" />
-          <StatCard icon={<Gauge size={18} />} label="Hit Rate" value={percent(summary.hitRate)} accent="text-emerald-300" />
+          <StatCard icon={<Activity size={18} />} label="Total" value={number(summary.total)} accent="text-aizuri" />
+          <StatCard icon={<Gauge size={18} />} label="Hit Rate" value={percent(summary.hitRate)} accent="text-success" />
           <StatCard icon={<Zap size={18} />} label="Followers" value={number(summary.follower)} accent="text-amber-accent-light" />
-          <StatCard icon={<TimerReset size={18} />} label="Rejected" value={number(summary.rejected)} accent="text-rose-300" />
-          <StatCard icon={<AlertTriangle size={18} />} label="Failed" value={number(summary.failed)} accent="text-orange-300" />
+          <StatCard icon={<TimerReset size={18} />} label="Rejected" value={number(summary.rejected)} accent="text-vermilion" />
+          <StatCard icon={<AlertTriangle size={18} />} label="Failed" value={number(summary.failed)} accent="text-warning" />
         </section>
 
         <main className="mt-5 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -241,23 +241,23 @@ export default function GuardDashboardPage() {
                       <MiniMetric label="Total" value={number(item.total)} />
                       <MiniMetric label="Leader" value={number(item.leader)} />
                       <MiniMetric label="Follower" value={number(item.follower)} tone="text-amber-accent-light" />
-                      <MiniMetric label="Hit" value={number(item.success_hit)} tone="text-emerald-200" />
+                      <MiniMetric label="Hit" value={number(item.success_hit)} tone="text-success" />
                       <MiniMetric label="Fail Hit" value={number(item.failed_hit)} tone="text-lime-200" />
-                      <MiniMetric label="Rejected" value={number(item.follower_rejected + item.processing_rejected)} tone="text-rose-200" />
-                      <MiniMetric label="Failed" value={number(item.failed)} tone="text-orange-200" />
+                      <MiniMetric label="Rejected" value={number(item.follower_rejected + item.processing_rejected)} tone="text-vermilion" />
+                      <MiniMetric label="Failed" value={number(item.failed)} tone="text-warning" />
                     </div>
                     <div className="grid gap-2 md:grid-cols-3">
                       <div>
                         <div className="mb-1 text-[10px] uppercase tracking-wide text-warm-gray">Reuse</div>
-                        <RateBar value={item.reuse_rate} tone="bg-emerald-400" />
+                        <RateBar value={item.reuse_rate} tone="bg-success" />
                       </div>
                       <div>
                         <div className="mb-1 text-[10px] uppercase tracking-wide text-warm-gray">Single-flight</div>
-                        <RateBar value={item.single_flight_rate} tone="bg-amber-400" />
+                        <RateBar value={item.single_flight_rate} tone="bg-kinpaku" />
                       </div>
                       <div>
                         <div className="mb-1 text-[10px] uppercase tracking-wide text-warm-gray">Reject</div>
-                        <RateBar value={item.reject_rate} tone="bg-rose-400" />
+                        <RateBar value={item.reject_rate} tone="bg-vermilion" />
                       </div>
                     </div>
                   </div>
@@ -290,7 +290,7 @@ export default function GuardDashboardPage() {
                     key={value}
                     onClick={() => setMetricBucket(value)}
                     className={`h-8 rounded-md px-3 text-xs font-medium ${
-                      metricBucket === value ? 'bg-cyan-400/15 text-cyan-300' : 'text-cream-dim hover:text-cream'
+                      metricBucket === value ? 'bg-aizuri-light/60 text-aizuri' : 'text-cream-dim hover:text-cream'
                     }`}
                   >
                     {label}
@@ -318,11 +318,11 @@ export default function GuardDashboardPage() {
                       <td className="whitespace-nowrap px-4 py-2 text-cream-dim">{formatBucketTime(item.bucket_start, metricBucket)}</td>
                       <td className="px-3 py-2 text-cream">{ACTION_LABELS[item.action] || item.action}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-cream">{number(item.total)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-cyan-300">{number(item.leader)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-aizuri">{number(item.leader)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-amber-accent-light">{number(item.follower)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-emerald-200">{number(item.success_hit)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-rose-200">{number(item.follower_rejected + item.processing_rejected)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-orange-200">{number(item.failed)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-success">{number(item.success_hit)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-vermilion">{number(item.follower_rejected + item.processing_rejected)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-warning">{number(item.failed)}</td>
                     </tr>
                   ))}
                   {!metrics.length && (

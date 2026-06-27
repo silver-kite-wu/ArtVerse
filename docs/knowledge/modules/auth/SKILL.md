@@ -24,11 +24,18 @@ RateLimitAspect         → Redis Lua sliding window, per-IP or per-userId
 |-------|--------|
 | Login | `POST /api/auth/login` → `StpUtil.login(userId, "PC")` → cookie `satoken` set (`httpOnly`, `SameSite=Lax`) |
 | Auto-renew | `active-timeout: 1800` (30 min) — any request within window auto-extends |
-| Hard expiry | `timeout: 3600` (60 min) — absolute max token lifetime |
-| Manual refresh | `POST /api/auth/refresh` → `StpUtil.renewTimeout(3600)` — extends by 1h |
+| Hard expiry | `timeout: 43200` (12 h) — absolute max token lifetime |
+| Manual refresh | `POST /api/auth/refresh` → `StpUtil.renewTimeout(43200)` — extends by 12h |
 | Logout | `POST /api/auth/logout` → `StpUtil.logout()` — destroys current token only |
 | Kickout | `POST /api/auth/kickout?userId=X` → `StpUtil.kickout(userId)` — admin only, destroys all tokens for user |
 | Multi-device | `is-concurrent: true`, `is-share: false` — each device gets independent token |
+
+### Important semantics
+
+- `timeout` is the hard ceiling for the current access token session. It is 12 hours.
+- `active-timeout` is the sliding idle window. Any authenticated request within 30 minutes extends the session automatically.
+- `/api/auth/refresh` is a compatibility and explicit renewal endpoint. It does not change the hard ceiling; it refreshes the current access token state up to the configured 12-hour limit.
+- Refresh tokens are separate from access tokens. They are rotated on use and revoked on logout, kickout, or reuse detection.
 
 ## Cookie Strategy
 
@@ -116,7 +123,7 @@ Run: `mvn test -pl .`
 ## Configuration Reference
 
 `application.yml` under `sa-token:`:
-- `timeout`: hard token expiry in seconds (3600 = 1h)
+- `timeout`: hard token expiry in seconds (43200 = 12h)
 - `active-timeout`: auto-renew threshold (1800 = 30min)
 - `is-concurrent`: allow multi-device login (true)
 - `is-share`: share token across devices (false)

@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MangaAgentConversationServiceTest {
@@ -95,6 +96,15 @@ class MangaAgentConversationServiceTest {
         assertThat(message).contains("Continue from the previously suspended", "Continue task", "Please choose database", "PostgreSQL");
     }
 
+    @Test
+    void deleteConversationDelegatesToRepositoryDelete() {
+        Fixture fixture = fixture();
+
+        fixture.service.deleteConversation(7L, fixture.user, fixture.conversation.getConversationUuid());
+
+        verify(fixture.conversationRepository).delete(fixture.conversation);
+    }
+
     private Fixture fixture() {
         MangaAgentConversationRepository conversationRepository = mock(MangaAgentConversationRepository.class);
         MangaAgentMessageRepository messageRepository = mock(MangaAgentMessageRepository.class);
@@ -106,6 +116,8 @@ class MangaAgentConversationServiceTest {
         MangaAgentConversation conversation = conversation(user, chapter);
         List<MangaAgentMessage> saved = new ArrayList<>();
         when(accessService.requireVisible(7L, 1L)).thenReturn(chapter);
+        when(conversationRepository.findByUserIdAndChapterIdAndConversationUuid(1L, 7L, conversation.getConversationUuid()))
+                .thenReturn(Optional.of(conversation));
         when(messageRepository.findByUserIdAndChapterIdOrderByCreatedAtAsc(1L, 7L))
                 .thenAnswer(invocation -> List.copyOf(saved));
         when(messageRepository.findByUserIdAndChapterIdAndRequestIdAndRole(eq(1L), eq(7L), any(UUID.class), any(MessageRole.class)))
@@ -117,7 +129,7 @@ class MangaAgentConversationServiceTest {
             saved.add(message);
             return message;
         });
-        return new Fixture(service, messageRepository, accessService, user, chapter, conversation, saved);
+        return new Fixture(service, conversationRepository, messageRepository, accessService, user, chapter, conversation, saved);
     }
 
     private static User user(Long id) {
@@ -164,6 +176,7 @@ class MangaAgentConversationServiceTest {
     }
 
     private record Fixture(MangaAgentConversationService service,
+                           MangaAgentConversationRepository conversationRepository,
                            MangaAgentMessageRepository messageRepository,
                            ChapterAccessService accessService,
                            User user,

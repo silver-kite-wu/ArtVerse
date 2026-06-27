@@ -8,6 +8,7 @@ import com.artverse.domain.MangaAgentRun;
 import com.artverse.domain.MangaAgentRunEventRecord;
 import com.artverse.domain.MangaAgentRunStatus;
 import com.artverse.domain.User;
+import com.artverse.application.workflow.MangaWorkflowRoute;
 import com.artverse.persistence.MangaAgentRunEventRepository;
 import com.artverse.persistence.MangaAgentRunRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -64,8 +65,16 @@ public class MangaAgentRunService {
 
     @Transactional
     public MangaAgentRun startOrReuse(MangaAgentConversation conversation, UUID requestId, String inputMessage) {
+        return startOrReuse(conversation, requestId, inputMessage, MangaWorkflowRoute.DIRECTOR);
+    }
+
+    @Transactional
+    public MangaAgentRun startOrReuse(MangaAgentConversation conversation, UUID requestId, String inputMessage,
+                                      MangaWorkflowRoute route) {
+        MangaWorkflowRoute effectiveRoute = route == null ? MangaWorkflowRoute.DIRECTOR : route;
         return runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId)
                 .map(existing -> {
+                    existing.setRoute(effectiveRoute);
                     if (existing.getStatus() == MangaAgentRunStatus.WAITING_USER) {
                         existing.setStatus(MangaAgentRunStatus.RUNNING);
                         existing.setUserInputRequestJson(null);
@@ -82,6 +91,7 @@ public class MangaAgentRunService {
                     run.setConversation(conversation);
                     run.setRequestId(requestId);
                     run.setInputMessage(inputMessage);
+                    run.setRoute(effectiveRoute);
                     run.setStatus(MangaAgentRunStatus.RUNNING);
                     return runRepository.save(run);
                 });
@@ -306,6 +316,7 @@ public class MangaAgentRunService {
                 run.getInputMessage(),
                 run.getFinalReply(),
                 run.getErrorMessage(),
+                run.getRoute() == null ? MangaWorkflowRoute.DIRECTOR : run.getRoute(),
                 waitingInput(run),
                 events,
                 run.getCreatedAt(),
@@ -408,6 +419,7 @@ public class MangaAgentRunService {
             String inputMessage,
             String finalReply,
             String errorMessage,
+            MangaWorkflowRoute route,
             AgentUserInputRequest userInputRequest,
             List<RunEventSnapshot> events,
             OffsetDateTime createdAt,

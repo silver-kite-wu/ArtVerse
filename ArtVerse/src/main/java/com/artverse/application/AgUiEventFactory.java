@@ -34,7 +34,11 @@ public class AgUiEventFactory {
         event.put("input", Map.of(
                 "threadId", threadId(run),
                 "runId", runId(requestId),
-                "state", Map.of("status", "RUNNING", "message", message == null ? "" : message),
+                "state", Map.of(
+                        "status", "RUNNING",
+                        "message", message == null ? "" : message,
+                        "route", run == null || run.getRoute() == null ? "DIRECTOR" : run.getRoute().name()
+                ),
                 "messages", java.util.List.of(),
                 "tools", java.util.List.of(),
                 "context", java.util.List.of(),
@@ -50,7 +54,8 @@ public class AgUiEventFactory {
                 "runId", runId(requestId),
                 "requestId", runId(requestId),
                 "status", status,
-                "message", message == null ? "" : message
+                "message", message == null ? "" : message,
+                "route", run == null || run.getRoute() == null ? "DIRECTOR" : run.getRoute().name()
         ));
         return event;
     }

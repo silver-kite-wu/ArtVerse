@@ -69,8 +69,8 @@ export default function HomePage({ onSelectStory }: Props) {
   const [editDesc, setEditDesc] = useState('');
 
   const importFileRef = useRef<HTMLInputElement>(null);
-  const [uploadingCover, setUploadingCover] = useState<number | null>(null);
   const [importingStory, setImportingStory] = useState(false);
+  const [, setUploadingCover] = useState<number | null>(null);
   const [importProgress, setImportProgress] = useState<{ message: string; percent?: number } | null>(null);
   const [exportingStoryId, setExportingStoryId] = useState<number | null>(null);
 
@@ -490,9 +490,9 @@ export default function HomePage({ onSelectStory }: Props) {
 
   if (loading) {
     return (
-      <div className="h-screen bg-ink flex items-center justify-center text-cream-dim">
+      <div className="h-screen bg-paper-base flex items-center justify-center text-sumi-dim">
         <div className="flex flex-col items-center gap-3">
-          <BookOpenText size={40} className="animate-pulse" />
+          <BookOpenText size={40} className="animate-pulse text-vermilion/40" />
           <span className="text-sm">加载中…</span>
         </div>
       </div>
@@ -500,7 +500,7 @@ export default function HomePage({ onSelectStory }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-ink text-cream">
+    <div className="min-h-screen bg-paper-base text-sumi">
       <input
         ref={editorFileInputRef}
         type="file"
@@ -531,7 +531,7 @@ export default function HomePage({ onSelectStory }: Props) {
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-ink-lighter">
             <div
-              className="h-full rounded-full bg-violet-500 transition-all duration-200"
+              className="h-full rounded-full bg-vermilion transition-all duration-200"
               style={{ width: `${importProgress.percent ?? 100}%` }}
             />
           </div>
@@ -542,22 +542,22 @@ export default function HomePage({ onSelectStory }: Props) {
       )}
 
       {/* Header */}
-      <header className="border-b border-ink-border glass backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-paper-border glass sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-coral flex items-center justify-center">
-              <Sparkles size={18} className="text-cream" />
+            <div className="w-9 h-9 rounded-lg bg-vermilion flex items-center justify-center">
+              <Sparkles size={18} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight">ArtVerse</h1>
-              <p className="text-xs text-cream-dim">AI 小说 · 漫画工坊</p>
+              <h1 className="font-display text-lg font-bold tracking-tight text-sumi">ArtVerse</h1>
+              <p className="text-xs text-sumi-dim">AI 漫画创作工坊</p>
             </div>
           </div>
           <button
             onClick={() => importFileRef.current?.click()}
             disabled={importingStory}
-            className="ml-auto mr-2 flex items-center gap-2 px-4 py-2.5 bg-ink-lighter hover:bg-ink-surface
-                       text-cream text-sm font-medium rounded-lg transition-colors disabled:opacity-40"
+            className="ml-auto mr-2 flex items-center gap-2 px-4 py-2.5 bg-paper-surface hover:bg-paper-border
+                       text-sumi-dim text-sm font-medium rounded-md transition-colors disabled:opacity-40"
             title="导入整本作品"
           >
             {importingStory ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
@@ -565,8 +565,8 @@ export default function HomePage({ onSelectStory }: Props) {
           </button>
           <button
             onClick={() => setShowNew(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-coral hover:bg-coral-light
-                       text-cream text-sm font-medium rounded-lg transition-colors shadow-lg shadow-violet-900/30"
+            className="flex items-center gap-2 px-4 py-2.5 bg-vermilion hover:bg-vermilion-hover
+                       text-white text-sm font-medium rounded-md transition-colors"
           >
             <Plus size={16} />
             新建小说
@@ -575,10 +575,10 @@ export default function HomePage({ onSelectStory }: Props) {
       </header>
 
       {/* Content */}
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-3 py-8">
         {/* New story modal */}
         {showNew && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowNew(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-sumi/30 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowNew(false)}>
             <div className="bg-ink-light border border-ink-border rounded-xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-ink-border">
@@ -636,7 +636,7 @@ export default function HomePage({ onSelectStory }: Props) {
                       </div>
                     )}
                     {newCoverPreview && (
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-sumi/20">
                         <span className="text-xs text-cream font-medium">点击更换封面</span>
                       </div>
                     )}
@@ -644,7 +644,7 @@ export default function HomePage({ onSelectStory }: Props) {
                   {newCoverPreview && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setNewCoverPreview(null); setNewCoverBase64(null); }}
-                      className="mt-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+                      className="mt-1.5 text-xs text-vermilion hover:text-vermilion-hover transition-colors"
                     >
                       移除封面
                     </button>
@@ -673,16 +673,16 @@ export default function HomePage({ onSelectStory }: Props) {
 
         {/* Empty state */}
         {stories.length === 0 && !showNew && (
-          <div className="flex flex-col items-center justify-center py-32 text-cream-dim">
-            <BookOpenText size={56} className="mb-4 text-ink-muted" />
-            <p className="text-lg font-medium mb-2">还没有小说</p>
-            <p className="text-sm mb-6">点击"新建小说"开始你的创作之旅</p>
+          <div className="flex flex-col items-center justify-center py-32 text-sumi-dim">
+            <BookOpenText size={56} className="mb-4 text-sumi-faint/30" />
+            <p className="text-lg font-medium mb-2 text-sumi">还没有故事</p>
+            <p className="text-sm mb-6">点击新建开始你的第一部漫画</p>
             <button
               onClick={() => setShowNew(true)}
-              className="px-5 py-2.5 bg-coral hover:bg-coral-light text-cream text-sm font-medium rounded-lg transition-colors"
+              className="px-5 py-2.5 bg-vermilion hover:bg-vermilion-hover text-white text-sm font-medium rounded-md transition-colors"
             >
               <Plus size={16} className="inline mr-1" />
-              新建小说
+              新建故事
             </button>
           </div>
         )}
@@ -693,9 +693,7 @@ export default function HomePage({ onSelectStory }: Props) {
             {stories.map((s) => (
               <div
                 key={s.id}
-                className="group bg-ink-light border border-ink-border rounded-xl overflow-hidden
-                           hover:border-violet-600/50 hover:shadow-xl hover:shadow-violet-900/10
-                           transition-all duration-200"
+                className="group panel-frame overflow-hidden transition-all duration-200 hover:shadow-card-hover hover:-translate-y-0.5"
               >
                 {/* Cover */}
                 <div
@@ -711,16 +709,16 @@ export default function HomePage({ onSelectStory }: Props) {
                       decoding="async"
                     />
                   ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-warm-gray group-hover:text-cream-dim transition-colors">
+                    <div className="flex flex-col items-center justify-center h-full text-sumi-faint group-hover:text-sumi-dim transition-colors">
                       <ImagePlus size={32} className="mb-2" />
                       <span className="text-xs">点击上传封面</span>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-transparent group-hover:bg-ink/60 transition-colors" />
+                  <div className="absolute inset-0 bg-transparent group-hover:bg-sumi/20 transition-colors" />
                 </div>
 
                 {/* Info */}
-                <div className="p-4">
+                <div className="p-3">
                   {editingId === s.id ? (
                     <div className="space-y-2">
                       <input
@@ -728,15 +726,15 @@ export default function HomePage({ onSelectStory }: Props) {
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
-                        className="w-full px-3 py-1.5 bg-ink-lighter border border-ink-border rounded text-sm
-                                   focus:outline-none focus:ring-2 focus:border-coral"
+                        className="w-full px-3 py-1.5 bg-paper-surface border border-paper-border rounded text-sm text-sumi
+                                   focus:outline-none focus:border-vermilion"
                       />
                       <textarea
                         value={editDesc}
                         onChange={(e) => setEditDesc(e.target.value)}
                         rows={2}
-                        className="w-full px-3 py-1.5 bg-ink-lighter border border-ink-border rounded text-sm
-                                   focus:outline-none focus:ring-2 focus:border-coral resize-none"
+                        className="w-full px-3 py-1.5 bg-paper-surface border border-paper-border rounded text-sm text-sumi
+                                   focus:outline-none focus:border-vermilion resize-none"
                         placeholder="简短描述（可选）"
                       />
                       <div className="flex gap-1 justify-end">
@@ -756,13 +754,13 @@ export default function HomePage({ onSelectStory }: Props) {
                     </div>
                   ) : (
                     <>
-                      <h3 className="font-semibold text-sm mb-1 line-clamp-1">{s.title}</h3>
+                      <h3 className="font-semibold text-sm mb-1 line-clamp-1 text-sumi">{s.title}</h3>
                       {s.description && (
-                        <p className="text-xs text-cream-dim mb-3 line-clamp-2">{s.description}</p>
+                        <p className="text-xs text-sumi-dim mb-3 line-clamp-2">{s.description}</p>
                       )}
                       {!s.description && <div className="mb-3" />}
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-warm-gray">
+                        <span className="text-xs text-sumi-faint">
                           {new Date(s.created_at).toLocaleDateString('zh-CN')}
                         </span>
                         <div className="flex items-center gap-1">
@@ -773,8 +771,8 @@ export default function HomePage({ onSelectStory }: Props) {
                             }}
                             className={`p-1.5 transition-colors rounded ${
                               storyCharFlags[s.id]
-                                ? 'text-emerald-400 hover:text-emerald-300'
-                                : 'text-warm-gray hover:text-cream-dim'
+                                ? 'text-success hover:text-success/80'
+                                : 'text-sumi-faint hover:text-sumi-dim'
                             }`}
                             title={storyCharFlags[s.id] ? '角色卡（已设定）' : '设置角色卡'}
                           >
@@ -787,8 +785,8 @@ export default function HomePage({ onSelectStory }: Props) {
                             }}
                             className={`p-1.5 transition-colors rounded ${
                               storyRefFlags[s.id]
-                                ? 'text-amber-accent hover:text-amber-accent-light'
-                                : 'text-warm-gray hover:text-cream-dim'
+                                ? 'text-kinpaku hover:text-kinpaku/80'
+                                : 'text-sumi-faint hover:text-sumi-dim'
                             }`}
                             title={storyRefFlags[s.id] ? '设定组（已设定）' : '设置设定组'}
                           >
@@ -800,7 +798,7 @@ export default function HomePage({ onSelectStory }: Props) {
                               handleExport(s);
                             }}
                             disabled={exportingStoryId === s.id}
-                            className="p-1.5 text-warm-gray hover:text-sky-300 transition-colors rounded disabled:opacity-40"
+                            className="p-1.5 text-sumi-faint hover:text-aizuri transition-colors rounded disabled:opacity-40"
                             title="导出整本作品"
                           >
                             {exportingStoryId === s.id ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
@@ -810,7 +808,7 @@ export default function HomePage({ onSelectStory }: Props) {
                               e.stopPropagation();
                               startEdit(s);
                             }}
-                            className="p-1.5 text-warm-gray hover:text-cream-dim transition-colors rounded"
+                            className="p-1.5 text-sumi-faint hover:text-sumi-dim transition-colors rounded"
                             title="编辑"
                           >
                             <Pencil size={13} />
@@ -820,15 +818,15 @@ export default function HomePage({ onSelectStory }: Props) {
                               e.stopPropagation();
                               handleDelete(s.id);
                             }}
-                            className="p-1.5 text-warm-gray hover:text-red-400 transition-colors rounded"
+                            className="p-1.5 text-sumi-faint hover:text-vermilion transition-colors rounded"
                             title="删除"
                           >
                             <Trash2 size={13} />
                           </button>
                           <button
                             onClick={() => onSelectStory(s)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-coral/15 hover:bg-coral
-                                       text-coral hover:text-cream text-xs font-medium rounded-lg transition-colors"
+                            className="flex items-center gap-1 px-3 py-1.5 bg-vermilion-light/30 hover:bg-vermilion
+                                       text-vermilion hover:text-white text-xs font-medium rounded-md transition-colors"
                           >
                             进入
                             <ChevronRight size={13} />
@@ -846,7 +844,7 @@ export default function HomePage({ onSelectStory }: Props) {
 
       {/* Asset groups modal */}
       {assetModalStoryId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4" onClick={() => setAssetModalStoryId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-sumi/30 backdrop-blur-sm p-3 sm:p-4" onClick={() => setAssetModalStoryId(null)}>
           <div className="bg-ink-light border border-ink-border rounded-xl w-full max-w-6xl h-[640px] max-h-[88vh] shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-ink-border flex-shrink-0">
@@ -885,7 +883,7 @@ export default function HomePage({ onSelectStory }: Props) {
                           className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
                             active
                               ? 'bg-coral/15 border-coral text-cream'
-                              : 'bg-gray-950/40 border-ink-border text-cream-dim hover:text-cream hover:border-ink-border'
+                              : 'bg-paper-surface border-paper-border text-sumi-dim hover:text-sumi hover:border-paper-border'
                           }`}
                         >
                           <span className="text-xs font-medium truncate block">{group.name}</span>
@@ -949,13 +947,13 @@ export default function HomePage({ onSelectStory }: Props) {
                                     onClick={toggle}
                                     className={`relative rounded-lg border-2 cursor-pointer transition-all overflow-hidden ${
                                       checked
-                                        ? 'border-coral bg-violet-600/10'
-                                        : 'border-ink-border hover:border-gray-500 bg-gray-950/40'
+                                        ? 'border-vermilion bg-vermilion-light/30'
+                                        : 'border-paper-border hover:border-sumi-faint bg-paper-surface'
                                     }`}
                                   >
                                     {/* Checkmark */}
                                     {checked && (
-                                      <div className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-violet-500 flex items-center justify-center shadow">
+                                      <div className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-vermilion flex items-center justify-center shadow">
                                         <Check size={11} className="text-cream" />
                                       </div>
                                     )}
@@ -990,7 +988,7 @@ export default function HomePage({ onSelectStory }: Props) {
                           {activeAssetGroup.id && (
                             <button
                               onClick={removeAssetGroup}
-                              className="px-4 py-2 bg-red-950/40 border border-red-900 text-red-300 hover:bg-red-900/60 text-sm font-medium rounded-lg transition-colors"
+                              className="px-4 py-2 bg-vermilion-light/30 border border-vermilion/20 text-vermilion hover:bg-vermilion-light/50 text-sm font-medium rounded-lg transition-colors"
                             >
                               删除此设定组
                             </button>
@@ -1019,7 +1017,7 @@ export default function HomePage({ onSelectStory }: Props) {
 
       {/* Character card modal (profile-based) */}
       {charModalStoryId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4" onClick={() => setCharModalStoryId(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-sumi/30 backdrop-blur-sm p-3 sm:p-4" onClick={() => setCharModalStoryId(null)}>
           <div className="bg-ink-light border border-ink-border rounded-xl w-full max-w-6xl h-[640px] max-h-[88vh] shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-ink-border flex-shrink-0">
@@ -1139,7 +1137,7 @@ export default function HomePage({ onSelectStory }: Props) {
                                         .then(() => setCharRefImages(prev => prev.filter(x => x.filename !== img.filename)))
                                         .catch(err => alert('删除失败: ' + err.message));
                                     }}
-                                    className="absolute top-1 right-1 p-1 rounded-md bg-red-600 hover:bg-red-500 text-cream shadow-lg transition-colors"
+                                    className="absolute top-1 right-1 p-1 rounded-md bg-vermilion hover:bg-vermilion-hover text-white shadow-lg transition-colors"
                                   title="删除"
                                   >
                                     <Trash2 size={10} />
@@ -1165,7 +1163,7 @@ export default function HomePage({ onSelectStory }: Props) {
                                 alert('删除失败: ' + err.message);
                               }
                             }}
-                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600/20 border border-red-600/30 text-red-400 hover:bg-red-600 hover:text-cream transition-colors"
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-vermilion-light/30 border border-vermilion/20 text-vermilion hover:bg-vermilion hover:text-white transition-colors"
                           >
                             <Trash2 size={12} />
                             删除此角色
@@ -1203,7 +1201,7 @@ export default function HomePage({ onSelectStory }: Props) {
       {/* Ref images modal (multi) */}
       {refModalStoryId !== null && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-sumi/30 backdrop-blur-sm p-3 sm:p-4"
           onClick={() => setRefModalStoryId(null)}
         >
           <div
@@ -1262,14 +1260,14 @@ export default function HomePage({ onSelectStory }: Props) {
                         loading="lazy"
                         decoding="async"
                       />
-                      <div className="absolute inset-0 bg-transparent group-hover:bg-black/40 transition-colors flex items-end p-2 pointer-events-none">
-                        <span className="text-[10px] text-white/80 bg-black/60 px-1.5 py-0.5 rounded">
+                      <div className="absolute inset-0 bg-transparent group-hover:bg-sumi/20 transition-colors flex items-end p-2 pointer-events-none">
+                        <span className="text-[10px] text-white bg-sumi/60 px-1.5 py-0.5 rounded">
                           {img.size_kb} KB
                         </span>
                       </div>
                       <button
                         onClick={() => handleRefDelete(img.filename)}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-md bg-red-600 hover:bg-red-500 text-cream shadow-lg transition-colors"
+                        className="absolute top-1.5 right-1.5 p-1 rounded-md bg-vermilion hover:bg-vermilion-hover text-white shadow-lg transition-colors"
                         title="删除"
                       >
                         <Trash2 size={12} />

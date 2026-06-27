@@ -20,8 +20,10 @@ public class MangaReviewNode extends AbstractStaticReplyNode {
     @Override
     protected String responseText(MangaWorkflowExecutionContext context) {
         return """
-                当前章节已有分镜内容，建议先检查是否需要修订。
-                如果你要我直接改分镜，请说明修改方向；如果要继续生成，请切回导演流程。
+                当前处于「质检」模式，用于检查现有分镜的状态、风险和下一步动作。
+
+                我还没有接入自动质检能力——你可以先查看当前的章节上下文和分镜列表，
+                确认需要修改或调整的地方后，切回「导演」模式告诉我要改什么。
                 """.trim();
     }
 }

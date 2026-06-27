@@ -7,11 +7,14 @@ import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.ColorMode;
+import com.artverse.domain.CharacterProfile;
 import com.artverse.domain.MangaImage;
 import com.artverse.domain.Story;
+import com.artverse.domain.StoryAssetGroup;
 import com.artverse.media.MediaStorageService;
 import com.artverse.persistence.ChapterRepository;
 import com.artverse.persistence.MangaImageRepository;
+import com.artverse.persistence.StoryAssetGroupRepository;
 import com.artverse.storage.ObjectStorageService;
 import com.artverse.storage.StoredObject;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,7 +39,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MangaGenerationServiceTest {
@@ -68,16 +74,16 @@ class MangaGenerationServiceTest {
         ChapterRepository chapterRepository = mock(ChapterRepository.class);
         MangaImageRepository mangaImageRepository = mock(MangaImageRepository.class);
         CharacterProfileService characterProfileService = mock(CharacterProfileService.class);
+        StoryAssetGroupRepository storyAssetGroupRepository = mock(StoryAssetGroupRepository.class);
         CapturingImage2Client image2Client = new CapturingImage2Client();
 
         when(chapterRepository.findByIdForIdempotency(7L)).thenReturn(Optional.of(chapter));
         when(mangaImageRepository.findByChapterIdAndImageNumber(7L, 1)).thenReturn(Optional.empty());
         when(mangaImageRepository.save(any(MangaImage.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(mangaImageRepository.saveAndFlush(any(MangaImage.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(characterProfileService.resolveEffective(7L)).thenReturn(Map.of("content", ""));
-
         MangaImageStorageService imageStorageService = new MangaImageStorageService(
                 mangaImageRepository,
+                chapterRepository,
                 new CapturingObjectStorage(),
                 new MediaStorageService(properties),
                 properties
@@ -89,6 +95,7 @@ class MangaGenerationServiceTest {
                 imageStorageService,
                 directExecutor(),
                 characterProfileService,
+                storyAssetGroupRepository,
                 properties,
                 new ObjectMapper()
         );
@@ -99,6 +106,75 @@ class MangaGenerationServiceTest {
         ImageGenerationRequest request = image2Client.request.get();
         assertThat(request.model()).isEqualTo("gpt-image-2");
         assertThat(request.prompt()).contains("Rainy alley");
+    }
+
+    @Test
+    void preloadsAssetGroupCharactersBeforeGenerating() throws Exception {
+        ArtVerseProperties properties = new ArtVerseProperties();
+        properties.getImage().setModel("gpt-image-2");
+        properties.getMinio().setBucket("artverse-test");
+        properties.getStorage().setRoot(Files.createTempDirectory("artverse-manga-test-").toString());
+
+        Story story = new Story();
+        story.setId(3L);
+        StoryAssetGroup group = new StoryAssetGroup();
+        group.setId(11L);
+        group.setStory(story);
+        group.setName("Main cast");
+        CharacterProfile character = new CharacterProfile();
+        character.setId(21L);
+        character.setName("Mika");
+        character.setDescription("Short hair, red coat");
+        group.getCharacters().add(character);
+
+        Chapter chapter = new Chapter();
+        chapter.setId(7L);
+        chapter.setStory(story);
+        chapter.setAssetGroup(group);
+        chapter.setImageCount(1);
+        chapter.setColorMode(ColorMode.BW);
+        chapter.setNovelContent("The protagonist opens the door on a rainy night and sees city lights.");
+        chapter.setScenesText(STORYBOARD_SCENE);
+
+        ChapterRepository chapterRepository = mock(ChapterRepository.class);
+        MangaImageRepository mangaImageRepository = mock(MangaImageRepository.class);
+        CharacterProfileService characterProfileService = mock(CharacterProfileService.class);
+        StoryAssetGroupRepository storyAssetGroupRepository = mock(StoryAssetGroupRepository.class);
+        CapturingImage2Client image2Client = new CapturingImage2Client();
+
+        when(chapterRepository.findByIdForIdempotency(7L)).thenReturn(Optional.of(chapter));
+        when(storyAssetGroupRepository.findByIdAndUserIdWithCharacters(eq(11L), eq(99L))).thenReturn(Optional.of(group));
+        when(mangaImageRepository.findByChapterIdAndImageNumber(7L, 1)).thenReturn(Optional.empty());
+        when(mangaImageRepository.save(any(MangaImage.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mangaImageRepository.saveAndFlush(any(MangaImage.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(characterProfileService.resolveEffective(7L)).thenReturn(Map.of("content", ""));
+
+        MangaImageStorageService imageStorageService = new MangaImageStorageService(
+                mangaImageRepository,
+                chapterRepository,
+                new CapturingObjectStorage(),
+                new MediaStorageService(properties),
+                properties
+        );
+
+        MangaGenerationService service = new MangaGenerationService(
+                chapterRepository,
+                image2Client,
+                imageStorageService,
+                directExecutor(),
+                characterProfileService,
+                storyAssetGroupRepository,
+                properties,
+                new ObjectMapper()
+        );
+
+        service.generateMangaStream(7L, 11L, 99L, "image-key", null, () -> {}, error -> {});
+
+        assertThat(image2Client.awaitRequest()).isTrue();
+        ImageGenerationRequest request = image2Client.request.get();
+        assertThat(request.prompt()).contains("Asset group: Main cast");
+        assertThat(request.prompt()).contains("Character: Mika");
+        verify(storyAssetGroupRepository).findByIdAndUserIdWithCharacters(eq(11L), eq(99L));
     }
 
     @Test
@@ -121,6 +197,7 @@ class MangaGenerationServiceTest {
         ChapterRepository chapterRepository = mock(ChapterRepository.class);
         MangaImageRepository mangaImageRepository = mock(MangaImageRepository.class);
         CharacterProfileService characterProfileService = mock(CharacterProfileService.class);
+        StoryAssetGroupRepository storyAssetGroupRepository = mock(StoryAssetGroupRepository.class);
 
         when(chapterRepository.findByIdForIdempotency(7L)).thenReturn(Optional.of(chapter));
         when(mangaImageRepository.findByChapterIdAndImageNumber(7L, 1)).thenReturn(Optional.empty());
@@ -128,6 +205,7 @@ class MangaGenerationServiceTest {
 
         MangaImageStorageService imageStorageService = new MangaImageStorageService(
                 mangaImageRepository,
+                chapterRepository,
                 new CapturingObjectStorage(),
                 new MediaStorageService(properties),
                 properties
@@ -139,11 +217,12 @@ class MangaGenerationServiceTest {
                 imageStorageService,
                 directExecutor(),
                 characterProfileService,
+                storyAssetGroupRepository,
                 properties,
                 new ObjectMapper()
         );
 
-        assertThatThrownBy(() -> service.generateImageForJob(chapter, List.of(), "image-key", "test prompt"))
+        assertThatThrownBy(() -> service.generateImageForJob(List.of(), "image-key", "test prompt", "bw"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Image generation timed out or failed");
     }

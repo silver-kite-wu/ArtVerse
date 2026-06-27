@@ -4,6 +4,9 @@ import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.netty.resolver.DefaultAddressResolverGroup;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
@@ -15,6 +18,9 @@ import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.netty.http.HttpProtocol;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.resources.ConnectionProvider;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -36,6 +42,61 @@ public class WebClientImage2Client implements Image2Client {
 
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(600);
     private static final int MAX_IN_MEMORY_SIZE = 128 * 1024 * 1024;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(30);
+
+    private WebClient webClient;
+    private ConnectionProvider connectionProvider;
+
+    @PostConstruct
+    public void init() {
+        this.connectionProvider = buildConnectionProvider();
+        this.webClient = buildWebClient(buildHttpClient(connectionProvider));
+        log.info("WebClientImage2Client initialized with base URL: {}", properties.getImage().getBaseUrl());
+    }
+
+    @PreDestroy
+    public void destroy() {
+        if (connectionProvider != null) {
+            connectionProvider.dispose();
+            log.info("WebClientImage2Client connection pool disposed");
+        }
+    }
+
+    private ConnectionProvider buildConnectionProvider() {
+        return ConnectionProvider.builder("image2-pool")
+                .maxConnections(50)
+                .maxIdleTime(Duration.ofSeconds(60))
+                .build();
+    }
+
+    /**
+     * Builds a Netty HttpClient configured to:
+     * <ul>
+     *   <li>Use JVM's built-in DNS resolver (avoids Netty async DNS failures on Windows)</li>
+     *   <li>Use JDK SSL provider — requires JVM flag {@code -Dio.netty.handler.ssl.noOpenSsl=true}
+     *       to force JDK SSL over OpenSSL (avoids TLS renegotiation issues with some proxies)</li>
+     *   <li>Force HTTP/1.1 protocol (avoids HTTP/2 compatibility issues with some proxies)</li>
+     *   <li>Use a shared connection pool for better performance</li>
+     * </ul>
+     */
+    private HttpClient buildHttpClient(ConnectionProvider connectionProvider) {
+        return HttpClient.create(connectionProvider)
+                .resolver(DefaultAddressResolverGroup.INSTANCE)     // use JVM DNS
+                .protocol(HttpProtocol.HTTP11)   // force HTTP/1.1
+                .responseTimeout(READ_TIMEOUT)
+                .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS,
+                        (int) CONNECT_TIMEOUT.toMillis());
+    }
+
+    private WebClient buildWebClient(HttpClient httpClient) {
+        return WebClient.builder()
+                .baseUrl(properties.getImage().getBaseUrl())
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
+                .exchangeStrategies(ExchangeStrategies.builder()
+                        .codecs(c -> c.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_SIZE))
+                        .build())
+                .build();
+    }
 
     @Override
     public Mono<GeneratedImage> generate(ImageGenerationRequest request, String apiKey) {
@@ -48,7 +109,7 @@ public class WebClientImage2Client implements Image2Client {
     private Mono<GeneratedImage> generateWithoutReferences(ImageGenerationRequest request, String apiKey) {
         String body = buildGenerationsRequest(request);
 
-        return createClient().post()
+        return webClient.post()
                 .uri("/images/generations")
                 .header("Authorization", "Bearer " + apiKey)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -75,7 +136,7 @@ public class WebClientImage2Client implements Image2Client {
             }
         }
 
-        return createClient().post()
+        return webClient.post()
                 .uri("/images/edits")
                 .header("Authorization", "Bearer " + apiKey)
                 .contentType(MediaType.MULTIPART_FORM_DATA)
@@ -102,7 +163,7 @@ public class WebClientImage2Client implements Image2Client {
                 if (data.has("b64_json")) {
                     imageBytes = Base64.getDecoder().decode(data.get("b64_json").asText());
                 } else if (data.has("url")) {
-                    imageBytes = createClient().get().uri(data.get("url").asText())
+                    imageBytes = webClient.get().uri(data.get("url").asText())
                             .retrieve()
                             .bodyToMono(byte[].class)
                             .timeout(READ_TIMEOUT)
@@ -134,15 +195,6 @@ public class WebClientImage2Client implements Image2Client {
                 throw new BusinessException(502, "Failed to process Image2 response: " + e.getMessage());
             }
         }).subscribeOn(Schedulers.boundedElastic());
-    }
-
-    private WebClient createClient() {
-        return WebClient.builder()
-                .baseUrl(properties.getImage().getBaseUrl())
-                .exchangeStrategies(ExchangeStrategies.builder()
-                        .codecs(c -> c.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_SIZE))
-                        .build())
-                .build();
     }
 
     private String buildGenerationsRequest(ImageGenerationRequest request) {

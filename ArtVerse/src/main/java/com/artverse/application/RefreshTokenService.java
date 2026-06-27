@@ -10,8 +10,8 @@ import java.util.UUID;
 public class RefreshTokenService {
 
     private static final String PREFIX = "rt:";
-    private static final Duration REFRESH_TOKEN_TTL = Duration.ofDays(7);
-    private static final long REFRESH_TOKEN_TIMEOUT_SECONDS = 7 * 24 * 3600;
+    private static final Duration REFRESH_TOKEN_TTL = Duration.ofHours(12);
+    private static final long REFRESH_TOKEN_TIMEOUT_SECONDS = 12 * 3600;
 
     private final StringRedisTemplate redis;
 

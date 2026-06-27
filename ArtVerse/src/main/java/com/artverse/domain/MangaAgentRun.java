@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import com.artverse.application.workflow.MangaWorkflowRoute;
 
 @Entity
 @Table(
@@ -50,6 +51,10 @@ public class MangaAgentRun {
 
     @Column(name = "input_message", nullable = false, columnDefinition = "TEXT")
     private String inputMessage;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private MangaWorkflowRoute route = MangaWorkflowRoute.DIRECTOR;
 
     @Column(name = "final_reply", columnDefinition = "TEXT")
     private String finalReply;

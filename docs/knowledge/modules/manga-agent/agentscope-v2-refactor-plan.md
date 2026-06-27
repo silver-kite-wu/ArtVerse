@@ -2,7 +2,7 @@
 
 ## Background
 
-The Manga Agent already depends on `io.agentscope:agentscope-harness:2.0.0-RC3`, but part of the application code still follows an older orchestration style. The current implementation wraps AgentScope with a business-heavy gateway and passes per-run tool data through factory-captured fields instead of the v2 `RuntimeContext` model.
+The Manga Agent depends on AgentScope Java v2 (`io.agentscope:agentscope-harness:2.0.0-RC4` locally). AgentScope-related changes must use the official v2 documentation and built-in primitives before adding project-local wrappers.
 
 The target architecture should align with AgentScope Java v2:
 
@@ -14,11 +14,11 @@ The target architecture should align with AgentScope Java v2:
 
 ## Current Pain Points
 
-- `AgentScopeHarnessAgentGateway` previously mixed model resolution, cache-key construction, workspace selection, prompt selection, tool registration, message conversion, and `RuntimeContext` construction. The first split moved Agent construction, prompt selection, toolkit setup, and runtime context creation into dedicated factories.
-- `MangaAgentService` owns conversation state, idempotency, run persistence, SSE publishing, AgentScope execution, HITL resume, cancellation checks, and degraded fallback handling.
-- The compatibility path in `MangaAgentToolFactory` can still capture `cozeApiKey`, `chapterId`, and `userId` for direct tests and older callers. AgentScope registration now uses stateless tool objects with per-call values supplied through `RuntimeContext`.
+- `AgentScopeHarnessAgentGateway` previously mixed model resolution, cache-key construction, workspace selection, prompt selection, tool registration, message conversion, and `RuntimeContext` construction. The current split keeps AgentScope execution in the gateway, agent construction/tool group setup in `AgentScopeAgentFactory`, prompt selection in `MangaAgentPromptProvider`, and runtime context creation in `AgentScopeRuntimeContextFactory`.
+- `MangaAgentService` is now the public application facade. It still coordinates conversations, run scope, resume/cancel/open-run APIs, and SSE sink setup, but workflow routing and execution live in `MangaWorkflowOrchestrator` and workflow nodes.
+- Route selection is explicit (`DIRECTOR`, `HITL`, `REVIEW`) and persisted on `MangaAgentRun`; it should not be inferred from prompt text by default.
 - HITL currently uses `ask_user` plus `ToolSuspendException` and business-side state lookup. This is compatible with the existing frontend, but it is not yet modeled around v2 permission/external-execution events.
-- Several visible Chinese strings in the Manga Agent path are mojibake. Treat these as correctness defects.
+- Visible Chinese strings in the Manga Agent path are correctness-sensitive. Treat mojibake as a defect and fix source strings when touched.
 
 ## Target Boundaries
 
@@ -30,7 +30,7 @@ Owns only AgentScope concerns:
 - Resolve the effective model.
 - Build `RuntimeContext`.
 - Convert ArtVerse `AgentMessage` to AgentScope messages.
-- Register task-specific toolsets.
+- Register task-specific toolsets with AgentScope v2 `Toolkit` and tool groups.
 
 It should not own run persistence, SSE emission, final reply saving, or business retry/degraded semantics.
 
@@ -86,35 +86,35 @@ Expected behavior should not change.
 
 ### Phase 2: Split AgentScope construction
 
-Status: foundation implemented.
+Status: implemented and slimmed.
 
 - Extracted `AgentScopeRuntimeContextFactory`.
 - Extracted `AgentScopeAgentFactory`.
 - Extracted `MangaAgentPromptProvider`.
-- Added `MangaAgentToolkitFactory` for AgentScope tool group registration.
+- Tool group registration is colocated with `AgentScopeAgentFactory` because there is one current AgentScope-backed Manga task and AgentScope already provides `Toolkit`/tool group primitives.
 - Moved cache-key construction next to agent construction.
 - Replaced `PROMPT_VERSION` with `MANGA_DIRECTOR_PROMPT_VERSION`.
 - Added focused tests for context construction and tool group registration.
 
 Remaining follow-up:
 
-- Use workflow node identity to choose allowed tool groups per Agent node.
-- Revisit AgentScope tool group scope when upgrading from `2.0.0-RC3`; this local version uses the available `createToolGroup(name, description, active)` API.
+- Use workflow node identity to choose allowed tool groups per Agent node when more AgentScope-backed nodes are introduced.
+- Revisit AgentScope tool group scope when upgrading from `2.0.0-RC4`; this local version uses the available `createToolGroup(name, description, active)` API.
 
 ### Phase 3: Split run execution from run coordination
 
-Status: node foundation implemented.
+Status: node foundation implemented and route contract made explicit.
 
 - Extracted `MangaWorkflowOrchestrator` for sync and streaming workflow execution.
 - Kept `MangaAgentService` as the public application facade for controllers, conversations, run scope, resume/cancel/open-run APIs, and SSE sink setup.
 - Preserved existing API contracts while reducing `MangaAgentService` method size and AgentScope execution coupling.
 - Added `MangaWorkflowNodeHandler`, `MangaWorkflowNodeRegistry`, and `MangaWorkflowStreamContext`.
 - Extracted current Director AgentScope execution into `MangaDirectorAgentNode`.
-- `MangaWorkflowOrchestrator` now owns validation, guard/run lifecycle, route/context events, and node dispatch instead of direct AgentScope request construction.
+- `MangaWorkflowOrchestrator` now owns validation, guard/run lifecycle, explicit route/context events, and node dispatch instead of direct AgentScope request construction.
 
 Remaining follow-up:
 
-- Add dedicated Storyboard, Review, HITL, and Generation node handlers. Routes without a concrete handler currently fall back to Director to preserve behavior.
+- Add dedicated Storyboard and Generation node handlers when product behavior is defined. Current routes are `DIRECTOR`, `HITL`, and `REVIEW`.
 - Add explicit workflow result types for reply, degraded flag, waiting state, and terminal/cancelled outcome.
 - Move node-specific tool group selection into workflow node configuration.
 
@@ -139,7 +139,7 @@ For backend changes:
 ```bash
 cd ArtVerse
 mvn -q -DskipTests compile
-mvn -q -Dtest=AgentScopeHarnessAgentGatewayTest,MangaAgentToolFactoryTest,MangaAgentToolkitFactoryTest test
+mvn -q "-Dtest=AgUiEventFactoryTest,MangaAgentRunRouteTest,MangaAgentServiceTest,GenerationRequestKeyBuilderTest" test
 ```
 
 For frontend or AG-UI contract changes:

@@ -12,6 +12,7 @@
   "dependencies": {
     "@ag-ui/client": "^0.0.57",
     "@ag-ui/core": "^0.0.57",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@tailwindcss/vite": "^4.2.4",
     "lucide-react": "^1.12.0",
     "react": "^19.2.5",

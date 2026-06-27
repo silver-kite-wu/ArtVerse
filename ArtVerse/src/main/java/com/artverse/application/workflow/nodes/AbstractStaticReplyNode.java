@@ -27,6 +27,12 @@ abstract class AbstractStaticReplyNode implements MangaWorkflowNodeHandler {
     }
 
     protected final MangaWorkflowResult reply(MangaWorkflowExecutionContext context) {
+        mangaAgentConversationService.saveMessage(
+                context.conversation(),
+                MessageRole.USER,
+                context.message(),
+                context.requestId()
+        );
         String reply = responseText(context);
         mangaAgentConversationService.saveMessage(
                 context.conversation(),

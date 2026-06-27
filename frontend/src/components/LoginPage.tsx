@@ -45,27 +45,27 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
   };
 
   return (
-    <div className={(isModal ? '' : 'min-h-screen bg-ink ') + 'flex items-center justify-center p-4'}>
+    <div className={(isModal ? '' : 'min-h-screen bg-paper-base ') + 'flex items-center justify-center p-4'}>
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-coral/15 border border-coral/20">
-            <Sparkles size={28} className="text-coral" />
+          <div className="animate-stamp mb-4 inline-flex h-14 w-14 items-center justify-center rounded-xl border-2 border-vermilion/20 bg-vermilion-light/20">
+            <Sparkles size={28} className="text-vermilion" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-cream">ArtVerse</h1>
-          <p className="mt-1 text-sm text-cream-dim">AI 小说 · 漫画工坊</p>
+          <h1 className="font-display text-xl font-bold tracking-tight text-sumi">ArtVerse</h1>
+          <p className="mt-1 text-sm text-sumi-dim">AI 漫画创作工坊</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-ink-border bg-ink-light p-6">
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-paper-border bg-paper-raised p-6 shadow-md">
           {message && (
-            <p className="rounded-lg border border-amber-accent/20 bg-amber-accent/10 px-3 py-2 text-sm text-amber-accent-light">
+            <p className="rounded-md border border-kinpaku/20 bg-kinpaku-light/50 px-3 py-2 text-sm text-kinpaku">
               {message}
             </p>
           )}
 
-          <h2 className="text-sm font-semibold text-cream">{mode === 'login' ? '登录' : '注册'}</h2>
+          <h2 className="text-sm font-semibold text-sumi">{mode === 'login' ? '登录' : '注册'}</h2>
 
           <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs text-cream-dim">
+            <label className="flex items-center gap-1.5 text-xs text-sumi-dim">
               <User size={12} />用户名
             </label>
             <input
@@ -74,13 +74,13 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
               onChange={(e) => setUsername(e.target.value)}
               placeholder="输入用户名"
               autoFocus
-              className="w-full rounded-lg border border-ink-border bg-ink px-3 py-2 text-sm text-cream placeholder-ink-muted outline-none transition-colors focus:border-coral"
+              className="w-full rounded-md border border-paper-border bg-paper-surface px-3 py-2 text-sm text-sumi placeholder-sumi-faint outline-none transition-colors focus:border-vermilion"
             />
           </div>
 
           {mode === 'register' && (
             <div className="space-y-1.5">
-              <label className="flex items-center gap-1.5 text-xs text-cream-dim">
+              <label className="flex items-center gap-1.5 text-xs text-sumi-dim">
                 <Mail size={12} />邮箱
               </label>
               <input
@@ -88,13 +88,13 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="输入邮箱地址"
-                className="w-full rounded-lg border border-ink-border bg-ink px-3 py-2 text-sm text-cream placeholder-ink-muted outline-none transition-colors focus:border-coral"
+                className="w-full rounded-md border border-paper-border bg-paper-surface px-3 py-2 text-sm text-sumi placeholder-sumi-faint outline-none transition-colors focus:border-vermilion"
               />
             </div>
           )}
 
           <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs text-cream-dim">
+            <label className="flex items-center gap-1.5 text-xs text-sumi-dim">
               <KeyRound size={12} />密码
             </label>
             <input
@@ -102,12 +102,12 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="输入密码"
-              className="w-full rounded-lg border border-ink-border bg-ink px-3 py-2 text-sm text-cream placeholder-ink-muted outline-none transition-colors focus:border-coral"
+              className="w-full rounded-md border border-paper-border bg-paper-surface px-3 py-2 text-sm text-sumi placeholder-sumi-faint outline-none transition-colors focus:border-vermilion"
             />
           </div>
 
           {error && (
-            <p className="rounded-lg border border-coral-dark/20 bg-coral-dark/10 px-3 py-2 text-xs text-coral-light">
+            <p className="rounded-md border border-vermilion/20 bg-vermilion-light/20 px-3 py-2 text-xs text-vermilion">
               {error}
             </p>
           )}
@@ -115,7 +115,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-coral py-2.5 text-sm font-medium text-cream transition-colors hover:bg-coral-light disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-vermilion py-2.5 text-sm font-medium text-white transition-colors hover:bg-vermilion-hover disabled:opacity-50"
           >
             {loading ? (
               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -130,7 +130,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
           <button
             type="button"
             onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-            className="w-full text-center text-xs text-cream-dim transition-colors hover:text-coral"
+            className="w-full text-center text-xs text-sumi-dim transition-colors hover:text-vermilion"
           >
             {mode === 'login' ? '还没有账号？立即注册' : '已有账号？去登录'}
           </button>
@@ -139,7 +139,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
             <button
               type="button"
               onClick={onCancel}
-              className="w-full text-center text-xs text-ink-muted transition-colors hover:text-cream-dim"
+              className="w-full text-center text-xs text-sumi-faint transition-colors hover:text-sumi-dim"
             >
               稍后再说
             </button>

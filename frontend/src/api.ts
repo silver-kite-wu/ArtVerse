@@ -1,21 +1,17 @@
-﻿import { HttpAgent, type AGUIEvent, type RunAgentInput } from '@ag-ui/client';
+import { EventType, HttpAgent, type AGUIEvent, type RunAgentInput } from '@ag-ui/client';
 
 const BASE = '';
 export const DEEPSEEK_USAGE_URL = 'https://platform.deepseek.com/usage';
 export const IMAGE2_CONSOLE_URL = 'https://api.duojie.games/console/token';
 
 
-const LS_SATOKEN = 'artverse.satoken';
+const LS_REFRESH_TOKEN = 'artverse.refreshToken';
 const LS_USER = 'artverse.user';
 
 export interface UserInfo {
   id: number;
   username: string;
   email: string;
-}
-
-function getSaToken(): string | null {
-  return localStorage.getItem(LS_SATOKEN);
 }
 
 export function getUser(): UserInfo | null {
@@ -25,11 +21,11 @@ export function getUser(): UserInfo | null {
 }
 
 export function isAuthenticated(): boolean {
-  return !!getSaToken();
+  return !!getUser();
 }
 
 export function clearAuth(): void {
-  localStorage.removeItem(LS_SATOKEN);
+  localStorage.removeItem(LS_REFRESH_TOKEN);
   localStorage.removeItem(LS_USER);
 }
 
@@ -44,15 +40,25 @@ async function tryRefreshToken(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
+        const refreshToken = localStorage.getItem(LS_REFRESH_TOKEN);
+        const body = refreshToken ? JSON.stringify({ refresh_token: refreshToken }) : undefined;
         const res = await fetch(`${BASE}/api/auth/refresh`, {
           method: 'POST',
-          headers: { 'satoken': getSaToken() || '' },
+          credentials: 'same-origin',
+          headers: body ? { 'Content-Type': 'application/json' } : undefined,
+          body,
         });
-        if (!res.ok) return false;
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem(LS_REFRESH_TOKEN);
+          }
+          return false;
+        }
         const data = await res.json();
-        const newToken = data.tokenValue ?? data.token_value;
-        if (!newToken) return false;
-        localStorage.setItem(LS_SATOKEN, newToken);
+        const newRefresh = data.refreshToken ?? data.refresh_token;
+        if (newRefresh) {
+          localStorage.setItem(LS_REFRESH_TOKEN, newRefresh);
+        }
         return true;
       } catch {
         return false;
@@ -64,9 +70,9 @@ async function tryRefreshToken(): Promise<boolean> {
   return ok;
 }
 
-async function fetchAndSaveUser(tokenValue: string): Promise<void> {
+async function fetchAndSaveUser(): Promise<void> {
   const res = await fetch(`${BASE}/api/user/me`, {
-    headers: { 'satoken': tokenValue },
+    credentials: 'same-origin',
   });
   if (!res.ok) throw new Error('Error');
   const user: UserInfo = await res.json();
@@ -77,40 +83,37 @@ export async function loginUser(username: string, password: string): Promise<voi
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   const data = await res.json();
-  const tokenValue: string = data.tokenValue ?? data.token_value;
-  if (!tokenValue) throw new Error('Error');
-  localStorage.setItem(LS_SATOKEN, tokenValue);
-  await fetchAndSaveUser(tokenValue);
+  const rt = data.refreshToken ?? data.refresh_token;
+  if (rt) localStorage.setItem(LS_REFRESH_TOKEN, rt);
+  await fetchAndSaveUser();
 }
 
 export async function registerUser(username: string, email: string, password: string): Promise<void> {
   const res = await fetch(`${BASE}/api/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
     body: JSON.stringify({ username, email, password }),
   });
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   const data = await res.json();
-  const tokenValue: string = data.tokenValue ?? data.token_value;
-  if (!tokenValue) throw new Error('Error');
-  localStorage.setItem(LS_SATOKEN, tokenValue);
-  await fetchAndSaveUser(tokenValue);
+  const rt = data.refreshToken ?? data.refresh_token;
+  if (rt) localStorage.setItem(LS_REFRESH_TOKEN, rt);
+  await fetchAndSaveUser();
 }
 
 export async function logoutUser(): Promise<void> {
-  const token = getSaToken();
-  if (token) {
-    try {
-      await fetch(`${BASE}/api/auth/logout`, {
-        method: 'POST',
-        headers: { 'satoken': token },
-      });
-    } catch { /* ignore */ }
-  }
+  try {
+    await fetch(`${BASE}/api/auth/logout`, {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+  } catch { /* ignore */ }
   clearAuth();
 }
 
@@ -168,19 +171,17 @@ export async function saveUserApiKey(provider: string, apiKey: string): Promise<
 
 
 function apiHeaders(json = false): HeadersInit {
-  const token = getSaToken();
   return {
     ...(json ? { 'Content-Type': 'application/json' } : {}),
-    ...(token ? { 'satoken': token } : {}),
   };
 }
 
 async function authFetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
-  let res = await fetch(input, { ...init, headers: { ...apiHeaders(), ...(init?.headers || {}) } });
+  let res = await fetch(input, { ...init, credentials: 'same-origin', headers: { ...apiHeaders(), ...(init?.headers || {}) } });
   if (res.status === 401) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
-      res = await fetch(input, { ...init, headers: { ...apiHeaders(), ...(init?.headers || {}) } });
+      res = await fetch(input, { ...init, credentials: 'same-origin', headers: { ...apiHeaders(), ...(init?.headers || {}) } });
     } else {
       notifyAuthExpired();
     }
@@ -502,14 +503,7 @@ export async function importNovel(chapterId: number, content: string): Promise<C
 
 export async function generateScenes(chapterId: number, signal?: AbortSignal): Promise<string[]> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/generate-scenes`, { method: 'POST', signal });
-  if (!res.ok) {
-    const text = await res.text();
-    try {
-      const err = JSON.parse(text);
-      if (err.code === 4028) throw new Error('Coze余额不足，请等待配额刷新或升级付费版本');
-    } catch { /* not JSON, use raw text */ }
-    throw new Error(text);
-  }
+  if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
   return data.scenes;
 }
@@ -905,6 +899,7 @@ export interface MangaProgress {
 
 export function generateMangaStream(
   chapterId: number,
+  assetGroupId: number | null | undefined,
   onEvent: (event: MangaProgress) => void,
 ): AbortController {
   const controller = new AbortController();
@@ -933,6 +928,8 @@ export function generateMangaStream(
   const connect = () => {
     authFetch(`${BASE}/api/chapters/${chapterId}/generate-manga-stream`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assetGroupId: assetGroupId ?? null }),
       signal: controller.signal,
     })
       .then(async (res) => {
@@ -1049,10 +1046,11 @@ export async function listMyWorks(): Promise<MyWork[]> {
 // ---- Image Gen ----
 export interface ImageGenRecord { id: number; prompt: string; image_url: string; model: string; size: string; created_at: string; }
 
-export async function generateImage(prompt: string, referenceImages?: string[], size?: string): Promise<ImageGenRecord> {
+export async function generateImage(prompt: string, referenceImages?: string[], size?: string, signal?: AbortSignal): Promise<ImageGenRecord> {
   const res = await authFetch(BASE+'/api/image-gen/generate', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, reference_images: referenceImages || [], ...(size ? { size } : {}) }),
+    signal,
   });
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   return res.json();
@@ -1158,6 +1156,8 @@ export interface MangaAgentConversation {
   archivedAt?: string | null;
 }
 
+export type MangaWorkflowRoute = 'AUTO' | 'CHAT' | 'DIRECTOR' | 'HITL' | 'REVIEW';
+
 export type MangaAgentRunEvent =
   | { type: 'status'; data: { message?: string; requestId?: string; request_id?: string } }
   | { type: 'run_event'; data: AgentRunTimelineEvent }
@@ -1170,12 +1170,14 @@ export type MangaAgentRunEvent =
 export type ArtVerseAgUiEvent = AGUIEvent & {
   protocol?: 'ag-ui';
   runId?: string;
+  route?: MangaWorkflowRoute;
   rawEvent?: AgentRunTimelineEvent | Record<string, unknown>;
   snapshot?: {
     requestId?: string;
     runId?: string;
     status?: string;
     message?: string;
+    route?: MangaWorkflowRoute;
   };
   result?: {
     reply?: string;
@@ -1217,6 +1219,7 @@ export interface AgentRunPersistedEvent {
 export interface MangaAgentRunSnapshot {
   requestId: string;
   request_id?: string;
+  route?: MangaWorkflowRoute;
   status: MangaAgentRunStatus;
   inputMessage?: string;
   finalReply?: string;
@@ -1266,6 +1269,13 @@ export async function createMangaAgentConversation(chapterId: number): Promise<M
   return res.json();
 }
 
+export async function deleteMangaAgentConversation(chapterId: number, conversationId: string): Promise<void> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+}
+
 export async function getMangaAgentConversationMessages(
   chapterId: number,
   conversationId: string,
@@ -1276,10 +1286,41 @@ export async function getMangaAgentConversationMessages(
   return data.messages || [];
 }
 
+export async function runMangaAgent(
+  chapterId: number,
+  message: string,
+  requestId?: string,
+  route?: MangaWorkflowRoute,
+): Promise<{ reply: string; request_id?: string; requestId?: string }> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, requestId, route }),
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export function runMangaAgentStream(
+  chapterId: number,
+  message: string,
+  requestId: string | undefined,
+  onEvent: (event: MangaAgentRunEvent) => void,
+  route?: MangaWorkflowRoute,
+): AbortController {
+  return startMangaAgentEventStream(
+    `${BASE}/api/chapters/${chapterId}/manga-agent/run-stream`,
+    { message, requestId, route },
+    requestId,
+    onEvent,
+  );
+}
+
 class ArtVerseMangaAgentHttpAgent extends HttpAgent {
   private readonly message: string;
-  private readonly answer?: string;
   private readonly requestId?: string;
+  private readonly answer?: string;
+  private readonly route?: MangaWorkflowRoute;
 
   constructor(
     url: string,
@@ -1287,14 +1328,16 @@ class ArtVerseMangaAgentHttpAgent extends HttpAgent {
     requestId: string | undefined,
     abortController: AbortController,
     answer?: string,
+    route?: MangaWorkflowRoute,
   ) {
     super({
       url,
       headers: apiHeaders(true) as Record<string, string>,
     });
     this.message = message;
-    this.answer = answer;
     this.requestId = requestId;
+    this.answer = answer;
+    this.route = route;
     this.abortController = abortController;
   }
 
@@ -1310,6 +1353,7 @@ class ArtVerseMangaAgentHttpAgent extends HttpAgent {
         ? {
           message: this.message,
           requestId: this.requestId || input.runId,
+          route: this.route,
         }
         : {
           answer: this.answer,
@@ -1325,6 +1369,7 @@ export function runMangaAgentAgUiStream(
   requestId: string | undefined,
   onEvent: (event: MangaAgentRunEvent) => void,
   conversationId?: string,
+  route?: MangaWorkflowRoute,
 ): AbortController {
   const controller = new AbortController();
   const agent = new ArtVerseMangaAgentHttpAgent(
@@ -1334,6 +1379,8 @@ export function runMangaAgentAgUiStream(
     message,
     requestId,
     controller,
+    undefined,
+    route,
   );
   const subscription = agent.run({
     threadId: conversationId ? `chapter-${chapterId}-conversation-${conversationId}` : `chapter-${chapterId}`,
@@ -1390,6 +1437,89 @@ export function resumeMangaAgentAgUiStream(
   });
   controller.signal.addEventListener('abort', () => subscription.unsubscribe());
   return controller;
+}
+
+function startMangaAgentEventStream(
+  url: string,
+  body: Record<string, unknown>,
+  requestId: string | undefined,
+  onEvent: (event: MangaAgentRunEvent) => void,
+): AbortController {
+  const controller = new AbortController();
+
+  authFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        onEvent({ type: 'error', data: { detail: parseApiError(await res.text()), requestId } });
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) {
+        onEvent({ type: 'error', data: { detail: '智能体连接不可用', requestId } });
+        return;
+      }
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEvent = 'message';
+      const handleLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(':')) return;
+        if (trimmed.startsWith('event:')) {
+          currentEvent = trimmed.slice(6).trim();
+          return;
+        }
+        if (!trimmed.startsWith('data:')) return;
+
+        const dataStr = trimmed.slice(5).trim();
+        try {
+          const data = JSON.parse(dataStr);
+          if (isAgUiEventPayload(data) && (currentEvent === 'message' || currentEvent === 'ag_ui_event')) {
+            onEvent({ type: 'ag_ui_event', data });
+          } else if (currentEvent === 'status'
+            || currentEvent === 'run_event'
+            || currentEvent === 'tool'
+            || currentEvent === 'user_input_requested'
+            || currentEvent === 'done'
+            || currentEvent === 'error') {
+            onEvent({ type: currentEvent, data } as MangaAgentRunEvent);
+          }
+        } catch {
+          // Ignore malformed stream chunks.
+        } finally {
+          currentEvent = 'message';
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          handleLine(line);
+        }
+      }
+      if (buffer.trim()) handleLine(buffer);
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') {
+        onEvent({ type: 'error', data: { detail: err.message || '智能体连接中断', requestId } });
+      }
+    });
+
+  return controller;
+}
+
+function isAgUiEventPayload(value: unknown): value is ArtVerseAgUiEvent {
+  if (!value || typeof value !== 'object') return false;
+  const type = (value as { type?: unknown }).type;
+  return typeof type === 'string' && Object.values(EventType).includes(type as EventType);
 }
 
 function createClientRequestId(): string {
@@ -1452,3 +1582,30 @@ export async function cancelMangaAgentConversationRun(
   return res.json();
 }
 
+export async function resumeMangaAgentRun(
+  chapterId: number,
+  requestId: string,
+  answer: string,
+): Promise<{ reply: string; request_id?: string; requestId?: string }> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/runs/${requestId}/resume`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answer }),
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export function resumeMangaAgentRunStream(
+  chapterId: number,
+  requestId: string,
+  answer: string,
+  onEvent: (event: MangaAgentRunEvent) => void,
+): AbortController {
+  return startMangaAgentEventStream(
+    `${BASE}/api/chapters/${chapterId}/manga-agent/runs/${requestId}/resume-stream`,
+    { answer },
+    requestId,
+    onEvent,
+  );
+}

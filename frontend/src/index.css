@@ -1,32 +1,77 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
+
+/* ── 和纸工坊 设计令牌 ── */
 
 @theme {
-  --color-ink: #0D0D0F;
-  --color-ink-light: #141418;
-  --color-ink-lighter: #1A1A20;
-  --color-ink-surface: #22222A;
-  --color-ink-border: #2A2A34;
-  --color-ink-muted: #3A3A46;
-  --color-cream: #F5EDE3;
-  --color-cream-dim: #C8BFAD;
-  --color-coral: #E8553D;
-  --color-coral-light: #F07B5F;
-  --color-coral-dark: #C93D28;
-  --color-amber-accent: #D4A04A;
-  --color-amber-accent-light: #E8C06A;
-  --color-warm-gray: #8A8690;
+  /* 纸本色系 */
+  --color-paper-base: #FAF6EF;
+  --color-paper-surface: #F2EDE4;
+  --color-paper-raised: #FFFFFF;
+  --color-paper-border: #E5DFD5;
+
+  /* 墨色系 */
+  --color-sumi: #1A1614;
+  --color-sumi-dim: #5C5650;
+  --color-sumi-faint: #8B8680;
+
+  /* 朱砂色系 */
+  --color-vermilion: #C0392B;
+  --color-vermilion-hover: #A93226;
+  --color-vermilion-light: #FADBD8;
+
+  /* 金泥色系 */
+  --color-kinpaku: #B8953A;
+  --color-kinpaku-light: #F9EEC1;
+
+  /* 蓝墨色系 */
+  --color-aizuri: #2E5A88;
+  --color-aizuri-light: #D6E4F0;
+
+  /* 功能色 */
+  --color-success: #27AE60;
+  --color-warning: #E67E22;
+  --color-danger: #C0392B;
+
+  /* 保留兼容旧名称（逐步迁移） */
+  --color-ink: #FAF6EF;
+  --color-ink-light: #F2EDE4;
+  --color-ink-lighter: #FFFFFF;
+  --color-ink-surface: #E5DFD5;
+  --color-ink-border: #E5DFD5;
+  --color-ink-muted: #8B8680;
+  --color-cream: #1A1614;
+  --color-cream-dim: #5C5650;
+  --color-coral: #C0392B;
+  --color-coral-light: #A93226;
+  --color-coral-dark: #922B21;
+  --color-amber-accent: #B8953A;
+  --color-amber-accent-light: #D4B45A;
+  --color-warm-gray: #8B8680;
 }
 
+/* ── 全局基础 ── */
 body {
   margin: 0;
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: var(--color-ink);
-  color: var(--color-cream);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--color-paper-base);
+  color: var(--color-sumi);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar - warm & refined */
+/* ── 网点纹理 (Screen Tone) ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.025;
+  background-image: radial-gradient(circle, var(--color-sumi) 0.5px, transparent 1px);
+  background-size: 6px 6px;
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ── 自定义滚动条 ── */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -35,18 +80,24 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(232, 85, 61, 0.15);
+  background: rgba(192, 57, 43, 0.2);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(232, 85, 61, 0.3);
+  background: rgba(192, 57, 43, 0.4);
 }
-/* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(232, 85, 61, 0.15) transparent;
+  scrollbar-color: rgba(192, 57, 43, 0.2) transparent;
 }
 
+/* ── 选中文字 ── */
+::selection {
+  background: rgba(192, 57, 43, 0.15);
+  color: var(--color-sumi);
+}
+
+/* ── 动画关键帧 ── */
 @keyframes barbershop {
   0% { background-position: 0 0; }
   100% { background-position: 32px 0; }
@@ -62,35 +113,104 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 85, 61, 0.2); }
-  50% { box-shadow: 0 0 12px 2px rgba(232, 85, 61, 0.15); }
+@keyframes ink-spread {
+  0% { clip-path: inset(0 100% 0 0); }
+  100% { clip-path: inset(0 0 0 0); }
 }
 
+@keyframes stamp-press {
+  0% { transform: scale(1.4); opacity: 0; }
+  60% { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ── 工具类 ── */
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }
 
+.animate-stamp {
+  animation: stamp-press 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 笔触分割线 */
+.brush-divider {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-vermilion) 20%,
+    var(--color-vermilion) 80%,
+    transparent 100%
+  );
+  opacity: 0.5;
+  border-radius: 1px;
+}
+
+/* 漫画分格框 */
+.panel-frame {
+  border: 1px solid var(--color-paper-border);
+  border-radius: 10px;
+  border-left-width: 3px;
+  border-left-color: var(--color-sumi-faint);
+  background: var(--color-paper-raised);
+}
+
+.panel-frame:hover {
+  border-left-color: var(--color-vermilion);
+}
+
+/* 网点纹理背景（用于卡片装饰） */
+.screen-tone-bg {
+  background-image: radial-gradient(circle, var(--color-sumi-faint) 0.5px, transparent 1px);
+  background-size: 6px 6px;
+  opacity: 0.06;
+}
+
+/* 毛玻璃效果（浅色版） */
 .glass {
-  background: rgba(13, 13, 15, 0.7);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background: rgba(250, 246, 239, 0.8);
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
 }
 
 .glass-light {
-  background: rgba(26, 26, 32, 0.6);
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
 }
 
+/* 闪光效果 */
 .shimmer-bg {
-  background: linear-gradient(90deg, transparent, rgba(232, 85, 61, 0.06), transparent);
+  background: linear-gradient(90deg, transparent, rgba(192, 57, 43, 0.04), transparent);
   background-size: 200% 100%;
   animation: shimmer 2.5s infinite;
 }
 
-/* Selection */
-::selection {
-  background: rgba(232, 85, 61, 0.3);
-  color: #F5EDE3;
+/* 显示字体 */
+.font-display {
+  font-family: 'Noto Serif SC', serif;
+}
+
+/* 焦点可见性 */
+:focus-visible {
+  outline: 2px solid var(--color-vermilion);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 减少动效 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

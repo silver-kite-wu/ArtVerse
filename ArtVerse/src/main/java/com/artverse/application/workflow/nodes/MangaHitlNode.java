@@ -20,8 +20,10 @@ public class MangaHitlNode extends AbstractStaticReplyNode {
     @Override
     protected String responseText(MangaWorkflowExecutionContext context) {
         return """
-                这里需要你先做一个选择。
-                请选择继续生成、修订分镜，或者切回导演流程后再继续。
+                当前处于「决策」模式，这是一个需要你收束选择的工作节点。
+
+                请说明需要确认什么（例如：选择分支、确认创意方向、决定是否执行工具操作），
+                然后切回「导演」模式，我会根据你的选择继续推进。
                 """.trim();
     }
 }

@@ -112,14 +112,14 @@ class AuthControllerTest {
             SaTokenInfo info = new SaTokenInfo();
             info.setTokenName("satoken");
             info.setTokenValue("access-token");
-            info.setTokenTimeout(3600);
+            info.setTokenTimeout(43200);
             stpUtil.when(StpUtil::getTokenInfo).thenReturn(info);
             when(refreshTokenService.issue(1L)).thenReturn("new-refresh-token");
             when(refreshTokenService.getTimeoutSeconds()).thenReturn(604800L);
 
             var result = controller.refresh(null);
 
-            stpUtil.verify(() -> StpUtil.renewTimeout(3600));
+            stpUtil.verify(() -> StpUtil.renewTimeout(43200));
             assertThat(result.tokenValue()).isEqualTo("access-token");
             assertThat(result.refreshToken()).isEqualTo("new-refresh-token");
         }
@@ -133,7 +133,7 @@ class AuthControllerTest {
             SaTokenInfo info = new SaTokenInfo();
             info.setTokenName("satoken");
             info.setTokenValue("new-access");
-            info.setTokenTimeout(3600);
+            info.setTokenTimeout(43200);
             stpUtil.when(StpUtil::getTokenInfo).thenReturn(info);
             when(refreshTokenService.issue(1L)).thenReturn("new-rt");
             when(refreshTokenService.getTimeoutSeconds()).thenReturn(604800L);

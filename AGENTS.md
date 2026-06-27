@@ -1,4 +1,4 @@
-# Repository Guidelines
+﻿# Repository Guidelines
 
 ## Project Structure & Module Organization
 
@@ -54,7 +54,7 @@ Run at least `mvn -q -DskipTests compile` after backend changes and `npm run bui
 
 ## Commit & Pull Request Guidelines
 
-Recent commits use short Chinese summaries, usually verb-object style, such as `添加guard层进行幂等和限流`. Keep commits concise and scoped.
+Recent commits use short Chinese summaries, usually verb-object style, such as `娣诲姞guard灞傝繘琛屽箓绛夊拰闄愭祦`. Keep commits concise and scoped.
 
 Pull requests should include:
 
@@ -72,4 +72,5 @@ Never commit API keys or local secrets. User API keys are stored through the app
 - User-facing UI text must be valid Simplified Chinese by default.
 - Do not commit encoded garbage, mojibake, or mixed-language placeholders into visible labels, prompts, tooltips, or status bars.
 - If a screen must show English, keep it intentional and localize the rest of the surface consistently.
-- Treat any visible乱码 as a correctness defect and fix the source string, not just the rendering layer.
+- Frontend source files must be kept in UTF-8, and any visible Chinese string that becomes乱码 is a correctness defect that must be fixed at the source.
+- Treat any visible涔辩爜 as a correctness defect and fix the source string, not just the rendering layer.

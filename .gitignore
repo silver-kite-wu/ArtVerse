@@ -28,5 +28,8 @@ frontend/build-error.txt
 sql.zip
 wechat_article_*.txt
 
+# Claude Code configuration
+.claude/
+
 # 备份文件
 backup/

@@ -16,10 +16,10 @@ export default class ErrorBoundary extends Component<
   override render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-dvh items-center justify-center bg-gray-950 px-6 text-gray-100">
-          <div className="max-w-md rounded-lg border border-red-500/20 bg-red-950/30 p-5">
-            <div className="text-sm font-medium text-red-300">Application error</div>
-            <div className="mt-2 text-sm text-gray-300">{this.state.error || 'Unknown error'}</div>
+        <div className="flex min-h-dvh items-center justify-center bg-paper-base px-6 text-sumi">
+          <div className="max-w-md rounded-lg border border-vermilion/20 bg-vermilion-light/20 p-5">
+            <div className="text-sm font-medium text-vermilion">应用出错</div>
+            <div className="mt-2 text-sm text-sumi-dim">{this.state.error || 'Unknown error'}</div>
           </div>
         </div>
       );

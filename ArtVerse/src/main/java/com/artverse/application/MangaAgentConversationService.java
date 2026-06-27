@@ -79,6 +79,12 @@ public class MangaAgentConversationService {
         return conversationRepository.save(conversation);
     }
 
+    @Transactional
+    public void deleteConversation(Long chapterId, User user, UUID conversationId) {
+        MangaAgentConversation conversation = requireConversation(chapterId, user, conversationId);
+        conversationRepository.delete(conversation);
+    }
+
     // 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 message management 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
 
     @Transactional(readOnly = true)

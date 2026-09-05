@@ -244,8 +244,8 @@ public class MangaAgentExecutionSupport {
         User user = context.user();
         Chapter chapter = context.chapter();
         Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("coze_api_key", blankIfNull(
-                apiKeyService.activeUserProviderKeyOrBlank(user, ApiKeyService.SLOT_WORKFLOW)));
+        variables.put("workflow_config", apiKeyService.activeUserProviderConfigOrBlank(
+                user, ApiKeyService.SLOT_WORKFLOW));
         variables.put("step_id", context.stepId() == null || context.stepId().isBlank()
                 ? taskType.sessionSuffix()
                 : context.stepId());

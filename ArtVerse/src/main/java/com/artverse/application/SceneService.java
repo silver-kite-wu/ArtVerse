@@ -51,8 +51,8 @@ public class SceneService {
     }
 
     @Transactional
-    public List<String> generateScenes(Long chapterId, String cozeApiKey) {
-        List<String> scenes = generateScenesDraft(chapterId, cozeApiKey);
+    public List<String> generateScenes(Long chapterId, UserProviderConfig workflowConfig) {
+        List<String> scenes = generateScenesDraft(chapterId, workflowConfig);
         Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
         chapter.setScenesText(objectMapper.valueToTree(scenes).toString());
@@ -62,7 +62,7 @@ public class SceneService {
     }
 
     @Transactional(readOnly = true)
-    public List<String> generateScenesDraft(Long chapterId, String cozeApiKey) {
+    public List<String> generateScenesDraft(Long chapterId, UserProviderConfig workflowConfig) {
         Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
 
@@ -74,7 +74,7 @@ public class SceneService {
         List<String> scenes = cozeClient.generateScenes(
                 material,
                 chapter.getImageCount(),
-                cozeApiKey,
+                workflowConfig,
                 MangaPromptPolicy.storyboardInstruction(chapter.getImageCount()));
 
         if (scenes.size() != chapter.getImageCount()) {

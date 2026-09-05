@@ -11,6 +11,7 @@ import com.artverse.agent.MangaAgentPromptProvider;
 import com.artverse.agent.PostgresAgentWorkspaceStore;
 import com.artverse.application.ArtVerseSkillRegistry;
 import com.artverse.application.MangaAgentRunService;
+import com.artverse.common.BusinessException;
 import com.artverse.agent.gateway.tools.AgentToolConfigurationRegistry;
 import com.artverse.config.ArtVerseProperties;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -34,9 +35,7 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class AgentScopeAgentFactory {
 
-    private final Model model;
     private final CompactionConfig compactionConfig;
-    private final AgentModelSpecFactory agentModelSpecFactory;
     private final ArtVerseProperties properties;
     private final AgentWorkspaceService agentWorkspaceService;
     private final MangaAgentPromptProvider promptProvider;
@@ -64,8 +63,11 @@ public class AgentScopeAgentFactory {
     }
 
     public HarnessAgent getOrCreate(AgentRunRequest request) {
+        if (request.modelSpec() == null) {
+            throw new BusinessException(400,
+                    "LLM provider configuration is missing. Please configure it in Settings.");
+        }
         Path requestWorkspace = agentWorkspaceService.workspaceFor(request);
-        AgentModelSpec fallbackSpec = defaultModelSpec(request.llmApiKey());
         BusinessSkillSelection selection = skillRegistry.resolveSelection(request);
         String promptVersion = promptProvider.promptVersionFor(request.taskType());
         if (request.requestId() != null && request.chapterId() != null) {
@@ -74,16 +76,13 @@ public class AgentScopeAgentFactory {
             runService.recordStepSkillSelection(Long.valueOf(request.userId()), request.chapterId(),
                     request.requestId(), String.valueOf(request.variables().getOrDefault("step_id", "")), selection);
         }
-        String agentKey = buildAgentCacheKey(request, fallbackSpec, requestWorkspace, promptVersion, selection.cacheKey());
-        return agents.get(agentKey, key -> buildAgent(request, requestWorkspace, fallbackSpec, selection));
+        String agentKey = buildAgentCacheKey(request, requestWorkspace, promptVersion, selection.cacheKey());
+        return agents.get(agentKey, key -> buildAgent(request, requestWorkspace, selection));
     }
 
-    private HarnessAgent buildAgent(AgentRunRequest request, Path requestWorkspace, AgentModelSpec fallbackSpec,
+    private HarnessAgent buildAgent(AgentRunRequest request, Path requestWorkspace,
                                     BusinessSkillSelection selection) {
-        AgentModelSpec modelSpec = request.modelSpec() != null
-                ? request.modelSpec()
-                : fallbackSpec;
-        Model effectiveModel = resolveModel(request.llmApiKey(), modelSpec);
+        Model effectiveModel = resolveModel(request.llmApiKey(), request.modelSpec());
         HarnessAgent.Builder builder = HarnessAgent.builder()
                 // AgentScope 2.0 keeps per-session state in RuntimeContext. The agent
                 // itself is intentionally shared and must not encode tenant identity.
@@ -123,7 +122,8 @@ public class AgentScopeAgentFactory {
             log.info("Using user-provided {} API key for model: {}", modelSpec.provider(), modelSpec.model());
             return buildChatModel(llmApiKey, modelSpec);
         }
-        return model;
+        throw new BusinessException(400,
+                "LLM provider API key is missing. Please configure it in Settings.");
     }
 
     /**
@@ -142,17 +142,8 @@ public class AgentScopeAgentFactory {
                 .build();
     }
 
-    private AgentModelSpec defaultModelSpec(String llmApiKey) {
-        return agentModelSpecFactory.defaultLlm(llmApiKey);
-    }
-
     private static boolean hasApiKey(String key) {
         return key != null && !key.isBlank();
-    }
-
-    static String buildAgentCacheKey(AgentRunRequest request, AgentModelSpec fallbackSpec, Path workspace,
-                                     String promptVersion) {
-        return buildAgentCacheKey(request, fallbackSpec, workspace, promptVersion, "none");
     }
 
     private int maxIters(AgentTaskType taskType) {
@@ -170,9 +161,9 @@ public class AgentScopeAgentFactory {
         };
     }
 
-    static String buildAgentCacheKey(AgentRunRequest request, AgentModelSpec fallbackSpec, Path workspace,
+    static String buildAgentCacheKey(AgentRunRequest request, Path workspace,
                                      String promptVersion, String skillVersion) {
-        AgentModelSpec spec = request.modelSpec() != null ? request.modelSpec() : fallbackSpec;
+        AgentModelSpec spec = request.modelSpec();
         return String.join(":",
                 "task", request.taskType().name(),
                 "provider", nullToKey(spec.provider()),

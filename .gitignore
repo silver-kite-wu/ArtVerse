@@ -4,14 +4,19 @@
 .idea/
 *.iml
 .vscode/
+.trae/
 
 # OS junk
 .DS_Store
 Thumbs.db
 
+# Debug screenshots at repo root
+/*.png
+
 # Build outputs and dependency caches
 **/target/
 **/dist/
+**/dist.zip
 **/node_modules/
 **/.playwright-cli/
 
@@ -22,6 +27,8 @@ ArtVerse/.agentscope/
 # Local toolchains, caches, and scratch workspaces
 work/
 **/.m2/
+**/.m2-repo/
+**/.npm-cache/
 **/.gradle/
 **/.tmp/
 tmp/

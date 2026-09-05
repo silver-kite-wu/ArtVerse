@@ -18,7 +18,7 @@ import {
   registerUser,
   type ChallengeConfig,
 } from '../api';
-import TurnstileWidget from './TurnstileWidget';
+import CaptchaWidget from './CaptchaWidget';
 
 interface Props {
   onAuthSuccess: () => void;
@@ -48,17 +48,17 @@ function codePointLength(value: string): number {
 function challengeStatusText(status: ChallengeStatus, mode: Mode): string {
   switch (status) {
     case 'loading':
-      return '验证控件加载中...';
+      return '验证码加载中...';
     case 'ready':
-      return mode === 'register' ? '请完成人机验证后再注册' : '请先完成人机验证后再登录';
+      return mode === 'register' ? '请完成图形验证码后再注册' : '请输入图形验证码后登录';
     case 'verified':
-      return '人机验证通过';
+      return '验证码已输入';
     case 'expired':
-      return '验证已过期，请重新完成验证';
+      return '验证码已过期，请刷新后重试';
     case 'error':
-      return '验证加载失败，请刷新后重试';
+      return '验证码加载失败，请刷新后重试';
     default:
-      return mode === 'register' ? '注册前需要完成人机验证' : '检测到异常登录频率，请先完成人机验证';
+      return mode === 'register' ? '注册前需要完成图形验证码' : '请完成图形验证码后登录';
   }
 }
 
@@ -85,13 +85,13 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
 
   const isModal = variant === 'modal';
   const registerMode = mode === 'register';
-  const supportsTurnstile = challengeConfig.enabled
-    && challengeConfig.provider === 'turnstile'
-    && challengeConfig.siteKey.trim().length > 0;
+  const supportsCaptcha = challengeConfig.enabled
+    && challengeConfig.provider === 'graphic-captcha';
+  const loginAlwaysChallenge = supportsCaptcha && challengeConfig.loginMode === 'always';
   const registerChallengeVisible = registerMode
-    && supportsTurnstile
+    && supportsCaptcha
     && challengeConfig.registrationRequired;
-  const loginChallengeActive = loginChallengeVisible && supportsTurnstile;
+  const loginChallengeActive = !registerMode && supportsCaptcha && (loginAlwaysChallenge || loginChallengeVisible);
   const dialogTitleId = `${idPrefix}-title`;
   const dialogDescriptionId = `${idPrefix}-description`;
   const usernameId = `${idPrefix}-username`;
@@ -138,7 +138,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
   };
 
   const inputClass =
-    'w-full rounded-[18px] border border-border/80 bg-white/85 px-4 py-3.5 text-sm text-text-primary shadow-[0_4px_12px_rgba(24,27,25,0.08)] outline-none transition-[border-color,box-shadow,background-color] placeholder:text-text-muted focus:border-accent/50 focus:bg-white focus:shadow-[0_0_0_4px_var(--color-accent-soft),0_10px_24px_rgba(24,27,25,0.08)]';
+    'w-full rounded-[18px] border border-border/80 bg-bg-surface/85 px-4 py-3.5 text-sm text-text-primary outline-none! transition-[border-color,background-color] placeholder:text-text-muted focus:border-accent/50 focus:bg-bg-surface';
 
   const handleAuthError = (fallbackMessage: string, err: unknown, currentMode: Mode) => {
     if (err instanceof ApiError) {
@@ -147,7 +147,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
         setLoginChallengeToken(null);
         setLoginChallengeStatus('idle');
         setLoginChallengeResetSignal((value) => value + 1);
-        setError(err.message || '请先完成人机验证');
+        setError(err.message || '请先完成图形验证码');
         return;
       }
       if (err.code === 'CHALLENGE_FAILED' || err.code === 'CHALLENGE_UNAVAILABLE') {
@@ -197,11 +197,11 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
       return;
     }
     if (registerChallengeVisible && !registerChallengeToken) {
-      setError('请先完成人机验证后再注册');
+      setError('请先完成图形验证码后再注册');
       return;
     }
     if (loginChallengeActive && !loginChallengeToken) {
-      setError('请先完成人机验证');
+      setError('请先完成图形验证码');
       return;
     }
 
@@ -261,10 +261,10 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
   const currentChallengeStatus = registerChallengeVisible ? registerChallengeStatus : loginChallengeStatus;
 
   return (
-    <div className={(isModal ? '' : 'min-h-screen bg-bg-base ') + 'flex items-center justify-center p-4 sm:p-6'}>
+    <div className={(isModal ? '' : 'min-h-dvh bg-bg-base ') + 'flex items-center justify-center p-4 sm:p-6'}>
       <div className="flex w-full max-w-[38rem] min-h-0 flex-col">
         <div className="mb-5 flex items-center justify-center gap-3 sm:mb-6">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-white shadow-[0_16px_32px_rgba(214,88,14,0.3)]">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-white shadow-glow">
             <Sparkles size={20} />
           </div>
           <div className="text-left">
@@ -279,9 +279,9 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
           aria-modal={isModal ? 'true' : undefined}
           aria-labelledby={isModal ? dialogTitleId : undefined}
           aria-describedby={isModal ? dialogDescriptionId : undefined}
-          className="relative flex h-[46rem] max-h-[calc(100dvh-2rem)] flex-col overflow-hidden rounded-[32px] border border-border/80 bg-bg-raised/95 p-5 shadow-[0_30px_80px_rgba(24,27,25,0.18)] sm:p-7"
+          className="relative flex h-[min(46rem,calc(100dvh-2rem))] flex-col overflow-hidden rounded-[32px] border border-border/80 bg-bg-raised/95 p-5 sm:p-7"
         >
-          <div className="pointer-events-none absolute inset-x-12 top-0 h-28 rounded-full bg-[radial-gradient(circle,rgba(214,88,14,0.18)_0%,rgba(214,88,14,0.08)_32%,rgba(214,88,14,0)_76%)] blur-2xl" />
+          <div className="pointer-events-none absolute inset-x-12 top-0 h-28 rounded-full bg-[radial-gradient(circle,rgba(241,72,30,0.16)_0%,rgba(241,72,30,0.06)_32%,rgba(241,72,30,0)_76%)] blur-2xl" />
 
           <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1 sm:gap-6">
             <div className="sr-only">
@@ -290,12 +290,12 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
             </div>
 
             {message && !registerMode && (
-              <p className="rounded-[20px] border border-accent/25 bg-[linear-gradient(135deg,rgba(214,88,14,0.12),rgba(214,88,14,0.04))] px-4 py-3 text-sm text-accent-secondary shadow-[0_10px_24px_rgba(214,88,14,0.12)]">
+              <p className="rounded-[20px] border border-accent/25 bg-[linear-gradient(135deg,rgba(241,72,30,0.10),rgba(241,72,30,0.03))] px-4 py-3 text-sm text-accent">
                 {message}
               </p>
             )}
 
-            <div className="rounded-[22px] border border-border/80 bg-white/55 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_6px_18px_rgba(24,27,25,0.08)]">
+            <div className="rounded-[22px] border border-border/80 bg-bg-surface/60 p-1.5">
               <div className="grid grid-cols-2 gap-1">
                 <button
                   type="button"
@@ -303,7 +303,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
                   className={
                     'rounded-[18px] px-4 py-3 text-sm font-semibold transition-all duration-200 '
                     + (mode === 'login'
-                      ? 'bg-white text-text-primary shadow-[0_12px_24px_rgba(24,27,25,0.12)]'
+                      ? 'bg-bg-raised text-text-primary'
                       : 'text-text-muted hover:text-text-primary')
                   }
                 >
@@ -315,7 +315,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
                   className={
                     'rounded-[18px] px-4 py-3 text-sm font-semibold transition-all duration-200 '
                     + (mode === 'register'
-                      ? 'bg-white text-text-primary shadow-[0_12px_24px_rgba(24,27,25,0.12)]'
+                      ? 'bg-bg-raised text-text-primary'
                       : 'text-text-muted hover:text-text-primary')
                   }
                 >
@@ -382,30 +382,24 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
             </div>
 
             {challengeBlockVisible && (
-              <div className="space-y-3 rounded-[24px] border border-border/80 bg-white/55 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_10px_24px_rgba(24,27,25,0.06)]">
-                <p className="text-sm font-medium text-text-secondary">
-                  {registerMode ? '注册前需要完成人机验证' : '检测到异常登录频率，请先完成人机验证'}
-                </p>
-                <div className="overflow-hidden rounded-[20px] border border-border/70 bg-white/80 p-3">
-                  {supportsTurnstile ? (
-                    <div className="flex justify-center">
-                      <TurnstileWidget
-                        visible={challengeBlockVisible}
-                        siteKey={challengeConfig.siteKey}
-                        action={registerMode ? 'register' : 'login'}
-                        resetSignal={registerMode ? registerChallengeResetSignal : loginChallengeResetSignal}
-                        onTokenChange={registerMode ? setRegisterChallengeToken : setLoginChallengeToken}
-                        onStatusChange={registerMode ? setRegisterChallengeStatus : setLoginChallengeStatus}
-                      />
-                    </div>
-                  ) : (
-                    <p className="text-sm text-text-muted">当前环境未配置可用的人机验证控件。</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-text-muted" aria-live="polite">
+              <div className="space-y-2">
+                <p className="flex items-center gap-1.5 text-sm font-medium text-text-secondary">
                   <ShieldCheck size={14} className="text-accent/70" />
-                  <span>{challengeStatusText(currentChallengeStatus, currentChallengeMode)}</span>
-                </div>
+                  图形验证码
+                </p>
+                {supportsCaptcha ? (
+                  <CaptchaWidget
+                    visible={challengeBlockVisible}
+                    resetSignal={registerMode ? registerChallengeResetSignal : loginChallengeResetSignal}
+                    onTokenChange={registerMode ? setRegisterChallengeToken : setLoginChallengeToken}
+                    onStatusChange={registerMode ? setRegisterChallengeStatus : setLoginChallengeStatus}
+                  />
+                ) : (
+                  <p className="text-sm text-text-muted">当前环境未配置可用的验证码控件。</p>
+                )}
+                <p className="text-xs text-text-muted" aria-live="polite">
+                  {challengeStatusText(currentChallengeStatus, currentChallengeMode)}
+                </p>
               </div>
             )}
 
@@ -429,7 +423,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-accent px-4 py-4 text-base font-semibold text-white shadow-[0_16px_32px_rgba(214,88,14,0.28)] transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-accent px-4 py-4 text-base font-semibold text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? (
                 <LoaderCircle size={18} className="animate-spin" />

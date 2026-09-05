@@ -1,4 +1,4 @@
-export type AppView = 'home' | 'square' | 'workspace' | 'editor' | 'imagegen' | 'myworks' | 'settings';
+export type AppView = 'square' | 'workspace' | 'editor' | 'imagegen' | 'myworks' | 'settings';
 
 export type AppRoute =
   | { view: Exclude<AppView, 'editor'> }
@@ -6,7 +6,6 @@ export type AppRoute =
   | { view: 'square'; format: 'novel' | 'manga'; storyId: number; chapterId?: number };
 
 const SIMPLE_VIEWS = new Set<Exclude<AppView, 'editor'>>([
-  'home',
   'square',
   'workspace',
   'imagegen',

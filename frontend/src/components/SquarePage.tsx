@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -207,7 +207,7 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
 
         <div className="sticky top-0 z-10 -mx-4 border-b border-border bg-bg-base/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <nav className="flex w-fit items-center rounded-xl bg-bg-surface p-1 shadow-sm ring-1 ring-border" aria-label="作品类型">
+            <nav className="flex w-fit items-center rounded-xl bg-bg-surface p-1 ring-1 ring-border" aria-label="作品类型">
               {(['novel', 'manga'] as ContentFormat[]).map((format) => (
                 <button
                   key={format}
@@ -221,7 +221,11 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
                   }`}
                 >
                   {formatLabel(format)}
-                  <span className="ml-1 opacity-75">{facets[format]}</span>
+                  <span className={`ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[0.625rem] font-bold ${
+                    route.format === format
+                      ? 'bg-white/20 text-white'
+                      : 'bg-accent-muted text-accent'
+                  }`}>{facets[format]}</span>
                 </button>
               ))}
             </nav>
@@ -262,7 +266,7 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
           {loading ? (
             <div className="grid gap-4 md:grid-cols-2">
               {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="h-48 rounded-2xl border border-border shimmer-bg" />
+                <div key={index} className="h-48 rounded-2xl border border-border bg-bg-surface/50 shimmer-bg" />
               ))}
             </div>
           ) : error ? (
@@ -290,7 +294,7 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
 
 function StoryCard({ story }: { story: SquareStory }) {
   return (
-    <article className="group overflow-hidden rounded-2xl border border-border bg-bg-surface shadow-[0_1px_2px_rgb(15_23_42/0.03)] transition duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-lg">
+    <article className="group overflow-hidden rounded-2xl border border-border bg-bg-surface transition duration-200 hover:-translate-y-0.5 hover:border-accent/40">
       <a
         href={storyHref(story.format, story.id)}
         target="_blank"
@@ -407,11 +411,11 @@ function Empty({
   onAction: () => void;
 }) {
   return (
-    <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-bg-surface px-4 text-center text-text-muted">
-      {icon}
-      <p className="mt-4 text-sm">{text}</p>
+    <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-bg-surface/50 px-4 text-center text-text-muted">
+      <div className="animate-float [&>svg]:h-12 [&>svg]:w-12 [&>svg]:text-accent/40">{icon}</div>
+      <p className="mt-5 text-sm">{text}</p>
       <button
-        className="mt-4 min-h-11 rounded-lg border border-border px-4 text-sm text-text-secondary hover:border-accent"
+        className="mt-5 min-h-11 rounded-lg bg-accent px-5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
         onClick={onAction}
       >
         {action}
@@ -654,10 +658,10 @@ function Detail({
                     onClick={() => onRead(chapter.id)}
                   >
                     <span className="min-w-0">
-                      <span className="block text-[11px] uppercase tracking-[0.18em] text-text-muted">
+                      <span className="block text-[0.6875rem] uppercase tracking-[0.18em] text-text-muted">
                         {chapterMetaLabel(chapter, detail.format)}
                       </span>
-                      <span className="mt-1 block truncate text-[15px] text-text-primary transition-colors group-hover:text-accent">
+                      <span className="mt-1 block truncate text-[0.9375rem] text-text-primary transition-colors group-hover:text-accent">
                         {chapterTitle(chapter)}
                       </span>
                     </span>
@@ -871,21 +875,21 @@ function Reader({
             <div className="flex items-center gap-2">
               <span className="text-xs text-text-muted">字号</span>
               <button
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary transition hover:border-accent hover:text-accent disabled:opacity-30"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-text-secondary transition hover:border-accent hover:text-accent disabled:opacity-30"
                 disabled={fontSize <= 14}
                 onClick={() => setFontSize((v) => v - 2)}
                 aria-label="缩小字号"
               >
-                A<span className="text-[10px]">-</span>
+                A<span className="text-[0.625rem]">-</span>
               </button>
               <span className="min-w-[2.5ch] text-center text-sm font-medium tabular-nums">{fontSize}</span>
               <button
-                className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary transition hover:border-accent hover:text-accent disabled:opacity-30"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-text-secondary transition hover:border-accent hover:text-accent disabled:opacity-30"
                 disabled={fontSize >= 28}
                 onClick={() => setFontSize((v) => v + 2)}
                 aria-label="放大字号"
               >
-                A<span className="text-[10px]">+</span>
+                A<span className="text-[0.625rem]">+</span>
               </button>
             </div>
             <label className="fanqie-setting-field">
@@ -915,7 +919,7 @@ function Reader({
       )}
 
       <main ref={progressRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
-        <article className="mx-auto" style={{ maxWidth: detail.format === 'novel' ? width : 920 }}>
+        <article className="mx-auto w-full" style={{ maxWidth: detail.format === 'novel' ? width : 'min(920px, 100%)' }}>
           <header className="fanqie-reader-header">
             <div className="text-xs uppercase tracking-[0.2em] text-text-muted">
               {detail.title}
@@ -929,7 +933,7 @@ function Reader({
               <div className="fanqie-reader-page mt-6">
                 <div
                   className="fanqie-reader-copy text-text-primary"
-                  style={{ fontSize: `${fontSize}px`, lineHeight }}
+                  style={{ fontSize: `${fontSize / 16}rem`, lineHeight }}
                 >
                   {parseParagraphs(chapter.content).map((paragraph, i) => (
                     <p key={i} className="reader-paragraph">{paragraph}</p>
@@ -958,6 +962,15 @@ function Reader({
                 action="返回作品详情"
                 onAction={onBack}
               />
+            </div>
+          )}
+
+          {hasContent && (
+            <div className="mt-12 flex flex-col items-center gap-3 pb-2">
+              <span className="seal-stamp h-11! min-w-11! text-base!">完</span>
+              <div className="text-xs tracking-[0.2em] text-text-muted">
+                {detail.title}{detail.published_at ? ` · ${displayDate(detail.published_at)}` : ''}
+              </div>
             </div>
           )}
 

@@ -31,7 +31,8 @@ class AgentToolAuditServiceTest {
                     .sessionId("u-1-story-2-chapter-7-manga-director")
                     .userId("1")
                     .put(MangaAgentRuntimeContext.class, new MangaAgentRuntimeContext(
-                            1L, 2L, 7L, UUID.randomUUID(), requestId, ""))
+                            1L, 2L, 7L, UUID.randomUUID(), requestId,
+                            new UserProviderConfig("workflow", "", "", "", "", "")))
                     .build();
 
             Callable<Map<String, Object>> action = () -> Map.of("saved", true);

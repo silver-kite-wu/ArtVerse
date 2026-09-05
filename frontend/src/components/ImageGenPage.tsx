@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react';
+﻿import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy,
@@ -323,7 +323,7 @@ function ConfigPopover({
 
   return (
     <div className="absolute left-0 bottom-full mb-2 z-50 w-72 origin-bottom-left animate-fade-in">
-      <div className="overflow-hidden rounded-2xl border border-border bg-bg-surface shadow-2xl shadow-black/50">
+      <div className="overflow-hidden rounded-2xl border border-border bg-bg-surface shadow-black/50">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
@@ -381,7 +381,7 @@ function ConfigPopover({
                     <rect x={4} y={0} width={12} height={20} rx={1.5} className={ar.value === '9:16' ? '' : 'hidden'} />
                   </svg>
                   <span className="font-medium leading-tight">{ar.label}</span>
-                  <span className="text-[10px] opacity-60 leading-tight">{ar.sub}</span>
+                  <span className="text-[0.625rem] opacity-60 leading-tight">{ar.sub}</span>
                 </button>
               ))}
             </div>
@@ -455,7 +455,7 @@ function Composer({
   return (
     <div className={compact ? 'w-full' : 'w-full max-w-5xl mx-auto'}>
       {/* Split the card: text section has overflow-hidden, footer does not */}
-      <div className="rounded-2xl border border-border shadow-2xl shadow-coral/5">
+      <div className="rounded-2xl border border-border shadow-coral/5">
         <div className="overflow-hidden rounded-t-2xl bg-bg-surface/85">
           <div className="relative p-4 sm:p-5">
             {refFiles.length > 0 && (
@@ -488,10 +488,10 @@ function Composer({
               placeholder="描述你想生成的画面、风格、主体和细节（支持粘贴图片作为参考图）"
               disabled={generating}
               rows={compact ? 4 : 5}
-              className="w-full resize-none bg-transparent text-[17px] leading-7 text-text-primary outline-none placeholder:text-text-secondary"
+              className="w-full resize-none bg-transparent text-[1.0625rem] leading-7 text-text-primary outline-none placeholder:text-text-secondary"
             />
             {pasteToast && (
-              <div className="absolute right-4 top-4 z-10 animate-fade-in rounded-lg bg-accent/90 px-3 py-1.5 text-xs text-white shadow-lg">
+              <div className="absolute right-4 top-4 z-10 animate-fade-in rounded-lg bg-accent/90 px-3 py-1.5 text-xs text-white">
                 已添加参考图
               </div>
             )}
@@ -637,7 +637,7 @@ function ThemeSidebar({
                     if (e.key === 'Enter') handleFinishRename();
                     if (e.key === 'Escape') setEditingId(null);
                   }}
-                  className="min-w-0 flex-1 bg-bg-base rounded px-1 py-0.5 text-sm text-text-primary outline-none border border-accent/40"
+                  className="min-w-0 flex-1 bg-bg-base rounded-lg  px-1 py-0.5 text-sm text-text-primary outline-none border border-accent/40"
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
@@ -1580,7 +1580,7 @@ export default function ImageGenPage() {
               <span>原图已添加到聊天框，在画布中标注后粘贴回来一起发送</span>
               <button
                 onClick={() => setPasteHint(false)}
-                className="shrink-0 rounded p-0.5 text-accent/60 hover:text-accent hover:bg-accent/20 transition-colors"
+                className="shrink-0 rounded-lg  p-0.5 text-accent/60 hover:text-accent hover:bg-accent/20 transition-colors"
                 aria-label="关闭提示"
               >
                 <X size={14} />

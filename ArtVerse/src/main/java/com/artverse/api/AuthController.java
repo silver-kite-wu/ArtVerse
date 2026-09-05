@@ -3,6 +3,7 @@ package com.artverse.api;
 import cn.dev33.satoken.stp.SaTokenInfo;
 import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.api.dto.AuthDtos.AuthResponse;
+import com.artverse.api.dto.AuthDtos.CaptchaImageResponse;
 import com.artverse.api.dto.AuthDtos.ChallengeConfigResponse;
 import com.artverse.api.dto.AuthDtos.LoginRequest;
 import com.artverse.api.dto.AuthDtos.RefreshRequest;
@@ -17,6 +18,7 @@ import com.artverse.domain.User;
 import com.artverse.security.AuthCookieService;
 import com.artverse.security.AuthGuardService;
 import com.artverse.security.AuthErrorCodes;
+import com.artverse.security.GraphicCaptchaService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -41,6 +43,7 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final AuthCookieService authCookieService;
     private final AuthGuardService authGuardService;
+    private final GraphicCaptchaService graphicCaptchaService;
 
     @GetMapping("/challenge/config")
     public ResponseEntity<ChallengeConfigResponse> challengeConfig() {
@@ -53,6 +56,15 @@ public class AuthController {
                         authGuardService.requiresRegistrationChallenge(),
                         authGuardService.loginMode()
                 ));
+    }
+
+    @GetMapping("/captcha/image")
+    @RateLimit(windowSeconds = 60, maxRequests = 30, key = "captcha")
+    public ResponseEntity<CaptchaImageResponse> captchaImage() {
+        GraphicCaptchaService.CaptchaImage captcha = graphicCaptchaService.generate();
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new CaptchaImageResponse(captcha.captchaId(), captcha.image()));
     }
 
     @PostMapping("/register")

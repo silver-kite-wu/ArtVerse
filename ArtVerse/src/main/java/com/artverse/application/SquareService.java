@@ -28,11 +28,16 @@ public class SquareService {
         String resolvedFormat = format == null || format.isBlank() ? "manga" : format.toLowerCase(Locale.ROOT);
         if (!FORMATS.contains(resolvedFormat)) throw new BusinessException(400, "Invalid format");
         String keyword = search == null ? "" : search.trim();
+        String pattern = keyword.isEmpty() ? null : "%" + keyword + "%";
         String union = contentUnion(resolvedFormat);
-        String filter = keyword.isEmpty() ? "" : " WHERE LOWER(title) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(description) LIKE LOWER(CONCAT('%', :search, '%'))";
+        // 搜索参数不能放进 SQL 的 CONCAT('%', ?, '%')：连接串使用 stringtype=unspecified，
+        // pgjdbc 以未定类型发送参数，而 PostgreSQL 的 concat() 是 VARIADIC "any" 函数，
+        // 无法推断参数类型，会报 "could not determine data type of parameter" 并返回 500。
+        // 改为在 Java 侧拼出 %关键词%，让参数落在 LOWER(:pattern) 这一可推断为 text 的位置。
+        String filter = pattern == null ? "" : " WHERE LOWER(title) LIKE LOWER(:pattern) OR LOWER(description) LIKE LOWER(:pattern)";
         Query pageQuery = entityManager.createNativeQuery("SELECT * FROM (" + union + ") entries" + filter + " ORDER BY published_at DESC NULLS LAST, id DESC, format ASC");
         Query countQuery = entityManager.createNativeQuery("SELECT COUNT(*) FROM (" + union + ") entries" + filter);
-        if (!keyword.isEmpty()) { pageQuery.setParameter("search", keyword); countQuery.setParameter("search", keyword); }
+        if (pattern != null) { pageQuery.setParameter("pattern", pattern); countQuery.setParameter("pattern", pattern); }
         pageQuery.setFirstResult(page * size);
         pageQuery.setMaxResults(size);
         @SuppressWarnings("unchecked") List<Object[]> rows = pageQuery.getResultList();
@@ -71,9 +76,9 @@ public class SquareService {
 
     private long countFor(String format, String search) {
         String union = contentUnion(format);
-        String filter = search.isEmpty() ? "" : " WHERE LOWER(title) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(description) LIKE LOWER(CONCAT('%', :search, '%'))";
+        String filter = search.isEmpty() ? "" : " WHERE LOWER(title) LIKE LOWER(:pattern) OR LOWER(description) LIKE LOWER(:pattern)";
         Query query = entityManager.createNativeQuery("SELECT COUNT(*) FROM (" + union + ") entries" + filter);
-        if (!search.isEmpty()) query.setParameter("search", search);
+        if (!search.isEmpty()) query.setParameter("pattern", "%" + search + "%");
         return ((Number) query.getSingleResult()).longValue();
     }
 

@@ -43,14 +43,13 @@ import {
 
 import ImageEditor from './ImageEditor';
 import AssetGroupManagerModal from './AssetGroupManagerModal';
+import OverlayPortal from '../ui/OverlayPortal';
 
 interface Props {
   onSelectStory: (story: Story) => void;
-  createStorySignal?: number | null;
-  onCreateStorySignalConsumed?: () => void;
 }
 
-export default function HomePage({ onSelectStory, createStorySignal, onCreateStorySignalConsumed }: Props) {
+export default function HomePage({ onSelectStory }: Props) {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -102,12 +101,6 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
 
   // Story global asset groups
   const [assetModalStoryId, setAssetModalStoryId] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (createStorySignal == null) return;
-    setShowNew(true);
-    onCreateStorySignalConsumed?.();
-  }, [createStorySignal, onCreateStorySignalConsumed]);
 
   const openCharModal = async (storyId: number) => {
     setCharModalStoryId(storyId);
@@ -363,7 +356,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
 
   if (loading) {
     return (
-      <div className="h-screen bg-bg-base flex items-center justify-center text-text-secondary">
+      <div className="h-dvh bg-bg-base flex items-center justify-center text-text-secondary">
         <div className="flex flex-col items-center gap-3">
           <BookOpenText size={40} className="animate-pulse text-accent/40" />
           <span className="text-sm">加载中…</span>
@@ -397,7 +390,8 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
         />
       )}
       {importProgress && (
-        <div className="fixed inset-x-0 top-4 z-[70] mx-auto w-[calc(100%-32px)] max-w-md rounded-xl border border-border glass p-4 shadow-2xl backdrop-blur">
+        <OverlayPortal>
+          <div className="absolute inset-x-0 top-4 z-[70] mx-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-border glass p-4 backdrop-blur">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-text-primary">
             <Loader2 size={16} className="animate-spin text-accent" />
             <span>{importProgress.message}</span>
@@ -411,25 +405,26 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
           <p className="mt-2 text-xs text-text-secondary">
             上传完成后服务器还需要解压图片并写入数据库，大作品会多等一会儿。
           </p>
-        </div>
+          </div>
+        </OverlayPortal>
       )}
 
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-border bg-bg-raised/95 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent">
               <Sparkles size={18} className="text-white" />
             </div>
             <div>
               <h1 className="text-sm font-semibold text-text-primary sm:text-base">故事工作区</h1>
-              <p className="text-[11px] text-text-muted">管理故事、角色与创作设定</p>
+              <p className="text-[0.6875rem] text-text-muted">管理故事、角色与创作设定</p>
             </div>
           </div>
           <button
             onClick={() => importFileRef.current?.click()}
             disabled={importingStory}
-            className="ml-auto mr-2 flex h-9 items-center gap-2 rounded-md border border-border bg-bg-raised px-3
+            className="ml-auto mr-2 flex h-9 items-center gap-2 rounded-lg border border-border bg-bg-raised px-3
                        text-text-secondary text-xs font-medium transition-colors hover:bg-bg-surface disabled:opacity-40 sm:px-4 sm:text-sm"
             title="导入整本作品"
           >
@@ -438,7 +433,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
           </button>
           <button
             onClick={() => setShowNew(true)}
-            className="flex h-9 items-center gap-2 rounded-md bg-accent px-3 text-xs font-medium
+            className="flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-xs font-medium
                        text-white transition-colors hover:bg-accent-hover sm:px-4 sm:text-sm"
           >
             <Plus size={16} />
@@ -451,7 +446,8 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         {/* New story modal */}
         {showNew && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-base/30 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowNew(false)}>
+          <OverlayPortal>
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-bg-base/30 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowNew(false)}>
             <div className="bg-bg-surface border border-border rounded-xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -541,20 +537,21 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                 </button>
               </div>
             </div>
-          </div>
+            </div>
+          </OverlayPortal>
         )}
 
         {/* Empty state */}
         {stories.length === 0 && !showNew && (
           <div className="mx-auto flex max-w-2xl flex-col items-center justify-center py-20 text-center text-text-secondary sm:py-28">
-            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-md border border-border bg-bg-raised shadow-sm">
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-bg-raised shadow-sm">
               <BookOpenText size={24} className="text-accent" />
             </div>
             <p className="mb-2 font-display text-2xl font-semibold text-text-primary">创建你的第一部故事</p>
             <p className="mb-7 max-w-md text-sm leading-6">从故事名称开始，随后完善人物、章节和视觉设定。</p>
             <button
               onClick={() => setShowNew(true)}
-              className="flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+              className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
             >
               <Plus size={16} /> 新建故事
             </button>
@@ -570,7 +567,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                 <p className="mt-1 text-xs text-text-muted">共 {stories.length} 部作品</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {stories.map((s) => (
               <div
                 key={s.id}
@@ -599,7 +596,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                 </div>
 
                 {/* Info */}
-                <div className="min-w-0 flex-1 p-3.5">
+                <div className="min-w-0 flex-1 p-4">
                   {editingId === s.id ? (
                     <div className="space-y-2">
                       <input
@@ -607,14 +604,14 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
-                        className="w-full px-3 py-1.5 bg-bg-surface border border-border rounded text-sm text-text-primary
+                        className="w-full px-3 py-1.5 bg-bg-surface border border-border rounded-lg  text-sm text-text-primary
                                    focus:outline-none focus:border-accent"
                       />
                       <textarea
                         value={editDesc}
                         onChange={(e) => setEditDesc(e.target.value)}
                         rows={2}
-                        className="w-full px-3 py-1.5 bg-bg-surface border border-border rounded text-sm text-text-primary
+                        className="w-full px-3 py-1.5 bg-bg-surface border border-border rounded-lg  text-sm text-text-primary
                                    focus:outline-none focus:border-accent resize-none"
                         placeholder="简短描述（可选）"
                       />
@@ -650,7 +647,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                               e.stopPropagation();
                               openCharModal(s.id);
                             }}
-                            className={`p-1.5 transition-colors rounded ${
+                            className={`p-1.5 transition-colors rounded-lg  ${
                               storyCharFlags[s.id]
                                 ? 'text-success hover:text-success/80'
                                 : 'text-text-muted hover:text-text-secondary'
@@ -664,7 +661,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                               e.stopPropagation();
                               openAssetGroupModal(s.id);
                             }}
-                            className={`p-1.5 transition-colors rounded ${
+                            className={`p-1.5 transition-colors rounded-lg  ${
                               storyRefFlags[s.id]
                                 ? 'text-accent-secondary hover:text-accent-secondary/80'
                                 : 'text-text-muted hover:text-text-secondary'
@@ -679,7 +676,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                               handleExport(s);
                             }}
                             disabled={exportingStoryId === s.id}
-                            className="p-1.5 text-text-muted hover:text-accent-tertiary transition-colors rounded disabled:opacity-40"
+                            className="p-1.5 text-text-muted hover:text-accent-tertiary transition-colors rounded-lg  disabled:opacity-40"
                             title="导出整本作品"
                           >
                             {exportingStoryId === s.id ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
@@ -707,7 +704,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                           <button
                             onClick={() => onSelectStory(s)}
                             className="flex items-center gap-1 px-3 py-1.5 bg-accent-muted/30 hover:bg-accent
-                                       text-accent hover:text-white text-xs font-medium rounded-md transition-colors"
+                                       text-accent hover:text-white text-xs font-medium rounded-lg transition-colors"
                           >
                             进入
                             <ChevronRight size={13} />
@@ -738,8 +735,9 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
 
       {/* Character card modal (profile-based) */}
       {charModalStoryId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-base/30 backdrop-blur-sm p-3 sm:p-4" onClick={() => setCharModalStoryId(null)}>
-          <div className="bg-bg-surface border border-border rounded-xl w-full max-w-6xl h-[640px] max-h-[88vh] shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <OverlayPortal>
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-bg-base/30 backdrop-blur-sm p-3 sm:p-4" onClick={() => setCharModalStoryId(null)}>
+          <div className="bg-bg-surface border border-border rounded-xl w-full max-w-6xl h-[min(640px,88dvh)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
               <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -750,8 +748,8 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                 <X size={16} />
               </button>
             </div>
-            <div className="flex flex-1 min-h-0">
-              <div className="w-[250px] flex-shrink-0 border-r border-border flex flex-col">
+            <div className="flex flex-col sm:flex-row flex-1 min-h-0">
+              <div className="w-full sm:w-[15.5rem] max-h-44 sm:max-h-none shrink-0 border-b sm:border-b-0 sm:border-r border-border flex flex-col">
                 <div className="p-3 border-b border-border">
                   <button
                     onClick={addCharacter}
@@ -767,7 +765,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                       key={ch.id}
                       onClick={() => selectCharForEdit(ch)}
                       className={`w-full text-left px-4 py-3 text-sm transition-colors border-b border-border/50 ${
-                        editingCharId === ch.id ? 'bg-accent/15 text-accent-hover border-l-2 border-l-violet-500' : 'text-text-secondary hover:bg-bg-raised/50'
+                        editingCharId === ch.id ? 'bg-accent/15 text-accent-hover border-l-2 border-l-accent' : 'text-text-secondary hover:bg-bg-raised/50'
                       }`}
                     >
                       <div className="truncate font-medium">{ch.name}</div>
@@ -858,7 +856,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                                         .then(() => setCharRefImages(prev => prev.filter(x => x.filename !== img.filename)))
                                         .catch(err => alert('删除失败: ' + err.message));
                                     }}
-                                    className="absolute top-1 right-1 p-1 rounded-md bg-accent hover:bg-accent-hover text-white shadow-lg transition-colors"
+                                    className="absolute top-1 right-1 p-1 rounded-lg bg-accent hover:bg-accent-hover text-white transition-colors"
                                   title="删除"
                                   >
                                     <Trash2 size={10} />
@@ -915,18 +913,19 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
               </div>
             </div>
           </div>
-        </div>
-
+          </div>
+        </OverlayPortal>
       )}
 
       {/* Ref images modal (multi) */}
       {refModalStoryId !== null && (
+        <OverlayPortal>
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-bg-base/30 backdrop-blur-sm p-3 sm:p-4"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-bg-base/30 backdrop-blur-sm p-3 sm:p-4"
           onClick={() => setRefModalStoryId(null)}
         >
           <div
-            className="bg-bg-surface border border-border rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[85vh]"
+            className="bg-bg-surface border border-border rounded-xl w-full max-w-2xl flex flex-col max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -978,13 +977,13 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
                         decoding="async"
                       />
                       <div className="absolute inset-0 bg-transparent group-hover:bg-bg-base/20 transition-colors flex items-end p-2 pointer-events-none">
-                        <span className="text-[10px] text-white bg-bg-base/60 px-1.5 py-0.5 rounded">
+                        <span className="text-[0.625rem] text-white bg-bg-base/60 px-1.5 py-0.5 rounded">
                           {img.size_kb} KB
                         </span>
                       </div>
                       <button
                         onClick={() => handleRefDelete(img.filename)}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-md bg-accent hover:bg-accent-hover text-white shadow-lg transition-colors"
+                        className="absolute top-1.5 right-1.5 p-1 rounded-lg bg-accent hover:bg-accent-hover text-white transition-colors"
                         title="删除"
                       >
                         <Trash2 size={12} />
@@ -1026,6 +1025,7 @@ export default function HomePage({ onSelectStory, createStorySignal, onCreateSto
             </div>
           </div>
         </div>
+        </OverlayPortal>
       )}
     </div>
   );

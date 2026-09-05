@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Check, Layers, Loader2, Plus, Users, X } from 'lucide-react';
+import OverlayPortal from '../ui/OverlayPortal';
 import {
   createStoryAssetGroup,
   deleteStoryAssetGroup,
@@ -147,20 +148,21 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-base/30 p-3 backdrop-blur-sm sm:p-4" onClick={onClose}>
-      <div className="flex h-[640px] max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-border bg-bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}>
+    <OverlayPortal>
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-bg-base/30 p-3 backdrop-blur-sm sm:p-4" onClick={onClose}>
+        <div className="flex h-[min(640px,88dvh)] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-border bg-bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5 sm:py-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
             <Layers size={16} className="text-accent" />
             设置设定组
           </h3>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-bg-raised hover:text-text-primary" aria-label="关闭设定组管理">
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-bg-raised hover:text-text-primary" aria-label="关闭设定组管理">
             <X size={16} />
           </button>
         </div>
 
         {error && (
-          <div className="mx-4 mt-3 rounded-md border border-accent/20 bg-accent-soft px-3 py-2 text-xs text-accent sm:mx-5">
+          <div className="mx-4 mt-3 rounded-lg border border-accent/20 bg-accent-soft px-3 py-2 text-xs text-accent sm:mx-5">
             {error}
           </div>
         )}
@@ -175,7 +177,7 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
               <button
                 onClick={addGroup}
                 disabled={saving}
-                className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-text-primary transition-colors hover:bg-accent-soft disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-text-primary transition-colors hover:bg-accent-soft disabled:opacity-40"
               >
                 {saving && !activeGroup ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
                 添加设定组
@@ -210,7 +212,7 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
                       <input
                         value={draftName}
                         onChange={(event) => setDraftName(event.target.value)}
-                        className="w-full rounded-md border border-border bg-bg-raised px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2"
+                        className="w-full rounded-lg border border-border bg-bg-raised px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2"
                         placeholder="输入设定组名称"
                       />
                     </div>
@@ -221,7 +223,7 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
                         value={draftDescription}
                         onChange={(event) => setDraftDescription(event.target.value)}
                         rows={4}
-                        className="w-full resize-none rounded-md border border-border bg-bg-raised p-3 text-sm leading-relaxed text-text-primary outline-none focus:border-accent"
+                        className="w-full resize-none rounded-lg border border-border bg-bg-raised p-3 text-sm leading-relaxed text-text-primary outline-none focus:border-accent"
                         placeholder="设定组描述..."
                       />
                     </div>
@@ -250,7 +252,7 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
                                 type="button"
                                 key={character.id}
                                 onClick={toggle}
-                                className={`relative overflow-hidden rounded-md border-2 text-left transition-colors ${
+                                className={`relative overflow-hidden rounded-lg border-2 text-left transition-colors ${
                                   checked
                                     ? 'border-accent bg-accent-muted/30'
                                     : 'border-border bg-bg-surface hover:border-accent/20'
@@ -288,7 +290,7 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
                     <button
                       onClick={saveGroup}
                       disabled={saving}
-                      className="flex min-w-20 items-center justify-center gap-1.5 rounded-md bg-accent px-5 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-accent-soft disabled:opacity-40"
+                      className="flex min-w-20 items-center justify-center gap-1.5 rounded-lg bg-accent px-5 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-accent-soft disabled:opacity-40"
                     >
                       {saving && <Loader2 size={14} className="animate-spin" />}
                       {saving ? '保存中...' : '保存'}
@@ -303,7 +305,8 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
             </div>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </OverlayPortal>
   );
 }

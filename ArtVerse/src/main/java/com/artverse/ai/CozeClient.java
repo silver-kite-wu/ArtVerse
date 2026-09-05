@@ -1,5 +1,6 @@
 package com.artverse.ai;
 
+import com.artverse.application.UserProviderConfig;
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.artverse.prompt.MangaPromptPolicy;
@@ -25,20 +26,29 @@ public class CozeClient {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<Map<String, List<String>>> RES_TYPE = new TypeReference<>() {};
 
-    public List<String> generateScenes(String context, int number, String userApiKey) {
-        return generateScenes(context, number, userApiKey, MangaPromptPolicy.storyboardInstruction(number));
+    public List<String> generateScenes(String context, int number, UserProviderConfig workflowConfig) {
+        return generateScenes(context, number, workflowConfig, MangaPromptPolicy.storyboardInstruction(number));
     }
 
-    public List<String> generateScenes(String context, int number, String userApiKey, String promptInstruction) {
-        ArtVerseProperties.Coze config = properties.getCoze();
-        String apiKey = resolveApiKey(config, userApiKey);
+    public List<String> generateScenes(String context, int number, UserProviderConfig workflowConfig,
+                                       String promptInstruction) {
+        if (workflowConfig == null || workflowConfig.apiKey().isBlank()) {
+            throw new BusinessException(400,
+                    "Workflow provider API key is missing. Please configure it in Settings.");
+        }
+        if (workflowConfig.baseUrl().isBlank()) {
+            throw new BusinessException(400,
+                    "Workflow provider Base URL is missing. Please configure it in Settings.");
+        }
+        String apiKey = workflowConfig.apiKey();
+        String baseUrl = workflowConfig.baseUrl();
 
         String effectiveContext = (promptInstruction == null ? "" : promptInstruction)
                 + "\n\n【待改写的小说正文/创作素材】\n"
                 + context
                 + "\n\n【最终提醒】只输出符合上述规范的 JSON 数组，不要输出 Scene 单图提示词。";
         Map<String, Object> body = Map.of(
-                "workflow_id", config.getWorkflowId(),
+                "workflow_id", properties.getCoze().getWorkflowId(),
                 "parameters", Map.of(
                         "context", effectiveContext,
                         "number", number,
@@ -49,7 +59,7 @@ public class CozeClient {
         String raw;
         try {
             raw = WebClient.builder()
-                    .baseUrl(config.getBaseUrl())
+                    .baseUrl(baseUrl)
                     .codecs(c -> c.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
                     .build()
                     .post()
@@ -94,15 +104,5 @@ public class CozeClient {
         } catch (Exception e) {
             throw new BusinessException(502, "Coze 响应解析失败: " + e.getMessage());
         }
-    }
-
-    private String resolveApiKey(ArtVerseProperties.Coze config, String userApiKey) {
-        if (userApiKey != null && !userApiKey.isBlank()) return userApiKey;
-        String key = config.getApiKey();
-        if (key != null && !key.isBlank()) return key;
-        if (key == null || key.isBlank()) {
-            throw new BusinessException(502, "Coze API key not configured");
-        }
-        return key;
     }
 }

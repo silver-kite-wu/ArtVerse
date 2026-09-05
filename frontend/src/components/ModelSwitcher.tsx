@@ -203,13 +203,13 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
       >
         {triggerLabel ? (
           <>
-            <span className="text-[12px] leading-none" aria-hidden>{selectedProvider.emoji}</span>
-            <span className="truncate text-[12px]">{triggerLabel}</span>
+            <span className="text-[0.75rem] leading-none" aria-hidden>{selectedProvider.emoji}</span>
+            <span className="truncate text-[0.75rem]">{triggerLabel}</span>
           </>
         ) : (
           <>
             <Sparkles size={12} className="text-text-muted" />
-            <span className="text-[12px] text-text-muted">选择模型</span>
+            <span className="text-[0.75rem] text-text-muted">选择模型</span>
           </>
         )}
         <ChevronDown
@@ -219,7 +219,7 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
       </button>
 
       {open && (
-        <div className="absolute right-0 bottom-[calc(100%+6px)] z-30 flex w-[300px] flex-col overflow-hidden rounded-xl border border-border/80 bg-bg-raised shadow-lg animate-fade-in">
+        <div className="absolute right-0 bottom-[calc(100%+6px)] z-30 flex w-[min(300px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-border/80 bg-bg-raised animate-fade-in">
           <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2.5">
             <Search size={14} className="shrink-0 text-text-muted" />
             <input
@@ -229,7 +229,7 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
               onChange={(e) => updateSearch(e.target.value)}
               onKeyDown={handleSearchKeyDown}
               placeholder="搜索模型..."
-              className="min-w-0 flex-1 bg-transparent text-[13px] text-text-primary placeholder:text-text-muted/60 outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[0.8125rem] text-text-primary placeholder:text-text-muted/60 outline-none"
             />
             {search && (
               <button
@@ -238,7 +238,7 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
                 className="rounded p-0.5 text-text-muted hover:text-text-secondary transition-colors"
                 aria-label="清除搜索"
               >
-                <span className="text-[11px]">×</span>
+                <span className="text-[0.6875rem]">×</span>
               </button>
             )}
           </div>
@@ -247,14 +247,14 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
             {groupedModels.length === 0 ? (
               <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
                 <Search size={20} className="text-text-muted/30" />
-                <p className="text-[13px] text-text-muted">
+                <p className="text-[0.8125rem] text-text-muted">
                   {search ? '没有匹配的模型' : '暂无可选模型'}
                 </p>
                 {search && (
                   <button
                     type="button"
                     onClick={() => updateSearch('')}
-                    className="text-[12px] text-accent hover:text-accent-hover transition-colors"
+                    className="text-[0.75rem] text-accent hover:text-accent-hover transition-colors"
                   >
                     清除搜索
                   </button>
@@ -265,15 +265,15 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
                 <div key={group.id} className="mb-0.5 last:mb-0">
                   <div className="flex items-center gap-1.5 px-2 py-1.5">
                     <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] leading-none ${group.provider.color}`}
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-lg  text-[0.6875rem] leading-none ${group.provider.color}`}
                       aria-hidden
                     >
                       {group.provider.emoji}
                     </span>
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-text-muted/80">
+                    <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-text-muted/80">
                       {group.provider.label}
                     </span>
-                    <span className="text-[10px] text-text-muted/50">{group.models.length}</span>
+                    <span className="text-[0.625rem] text-text-muted/50">{group.models.length}</span>
                   </div>
                   {group.models.map((option) => {
                     const selected = option.value === selectedModel;
@@ -297,7 +297,7 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
                               : 'text-text-primary hover:bg-bg-surface')
                         }
                       >
-                        <span className="truncate text-[13px] font-medium">{option.model}</span>
+                        <span className="truncate text-[0.8125rem] font-medium">{option.model}</span>
                         {selected && <Check size={14} className="ml-auto shrink-0 text-accent" />}
                       </button>
                     );

@@ -262,9 +262,7 @@ class ApiKeyServiceTest {
     @Test
     void byokResolutionNeverFallsBackToOperatorSecret() {
         UserApiKeyRepository repository = mock(UserApiKeyRepository.class);
-        ArtVerseProperties properties = new ArtVerseProperties();
-        properties.getDeepseek().setApiKey("operator-paid-secret");
-        ApiKeyService service = service(repository, properties);
+        ApiKeyService service = service(repository, new ArtVerseProperties());
         User user = user(9L);
         when(repository.findFirstByUserIdAndSlotAndActiveTrueOrderByCreatedAtAscIdAsc(
                 9L, ApiKeyService.SLOT_LLM)).thenReturn(Optional.empty());
@@ -300,6 +298,39 @@ class ApiKeyServiceTest {
         assertThat(resolved.baseUrl()).isEqualTo("https://openrouter.ai/api/v1");
         assertThat(resolved.apiKey()).isEqualTo("sk-backup");
         assertThat(resolved.model()).isEqualTo("openai/gpt-4.1");
+    }
+
+    @Test
+    void activeUserProviderConfigOrBlankNeverFallsBackToOperatorEndpoints() {
+        UserApiKeyRepository repository = mock(UserApiKeyRepository.class);
+        ApiKeyService service = service(repository, new ArtVerseProperties());
+        User user = user(9L);
+        when(repository.findFirstByUserIdAndSlotAndActiveTrueOrderByCreatedAtAscIdAsc(
+                9L, ApiKeyService.SLOT_WORKFLOW)).thenReturn(Optional.empty());
+        when(repository.findFirstByUserIdAndSlotAndActiveTrueOrderByCreatedAtAscIdAsc(
+                9L, ApiKeyService.SLOT_LLM)).thenReturn(Optional.empty());
+
+        UserProviderConfig workflow = service.activeUserProviderConfigOrBlank(user, ApiKeyService.SLOT_WORKFLOW);
+        UserProviderConfig llm = service.activeUserProviderConfigOrBlank(user, ApiKeyService.SLOT_LLM);
+
+        assertThat(workflow.apiKey()).isBlank();
+        assertThat(workflow.baseUrl()).isBlank();
+        assertThat(llm.apiKey()).isBlank();
+        assertThat(llm.baseUrl()).isBlank();
+    }
+
+    @Test
+    void requireActiveUserProviderConfigRejectsMissingUserConfiguration() {
+        UserApiKeyRepository repository = mock(UserApiKeyRepository.class);
+        ApiKeyService service = service(repository);
+        User user = user(9L);
+        when(repository.findFirstByUserIdAndSlotAndActiveTrueOrderByCreatedAtAscIdAsc(
+                9L, ApiKeyService.SLOT_WORKFLOW)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.requireActiveUserProviderConfig(
+                user, ApiKeyService.SLOT_WORKFLOW, "Please configure workflow API key in Settings."))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Please configure workflow API key in Settings.");
     }
 
     private UserApiKey profile(User user, ApiKeyService service, boolean active) {

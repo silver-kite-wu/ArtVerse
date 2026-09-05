@@ -43,16 +43,15 @@ artverse:
       refresh-cookie-name: artverse-refresh
       refresh-token-timeout-seconds: 43200
     challenge:
-      # Local default uses Cloudflare Turnstile test keys so the register challenge
-      # is visible without extra setup. Deployments should override these values.
-      mode: ${ARTVERSE_AUTH_CHALLENGE_MODE:observe}
-      provider: turnstile
-      site-key: ${ARTVERSE_TURNSTILE_SITE_KEY:1x00000000000000000000AA}
-      secret-key: ${ARTVERSE_TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA}
-      allowed-hostnames:
-        - localhost
-        - 127.0.0.1
-      verify-timeout-ms: 3000
+      mode: ${ARTVERSE_AUTH_CHALLENGE_MODE:enforce}
+      provider: graphic-captcha
+      login-challenge-mode: always
+      captcha-length: 4
+      captcha-image-width: 160
+      captcha-image-height: 50
+      captcha-expire-seconds: 300
+      captcha-font-size: 28
+      captcha-interference-lines: 5
     risk:
       hmac-key: ${ARTVERSE_AUTH_RISK_HMAC_KEY:dev-auth-risk-hmac}
       login-failure-challenge-threshold: 3
@@ -98,18 +97,9 @@ artverse:
       - 20
   manga-generation:
     max-concurrent-jobs: 4
-  deepseek:
-    base-url: https://api.deepseek.com
-    model: deepseek-v4-flash
-    api-key: ""
-  image:
-    base-url: https://api.duojie.games/v1
-    model: gpt-image-2
-    size: 1024x1536
-    api-key: ""
+  # 图像/LLM/工作流服务的 API Key 与 Base URL 均来自用户在设置页保存的
+  # Provider 配置（数据库存储），此处不再提供任何运营方兜底凭据。
   coze:
-    base-url: https://api.coze.cn
-    api-key: ""
     workflow-id: "7645642109203103763"
   flyway:
     auto-repair-checksum-mismatch: true
@@ -167,11 +157,6 @@ artverse:
     routing-read-only-threshold: 0.55
     agent-cache-max-size: 256
     agent-cache-expire-after-minutes: 30
-    default-llm:
-      provider: deepseek
-      base-url: https://api.deepseek.com
-      model: deepseek-v4-flash
-      api-key: ""
     max-retries: 2
     retry-min-backoff-ms: 1000
     retry-max-backoff-ms: 10000

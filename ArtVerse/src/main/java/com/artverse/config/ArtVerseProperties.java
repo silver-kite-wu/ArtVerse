@@ -61,18 +61,26 @@ public class ArtVerseProperties {
 
     @Data
     public static class Challenge {
-        private ChallengeMode mode = ChallengeMode.DISABLED;
-        private String provider = "turnstile";
-        private String siteKey = "";
-        private String secretKey = "";
-        private List<String> allowedHostnames = List.of("localhost", "127.0.0.1");
-        private int verifyTimeoutMs = 3_000;
+        private ChallengeMode mode = ChallengeMode.ENFORCE;
+        private String provider = "graphic-captcha";
+        private LoginChallengeMode loginChallengeMode = LoginChallengeMode.ALWAYS;
+        private int captchaLength = 4;
+        private int captchaImageWidth = 160;
+        private int captchaImageHeight = 50;
+        private int captchaExpireSeconds = 300;
+        private int captchaFontSize = 28;
+        private int captchaInterferenceLines = 5;
     }
 
     public enum ChallengeMode {
         DISABLED,
         OBSERVE,
         ENFORCE
+    }
+
+    public enum LoginChallengeMode {
+        ALWAYS,
+        ADAPTIVE
     }
 
     @Data
@@ -142,17 +150,13 @@ public class ArtVerseProperties {
 
     @Data
     public static class DeepSeek {
-        private String baseUrl = "https://api.deepseek.com";
         private String model = "deepseek-v4-flash";
-        private String apiKey = "";
     }
 
     @Data
     public static class Image {
-        private String baseUrl = "https://api.duojie.games/v1";
         private String model = "gpt-image-2";
         private String size = "1024x1536";
-        private String apiKey = "";
     }
 
     @Data
@@ -169,8 +173,6 @@ public class ArtVerseProperties {
 
     @Data
     public static class Coze {
-        private String baseUrl = "https://api.coze.cn";
-        private String apiKey = "";
         private String workflowId = "7645642109203103763";
     }
 
@@ -253,17 +255,5 @@ public class ArtVerseProperties {
         private int circuitBreakerWaitSeconds = 30;
         private int circuitBreakerSlidingWindowSize = 20;
         private int circuitBreakerSlowCallThresholdMs = 120_000;
-
-        // Default LLM provider — used as the system fallback when no user config is present.
-        // Operator can set provider to "openai", "openroute", etc. to switch the system default.
-        private DefaultLlm defaultLlm = new DefaultLlm();
-    }
-
-    @Data
-    public static class DefaultLlm {
-        private String provider = "deepseek";
-        private String baseUrl = "https://api.deepseek.com";
-        private String model = "deepseek-v4-flash";
-        private String apiKey = "";
     }
 }

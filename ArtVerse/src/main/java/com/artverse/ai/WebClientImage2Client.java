@@ -212,12 +212,15 @@ public class WebClientImage2Client implements Image2Client {
         if (providerConfig.apiKey().isBlank()) {
             throw new BusinessException(400, "Image API key is missing. Please set it in Settings.", providerConfig.displayName());
         }
+        if (providerConfig.baseUrl().isBlank()) {
+            throw new BusinessException(400, "Image provider Base URL is missing. Please configure it in Settings.", providerConfig.displayName());
+        }
         return new UserProviderConfig(
                 providerConfig.slot(),
                 providerConfig.provider(),
                 providerConfig.label(),
                 providerConfig.apiKey(),
-                providerConfig.baseUrl().isBlank() ? properties.getImage().getBaseUrl() : providerConfig.baseUrl(),
+                providerConfig.baseUrl(),
                 providerConfig.primaryModel().isBlank() ? properties.getImage().getModel() : providerConfig.primaryModel()
         );
     }

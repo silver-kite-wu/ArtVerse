@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, FileText, History, MessageSquare, Save, Send, Sparkles, Square } from 'lucide-react';
 import {
   API_KEY_CHANGE_EVENT,
@@ -228,6 +228,24 @@ export default function ChatPanel({ chapter, onMessageSent, onChapterRefresh }: 
     }
   };
 
+  const handleRunStreamEvent = (
+    event: MangaAgentRunEvent,
+    requestId: string,
+    conversationId: string,
+    stream: { append: (delta: string) => void; finalText: () => string },
+  ) => {
+    if (event.type === 'error') {
+      const detail = event.data?.detail || event.data?.error || '小说对话执行失败。';
+      appendAssistantError(detail);
+      setStreamContent('');
+      setStreaming(false);
+      abortRef.current = null;
+      streamingChapterIdRef.current = null;
+      return;
+    }
+    handleStoryChatEvent(event.data as ArtVerseAgUiEvent, requestId, conversationId, stream);
+  };
+
   const handleSend = () => {
     if (!input.trim() || !chapter || streaming) return;
     const text = input.trim();
@@ -259,7 +277,7 @@ export default function ChatPanel({ chapter, onMessageSent, onChapterRefresh }: 
         activeConversation.conversationId,
         text,
         requestId,
-        (event: MangaAgentRunEvent) => handleStoryChatEvent(event.data as ArtVerseAgUiEvent, requestId, activeConversation.conversationId, {
+        (event: MangaAgentRunEvent) => handleRunStreamEvent(event, requestId, activeConversation.conversationId, {
           append(delta) { accumulated += delta; setStreamContent(accumulated); },
           finalText() { return accumulated; },
         }),
@@ -308,7 +326,7 @@ export default function ChatPanel({ chapter, onMessageSent, onChapterRefresh }: 
       pendingDraft.requestId,
       decision,
       pendingDraft.artifactId,
-      (event: MangaAgentRunEvent) => handleStoryChatEvent(event.data as ArtVerseAgUiEvent, pendingDraft.requestId, conversation.conversationId, {
+      (event: MangaAgentRunEvent) => handleRunStreamEvent(event, pendingDraft.requestId, conversation.conversationId, {
         append(delta) { accumulated += delta; setStreamContent(accumulated); },
         finalText() { return accumulated; },
       }),
@@ -375,22 +393,22 @@ export default function ChatPanel({ chapter, onMessageSent, onChapterRefresh }: 
     {mode === 'original' ? <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 px-4 pb-2 pt-3 text-xs leading-relaxed text-text-secondary">小说原文是章节正式正文。手工保存、恢复和 AI 确认写入都会创建历史版本。</div>
       <div className="min-h-0 flex-1 px-4 pb-3"><textarea value={originalText} onChange={(event) => { setOriginalText(event.target.value); setOriginalError(''); setOriginalNotice(''); }} placeholder={`粘贴或撰写小说原文，最长 ${MAX_ORIGINAL_CHARS} 字`} className="h-full w-full resize-none rounded-lg border border-border bg-bg-surface p-3 text-sm leading-relaxed text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent" /></div>
-      {showHistory && <div className="mx-4 mb-3 max-h-36 overflow-y-auto rounded-lg border border-border bg-bg-base p-2 text-xs">{revisions.length === 0 ? <p className="px-2 py-1 text-text-muted">暂无历史版本。</p> : revisions.map((revision) => <div key={revision.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-bg-surface"><span className="font-medium text-text-primary">v{revision.revision_number}</span><span className="text-text-muted">{revision.source}</span><span className="ml-auto text-text-muted">{new Date(revision.created_at).toLocaleString()}</span><button type="button" onClick={() => handleRestore(revision)} disabled={writeBusy} className="text-accent hover:text-accent-hover disabled:opacity-40">恢复</button></div>)}</div>}
-      <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-3"><div className="text-xs text-text-secondary">{originalText.length.toLocaleString()} / {MAX_ORIGINAL_CHARS.toLocaleString()} 字{originalDirty && <span className="ml-3 text-amber-600">未保存</span>}{originalError && <span className="ml-3 text-red-600" role="alert">{originalError}</span>} {originalNotice && <span className="ml-3 text-accent">{originalNotice}</span>}</div><div className="flex items-center gap-2"><button type="button" onClick={() => setShowHistory((value) => !value)} className="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary" aria-expanded={showHistory}><History size={13} />历史{revisions.length ? ` (${revisions.length})` : ''}</button><button type="button" onClick={handleOriginalSave} disabled={!chapter || writeBusy || !originalText.trim()} className="flex items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-30"><Save size={13} />{writeBusy ? '保存中...' : '保存原文'}</button></div></div>
+      {showHistory && <div className="mx-4 mb-3 max-h-36 overflow-y-auto rounded-lg border border-border bg-bg-base p-2 text-xs">{revisions.length === 0 ? <p className="px-2 py-1 text-text-muted">暂无历史版本。</p> : revisions.map((revision) => <div key={revision.id} className="flex items-center gap-2 rounded-lg  px-2 py-1.5 hover:bg-bg-surface"><span className="font-medium text-text-primary">v{revision.revision_number}</span><span className="text-text-muted">{revision.source}</span><span className="ml-auto text-text-muted">{new Date(revision.created_at).toLocaleString()}</span><button type="button" onClick={() => handleRestore(revision)} disabled={writeBusy} className="text-accent hover:text-accent-hover disabled:opacity-40">恢复</button></div>)}</div>}
+      <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-3"><div className="text-xs text-text-secondary">{originalText.length.toLocaleString()} / {MAX_ORIGINAL_CHARS.toLocaleString()} 字{originalDirty && <span className="ml-3 text-amber-600">未保存</span>}{originalError && <span className="ml-3 text-red-600" role="alert">{originalError}</span>} {originalNotice && <span className="ml-3 text-accent">{originalNotice}</span>}</div><div className="flex items-center gap-2"><button type="button" onClick={() => setShowHistory((value) => !value)} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary" aria-expanded={showHistory}><History size={13} />历史{revisions.length ? ` (${revisions.length})` : ''}</button><button type="button" onClick={handleOriginalSave} disabled={!chapter || writeBusy || !originalText.trim()} className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-30"><Save size={13} />{writeBusy ? '保存中...' : '保存原文'}</button></div></div>
     </div> : <>
       <div ref={scrollContainerRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {messages.length === 0 && !streaming && !pendingDraft && <div className="flex h-full items-center justify-center text-sm text-text-muted">开始和 AI 讨论你的小说创意。</div>}
         {messages.map((message) => <div key={message.local_id ?? message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'w-full justify-start'}`}><div className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${message.role === 'user' ? 'max-w-[80%] rounded-br-sm bg-accent-muted/40 text-text-primary' : 'w-full rounded-bl-sm border border-border bg-bg-raised text-text-primary shadow-sm'}`}><MarkdownRenderer content={message.content} /></div></div>)}
         {pendingDraft && <NovelDraftCard draft={pendingDraft} onToggle={() => setPendingDraft((value) => value ? { ...value, expanded: !value.expanded } : value)} onDecision={handleDraftDecision} />}
-        {streaming && <div className="flex justify-start"><div className="w-full rounded-xl rounded-bl-sm border border-border bg-bg-raised px-4 py-3 text-sm leading-relaxed text-text-primary shadow-sm">{streamContent ? <><MarkdownRenderer content={streamContent} /><span className="ml-0.5 inline-block h-4 w-1.5 rounded-sm bg-accent" /></> : 'AI 思考中...'}</div></div>}
+        {streaming && <div className="flex justify-start"><div className="relative w-full rounded-xl rounded-bl-sm border border-border bg-bg-raised px-4 py-3 text-sm leading-relaxed text-text-primary shadow-sm"><div className="gen-beam" />{streamContent ? <><MarkdownRenderer content={streamContent} /><span className="ml-0.5 inline-block h-4 w-1.5 rounded-sm bg-accent" /></> : 'AI 思考中...'}</div></div>}
         <div ref={messagesEndRef} />
       </div>
       <div className="border-t border-border/80 bg-bg-base/80 px-3 py-3 backdrop-blur-md md:px-4">
         <div className="mb-2 flex justify-end"><ModelSwitcher capability="llm" selectedModel={selectedLlmModel} onSelect={setSelectedLlmModel} disabled={streaming || !!pendingDraft?.busy} /></div>
-        <div className="group relative overflow-hidden rounded-2xl border border-border bg-bg-surface/95 shadow-lg shadow-black/10 transition-all duration-200 focus-within:border-accent/70 focus-within:bg-bg-raised focus-within:shadow-[0_0_0_3px_var(--color-accent-muted)]">
+        <div className="group relative overflow-hidden rounded-2xl border border-border bg-bg-surface/95 transition-all duration-200 focus-within:border-accent/70 focus-within:bg-bg-raised focus-within:shadow-[0_0_0_3px_var(--color-accent-muted)]">
           <div className="flex items-end gap-3 px-3 py-3">
-            <div className="mb-0.5 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-bg-base text-accent shadow-sm md:flex"><Sparkles size={15} aria-hidden="true" /></div>
-            <textarea ref={textareaRef} value={input} onChange={(event) => { setInput(event.target.value); autoResize(event.target); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSend(); } }} placeholder="描述你的小说想法，或要求 AI 润色、改写、续写并保存..." rows={1} className="min-h-10 flex-1 resize-none bg-transparent py-2 text-[15px] leading-6 text-text-primary outline-none placeholder:text-text-muted/80" style={{ maxHeight: '160px', overflow: 'auto' }} />
+            <div className="mb-0.5 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-bg-base text-accent md:flex"><Sparkles size={15} aria-hidden="true" /></div>
+            <textarea ref={textareaRef} value={input} onChange={(event) => { setInput(event.target.value); autoResize(event.target); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSend(); } }} placeholder="描述你的小说想法，或要求 AI 润色、改写、续写并保存..." rows={1} className="min-h-10 flex-1 resize-none bg-transparent py-2 text-[0.9375rem] leading-6 text-text-primary outline-none placeholder:text-text-muted/80" style={{ maxHeight: '10rem', overflow: 'auto' }} />
             {streaming ? <button type="button" onClick={handleAbort} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-md shadow-black/20 transition-all duration-200 hover:bg-accent-hover hover:shadow-lg" title="停止生成" aria-label="停止生成"><Square size={17} /></button> : <button type="button" onClick={handleSend} disabled={!input.trim() || !!pendingDraft?.busy} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-white shadow-md shadow-black/20 transition-all duration-200 hover:bg-accent-hover hover:shadow-lg disabled:cursor-not-allowed disabled:bg-bg-raised disabled:text-text-muted disabled:shadow-none" title="发送消息" aria-label="发送消息"><Send size={17} /></button>}
           </div>
         </div>
@@ -411,11 +429,11 @@ function NovelDraftCard({ draft, onToggle, onDecision }: {
         <h3 className="text-sm font-semibold text-text-primary">小说原文草稿</h3>
         <p className="mt-1 text-xs text-text-secondary">基准版本 {draft.baseVersion} · 当前 {draft.currentWordCount.toLocaleString()} 字 · 草稿 {draft.draftWordCount.toLocaleString()} 字 · {delta >= 0 ? '+' : ''}{delta.toLocaleString()}</p>
       </div>
-      <button type="button" onClick={onToggle} className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-text-secondary hover:text-text-primary" aria-expanded={draft.expanded} title={draft.expanded ? '收起草稿' : '展开草稿'}>
+      <button type="button" onClick={onToggle} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-text-secondary hover:text-text-primary" aria-expanded={draft.expanded} title={draft.expanded ? '收起草稿' : '展开草稿'}>
         {draft.expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
       </button>
     </div>
-    {draft.expanded ? <div className="mt-3 max-h-72 overflow-y-auto rounded-md border border-border bg-bg-surface p-3 whitespace-pre-wrap leading-relaxed text-text-primary">{draft.content}</div> : <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-text-secondary">{draft.content}</p>}
+    {draft.expanded ? <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-border bg-bg-surface p-3 whitespace-pre-wrap leading-relaxed text-text-primary">{draft.content}</div> : <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-text-secondary">{draft.content}</p>}
     {draft.error && <p className="mt-2 text-xs text-red-600" role="alert">{draft.error}</p>}
     <div className="mt-3 flex justify-end gap-2">
       <button type="button" onClick={() => onDecision('discard')} disabled={draft.busy} className="rounded-md border border-border px-3 py-2 text-xs font-medium text-text-secondary hover:text-text-primary disabled:opacity-40">放弃</button>

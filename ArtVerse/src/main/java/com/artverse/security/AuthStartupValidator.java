@@ -18,22 +18,15 @@ public class AuthStartupValidator {
         if (properties.getAuth().getChallenge().getMode() != ArtVerseProperties.ChallengeMode.ENFORCE) {
             return;
         }
-        if (!"turnstile".equalsIgnoreCase(properties.getAuth().getChallenge().getProvider())) {
-            throw new IllegalStateException("Only Turnstile challenge provider is supported");
+        if (!"graphic-captcha".equalsIgnoreCase(properties.getAuth().getChallenge().getProvider())) {
+            throw new IllegalStateException("Only graphic-captcha challenge provider is supported");
         }
-        if (blank(properties.getAuth().getChallenge().getSiteKey())
-                || blank(properties.getAuth().getChallenge().getSecretKey())) {
-            throw new IllegalStateException("Challenge enforce mode requires site and secret keys");
-        }
-        if (properties.getAuth().getChallenge().getAllowedHostnames() == null
-                || properties.getAuth().getChallenge().getAllowedHostnames().stream().allMatch(this::blank)) {
-            throw new IllegalStateException("Challenge enforce mode requires allowed hostnames");
+        if (properties.getAuth().getChallenge().getCaptchaLength() < 3
+                || properties.getAuth().getChallenge().getCaptchaLength() > 8) {
+            throw new IllegalStateException("Captcha length must be between 3 and 8");
         }
         if (blank(properties.getAuth().getRisk().getHmacKey())) {
             throw new IllegalStateException("Challenge enforce mode requires auth risk HMAC key");
-        }
-        if (!properties.getAuth().getCookie().isSecure()) {
-            throw new IllegalStateException("Challenge enforce mode requires secure auth cookies");
         }
     }
 

@@ -61,6 +61,9 @@ public class AuthDtos {
     ) {
     }
 
+    public record CaptchaImageResponse(String captchaId, String image) {
+    }
+
     public record UserInfo(Long id, String username, String email) {
     }
 

@@ -141,7 +141,7 @@ export default function WorkspaceEditor({ storyId, onBack, onLoadError }: Props)
   };
 
   if (loading) {
-    return <div className="flex flex-1 items-center justify-center bg-bg-base"><div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-vermilion" /></div>;
+    return <div className="page-atmosphere flex flex-1 items-center justify-center bg-bg-base"><div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" /></div>;
   }
 
   if (showKnowledge) {
@@ -149,19 +149,19 @@ export default function WorkspaceEditor({ storyId, onBack, onLoadError }: Props)
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-bg-surface/90 px-3 backdrop-blur-md">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-accent transition-colors">
+    <div className="page-atmosphere flex min-h-0 flex-1 flex-col bg-bg-base">
+      <div className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b border-border glass-panel px-3 md:px-4">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-text-secondary transition-colors hover:text-accent">
           <ChevronLeft size={16} />
           返回故事列表
         </button>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowKnowledge(true)} className="rounded-md border border-border bg-bg-base p-1.5 text-text-secondary hover:text-accent" title="知识库"><BookOpenCheck size={15} /></button>
+          <button onClick={() => setShowKnowledge(true)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-bg-surface text-text-secondary transition-colors hover:border-accent/30 hover:text-accent" title="知识库"><BookOpenCheck size={15} /></button>
           {chapters.length > 0 && (
             <select
               value={currentIdx}
               onChange={(e) => setChapterByIndex(Number(e.target.value))}
-              className="rounded-md border border-border bg-bg-base px-2 py-1 text-xs text-text-primary focus:border-accent focus:outline-none transition-colors"
+              className="rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-xs text-text-primary transition-colors focus:border-accent focus:outline-none"
             >
               {chapters.map((ch, i) => (
                 <option key={ch.id} value={i}>第 {ch.chapter_number} 章</option>
@@ -170,22 +170,23 @@ export default function WorkspaceEditor({ storyId, onBack, onLoadError }: Props)
           )}
         </div>
       </div>
+      <div className="brush-divider relative z-10 shrink-0"></div>
 
-      <div className="flex border-b border-border bg-bg-surface md:hidden">
-        <button onClick={() => setMobileTab('chat')} className={'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ' + (mobileTab === 'chat' ? 'border-b-2 border-accent text-accent' : 'text-text-secondary hover:text-text-primary')}>
+      <div className="flex border-b border-border glass-panel md:hidden">
+        <button onClick={() => setMobileTab('chat')} className={'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-all ' + (mobileTab === 'chat' ? 'border-b-2 border-accent text-accent' : 'text-text-secondary hover:text-text-primary')}>
           <MessageSquare size={14} />
           对话创作
         </button>
-        <button onClick={() => setMobileTab('manga')} className={'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ' + (mobileTab === 'manga' ? 'border-b-2 border-accent text-accent' : 'text-text-secondary hover:text-text-primary')}>
+        <button onClick={() => setMobileTab('manga')} className={'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-all ' + (mobileTab === 'manga' ? 'border-b-2 border-accent text-accent' : 'text-text-secondary hover:text-text-primary')}>
           <Image size={14} />
           漫画分镜
         </button>
       </div>
 
-      <div className="shrink-0 overflow-x-auto border-b border-border bg-bg-surface px-2 py-2 md:hidden">
-        <div className="flex gap-1">
+      <div className="shrink-0 overflow-x-auto border-b border-border bg-bg-surface/60 px-2 py-2 backdrop-blur-sm md:hidden">
+        <div className="flex gap-1.5">
           {chapters.map((ch: Chapter, idx: number) => (
-            <button key={ch.id} onClick={() => setChapterByIndex(idx)} className={'shrink-0 rounded-full border px-3 py-1.5 text-xs transition-all duration-200 ' + (ch.id === currentChapter?.id ? 'border-accent bg-accent-muted/50 text-accent font-medium' : 'border-border bg-bg-base text-text-secondary hover:text-text-primary')}>
+            <button key={ch.id} onClick={() => setChapterByIndex(idx)} style={{ animationDelay: `${idx * 40}ms` }} className={'shrink-0 animate-fade-in rounded-full border px-3 py-1.5 text-xs transition-all duration-200 ' + (ch.id === currentChapter?.id ? 'border-accent bg-accent-muted/50 text-accent font-medium shadow-sm' : 'border-border bg-bg-base text-text-secondary hover:border-accent/30 hover:text-text-primary')}>
               第 {ch.chapter_number} 章
             </button>
           ))}
@@ -205,20 +206,20 @@ export default function WorkspaceEditor({ storyId, onBack, onLoadError }: Props)
         </div>
       </main>
 
-      <footer className="flex h-14 shrink-0 items-center justify-center gap-2 border-t border-border bg-bg-surface/90 px-2 backdrop-blur-md md:gap-4">
-        <button onClick={handlePrevChapter} disabled={currentIdx === 0} className="flex items-center gap-1 rounded-md border border-border bg-bg-base px-3 py-2 text-sm font-medium text-text-secondary disabled:cursor-not-allowed disabled:opacity-30 hover:border-accent/20 hover:text-text-primary transition-colors">
+      <footer className="relative z-10 flex h-14 shrink-0 items-center justify-center gap-2 border-t border-border glass-panel px-2 md:gap-4">
+        <button onClick={handlePrevChapter} disabled={currentIdx === 0} className="fanqie-reader-nav disabled:cursor-not-allowed disabled:opacity-30">
           <ChevronLeft size={16} />
           <span className="hidden md:inline">上一章</span>
         </button>
-        <button onClick={handleDelete} disabled={!currentChapter || chapters.length <= 1} className="flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent-soft px-3 py-2 text-sm font-medium text-accent disabled:cursor-not-allowed disabled:opacity-30 hover:bg-accent-muted/40 transition-colors" aria-label="Delete chapter">
+        <button onClick={handleDelete} disabled={!currentChapter || chapters.length <= 1} className="flex items-center gap-1.5 rounded-lg border border-accent/20 bg-accent-soft px-3 py-2 text-sm font-medium text-accent transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-30 hover:bg-accent-muted/40" aria-label="Delete chapter">
           <Trash2 size={14} />
         </button>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {chapters.map((ch: Chapter, i: number) => (
-            <button key={ch.id} onClick={() => setChapterByIndex(i)} className={'h-2 w-2 rounded-full transition-all duration-200 ' + (i === currentIdx ? 'bg-accent scale-125' : 'bg-bg-surface hover:bg-bg-raised')} aria-label={'切换到第 ' + ch.chapter_number + ' 章'} />
+            <button key={ch.id} onClick={() => setChapterByIndex(i)} className={'rounded-full transition-all duration-200 ' + (i === currentIdx ? 'h-2.5 w-2.5 bg-accent scale-110 shadow-[0_0_8px_var(--color-accent-muted)]' : 'h-2 w-2 bg-text-muted/40 hover:bg-accent/50 hover:scale-110')} aria-label={'切换到第 ' + ch.chapter_number + ' 章'} />
           ))}
         </div>
-        <button onClick={handleNextChapter} disabled={creatingChapter} className="flex items-center gap-1 rounded-md bg-accent px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40 hover:bg-accent-hover transition-colors md:px-5">
+        <button onClick={handleNextChapter} disabled={creatingChapter} className="fanqie-cta-primary !px-3 !py-2 !text-sm md:!px-5 disabled:cursor-not-allowed disabled:opacity-40">
           {currentIdx === chapters.length - 1 ? (<><Plus size={16} />{creatingChapter ? '创建中…' : '新建'}</>) : (<><span className="hidden md:inline">下一章</span><ChevronRight size={16} /></>)}
         </button>
       </footer>

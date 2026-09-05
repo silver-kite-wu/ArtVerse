@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+﻿import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   BookOpenText,
   ChevronRight,
@@ -17,7 +17,7 @@ import ApiSettingsPage from './components/ApiSettingsPage';
 import HomePage from './components/HomePage';
 import ImageGenPage from './components/ImageGenPage';
 import LoginPage from './components/LoginPage';
-import MangaAgentPage from './components/MangaAgentPage';
+
 import MyWorksPage from './components/MyWorksPage';
 import SquarePage from './components/SquarePage';
 import ThemeToggle from './components/ThemeToggle';
@@ -91,8 +91,7 @@ export default function App() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginMessage, setLoginMessage] = useState('请先登录后再使用该功能');
   const [pendingRoute, setPendingRoute] = useState<AppRoute | null>(null);
-  const [pendingCreateStory, setPendingCreateStory] = useState(false);
-  const [workspaceCreateSignal, setWorkspaceCreateSignal] = useState<number | null>(null);
+
   const [navigationMessage, setNavigationMessage] = useState('');
   const lastFocusedElementRef = useRef<HTMLElement | null>(null);
 
@@ -127,7 +126,7 @@ export default function App() {
         setRoute(parsed);
         return;
       }
-      replaceAppRoute({ view: isAuthenticated() ? 'home' : 'square' });
+      replaceAppRoute({ view: isAuthenticated() ? 'workspace' : 'square' });
     };
 
     window.addEventListener('hashchange', syncRoute);
@@ -177,10 +176,6 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [loginOpen]);
 
-  const consumeWorkspaceCreateSignal = () => {
-    setWorkspaceCreateSignal(null);
-  };
-
   const requireLogin = (target?: AppRoute) => {
     if (document.activeElement instanceof HTMLElement) {
       lastFocusedElementRef.current = document.activeElement;
@@ -208,27 +203,9 @@ export default function App() {
     pushAppRoute({ view: 'workspace' });
   };
 
-  const openWorkspaceCreateStory = () => {
-    if (!authenticated) {
-      setPendingCreateStory(true);
-      requireLogin({ view: 'workspace' });
-      return;
-    }
-    setPendingCreateStory(false);
-    clearWorkspaceState();
-    setWorkspaceCreateSignal((prev) => (typeof prev === 'number' ? prev + 1 : 1));
-    setNavigationMessage('');
-    pushAppRoute({ view: 'workspace' });
-  };
-
   const handleAuthSuccess = () => {
     setAuthenticated(true);
     setLoginOpen(false);
-    if (pendingCreateStory) {
-      clearWorkspaceState();
-      setWorkspaceCreateSignal((prev) => (typeof prev === 'number' ? prev + 1 : 1));
-      setPendingCreateStory(false);
-    }
     if (pendingRoute) {
       replaceAppRoute(pendingRoute);
       setPendingRoute(null);
@@ -238,7 +215,6 @@ export default function App() {
   const cancelLogin = () => {
     setLoginOpen(false);
     setPendingRoute(null);
-    setPendingCreateStory(false);
     clearWorkspaceState();
     replaceAppRoute({ view: 'square' });
   };
@@ -247,7 +223,6 @@ export default function App() {
     await logoutUser();
     setAuthenticated(false);
     setPendingRoute(null);
-    setPendingCreateStory(false);
     setLoginOpen(false);
     clearWorkspaceState();
     replaceAppRoute({ view: 'square' });
@@ -283,7 +258,7 @@ export default function App() {
         className={
           'group relative flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm font-medium transition-all duration-200 '
           + (active
-            ? 'bg-accent-muted text-accent font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]'
+            ? 'bg-accent-muted text-accent font-semibold ring-1 ring-accent/20'
             : 'text-text-secondary hover:bg-accent-soft hover:text-text-primary')
         }
       >
@@ -304,7 +279,7 @@ export default function App() {
         type="button"
         onClick={() => goView(target)}
         className={
-          'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-medium transition-all duration-200 '
+          'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-[0.625rem] font-medium transition-all duration-200 '
           + (active ? 'text-accent' : 'text-text-muted hover:text-text-secondary')
         }
       >
@@ -345,7 +320,7 @@ export default function App() {
           <span className="min-w-0 flex-1">
             <span className="block truncate">{label}</span>
             {options?.description && (
-              <span className="mt-0.5 block truncate text-[11px] font-normal text-text-muted">
+              <span className="mt-0.5 block truncate text-[0.6875rem] font-normal text-text-muted">
                 {options.description}
               </span>
             )}
@@ -358,19 +333,19 @@ export default function App() {
 
   if (!authCheck) {
     return (
-      <div className="flex h-dvh w-screen items-center justify-center bg-bg-base">
+      <div className="flex h-dvh w-full items-center justify-center bg-bg-base">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-dvh w-screen overflow-hidden bg-bg-base text-text-primary">
+    <div className="relative flex h-dvh w-full overflow-hidden bg-bg-base text-text-primary">
       {!isMobile && !isSquareStoryRoute && (
         <aside
           className={
             'flex shrink-0 flex-col border-r border-border glass-panel transition-[width] duration-300 '
-            + (sidebarOpen ? 'w-[232px]' : 'w-[68px]')
+            + (sidebarOpen ? 'w-[14.5rem]' : 'w-[4.25rem]')
           }
         >
           <div className="flex h-16 items-center gap-3 border-b border-border px-3">
@@ -379,14 +354,17 @@ export default function App() {
             </div>
             {sidebarOpen && (
               <div className="min-w-0 flex-1">
-                <div className="font-display text-base font-bold text-text-primary">ArtVerse</div>
-                <div className="text-[10px] text-text-muted">AI 漫画创作工坊</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-display text-base font-bold text-text-primary">ArtVerse</span>
+                  <span className="seal-stamp h-4! min-w-4! text-[0.5rem]! font-normal">墨</span>
+                </div>
+                <div className="text-[0.625rem] text-text-muted">AI 漫画创作工坊</div>
               </div>
             )}
             <button
               type="button"
               onClick={() => setSidebarOpen((prev) => !prev)}
-              className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-accent-soft hover:text-text-primary"
+              className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-accent-soft hover:text-text-primary"
               aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
               title={sidebarOpen ? '收起侧栏' : '展开侧栏'}
             >
@@ -395,11 +373,10 @@ export default function App() {
           </div>
 
           <nav className="flex flex-1 flex-col gap-1 px-2 py-4">
-            {sidebarOpen && <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">创作空间</p>}
-            {navItem(<Sparkles size={18} />, '创作助手', 'home')}
+            {sidebarOpen && <p className="mb-1 px-3 text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted">创作空间</p>}
             {navItem(<BookOpenText size={18} />, '故事工作区', 'workspace')}
             {navItem(<Paintbrush size={18} />, 'AI 生图', 'imagegen')}
-            {sidebarOpen && <p className="mb-1 mt-4 px-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">发现与管理</p>}
+            {sidebarOpen && <p className="mb-1 mt-4 px-3 text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted">发现与管理</p>}
             {navItem(<Globe size={18} />, '作品广场', 'square')}
             {navItem(<FileText size={18} />, '作品管理', 'myworks')}
           </nav>
@@ -407,7 +384,7 @@ export default function App() {
           <div className="border-t border-border px-3 py-3">
             <div
               className={
-                'rounded-[22px] border border-border/80 bg-bg-surface/75 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm '
+                'rounded-[22px] border border-border/80 bg-bg-surface/75 backdrop-blur-sm '
                 + (sidebarOpen ? 'p-3' : 'p-2')
               }
               title={!sidebarOpen ? (authenticated ? userName : '游客模式') : undefined}
@@ -425,11 +402,11 @@ export default function App() {
                   <>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-text-primary">{authenticated ? userName : '游客模式'}</div>
-                      <div className="mt-0.5 truncate text-[11px] text-text-muted">
+                      <div className="mt-0.5 truncate text-[0.6875rem] text-text-muted">
                         {authenticated ? userEmail : '登录后保存模型配置与创作记录'}
                       </div>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${authenticated ? 'bg-accent-muted text-accent' : 'bg-bg-raised text-text-muted'}`}>
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-[0.625rem] font-semibold ${authenticated ? 'bg-accent-muted text-accent' : 'bg-bg-raised text-text-muted'}`}>
                       {authenticated ? '已登录' : '访客'}
                     </span>
                   </>
@@ -461,10 +438,13 @@ export default function App() {
         </aside>
       )}
 
-      <div className={'flex min-h-0 min-w-0 flex-1 flex-col ' + (isMobile && view !== 'editor' && !isSquareStoryRoute ? 'pb-[calc(64px+env(safe-area-inset-bottom))]' : '')}>
+      <div
+        key={view}
+        className={'flex min-h-0 min-w-0 flex-1 animate-view-enter flex-col ' + (isMobile && view !== 'editor' && !isSquareStoryRoute ? 'pb-[calc(64px+env(safe-area-inset-bottom))]' : '')}
+      >
         {isMobile && view !== 'editor' && !isSquareStoryRoute && (
           <header className="flex h-14 shrink-0 items-center justify-between border-b border-border glass-panel px-4">
-            <button type="button" onClick={() => goView('home')} className="flex items-center gap-2" aria-label="返回创作助手">
+            <button type="button" onClick={() => goView('workspace')} className="flex items-center gap-2" aria-label="返回故事工作区">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white shadow-glow"><Sparkles size={16} /></span>
               <span className="font-display text-base font-bold text-text-primary">ArtVerse</span>
             </button>
@@ -486,13 +466,10 @@ export default function App() {
             {navigationMessage}
           </div>
         )}
-        {view === 'home' && <MangaAgentPage onCreateStory={openWorkspaceCreateStory} />}
         {view === 'square' && <SquarePage />}
         {view === 'workspace' && (
           <HomePage
             onSelectStory={loadEditor}
-            createStorySignal={workspaceCreateSignal}
-            onCreateStorySignalConsumed={consumeWorkspaceCreateSignal}
           />
         )}
         {visibleRoute?.view === 'editor' && (
@@ -504,8 +481,7 @@ export default function App() {
       </div>
 
       {isMobile && view !== 'editor' && !isSquareStoryRoute && (
-        <nav className="fixed inset-x-0 bottom-0 z-40 flex h-[calc(64px+env(safe-area-inset-bottom))] border-t border-border glass-panel pb-[env(safe-area-inset-bottom)]" aria-label="主导航">
-          {mobileNavItem(<Sparkles size={19} />, '创作', 'home')}
+        <nav className="absolute inset-x-0 bottom-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom))] border-t border-border glass-panel pb-[env(safe-area-inset-bottom)]" aria-label="主导航">
           {mobileNavItem(<BookOpenText size={19} />, '故事', 'workspace')}
           {mobileNavItem(<Paintbrush size={19} />, '生图', 'imagegen')}
           {mobileNavItem(<Globe size={19} />, '广场', 'square')}
@@ -513,9 +489,11 @@ export default function App() {
         </nav>
       )}
 
+      <div id="overlay-root" className="app-overlay-layer" />
+
       {loginOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-bg-overlay/95 p-4 backdrop-blur-md sm:p-6"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-bg-overlay/95 p-4 backdrop-blur-md sm:p-6"
           onClick={cancelLogin}
         >
           <div className="w-full max-w-[38rem] animate-fade-in" onClick={(event) => event.stopPropagation()}>

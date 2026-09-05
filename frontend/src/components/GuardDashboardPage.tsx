@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, Gauge, RefreshCw, ShieldCheck, TimerReset, Zap } from 'lucide-react';
 import {
   getGuardEvents,
@@ -61,7 +61,7 @@ function RateBar({ value, tone }: { value: number; tone: string }) {
 function MiniMetric({ label, value, tone = 'text-text-primary' }: { label: string; value: string; tone?: string }) {
   return (
     <div className="rounded-md bg-bg-base/70 px-2 py-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-text-muted">{label}</div>
+      <div className="text-[0.625rem] uppercase tracking-wide text-text-muted">{label}</div>
       <div className={`mt-0.5 text-sm font-medium tabular-nums ${tone}`}>{value}</div>
     </div>
   );
@@ -248,15 +248,15 @@ export default function GuardDashboardPage() {
                     </div>
                     <div className="grid gap-2 md:grid-cols-3">
                       <div>
-                        <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Reuse</div>
+                        <div className="mb-1 text-[0.625rem] uppercase tracking-wide text-text-muted">Reuse</div>
                         <RateBar value={item.reuse_rate} tone="bg-success" />
                       </div>
                       <div>
-                        <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Single-flight</div>
+                        <div className="mb-1 text-[0.625rem] uppercase tracking-wide text-text-muted">Single-flight</div>
                         <RateBar value={item.single_flight_rate} tone="bg-accent-secondary" />
                       </div>
                       <div>
-                        <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Reject</div>
+                        <div className="mb-1 text-[0.625rem] uppercase tracking-wide text-text-muted">Reject</div>
                         <RateBar value={item.reject_rate} tone="bg-accent" />
                       </div>
                     </div>
@@ -289,7 +289,7 @@ export default function GuardDashboardPage() {
                   <button
                     key={value}
                     onClick={() => setMetricBucket(value)}
-                    className={`h-8 rounded-md px-3 text-xs font-medium ${
+                    className={`h-8 rounded-lg px-3 text-xs font-medium ${
                       metricBucket === value ? 'bg-accent-tertiary/10/60 text-accent-tertiary' : 'text-text-secondary hover:text-text-primary'
                     }`}
                   >
@@ -348,14 +348,14 @@ export default function GuardDashboardPage() {
                       <div className="text-sm font-medium text-text-primary">{ACTION_LABELS[event.action] || event.action}</div>
                       <div className="mt-1 text-xs text-text-secondary">{formatTime(event.time)} · {event.scope}</div>
                     </div>
-                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${decisionTone(event.decision)}`}>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium ${decisionTone(event.decision)}`}>
                       {event.decision}
                     </span>
                   </div>
                   <div className="mt-3 text-xs leading-relaxed text-text-secondary">
                     {formatSummary(event.summary)}
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-text-secondary">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[0.6875rem] text-text-secondary">
                     <span>result={event.result}</span>
                     <span>key={event.key_hash}</span>
                     {event.duration_ms != null && <span>{event.duration_ms}ms</span>}

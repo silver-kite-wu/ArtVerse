@@ -3,6 +3,7 @@ package com.artverse.application.tools;
 import com.artverse.agent.MangaAgentRuntimeContext;
 import com.artverse.application.AgentRunToolStatus;
 import com.artverse.application.AgentUserInputRequiredException;
+import com.artverse.application.UserProviderConfig;
 import com.artverse.domain.Chapter;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +22,7 @@ class MangaToolSupportTest {
         MangaToolSupport support = new MangaToolSupport(status);
         UUID requestId = UUID.randomUUID();
         MangaAgentRuntimeContext context = new MangaAgentRuntimeContext(
-                1L, 3L, 7L, UUID.randomUUID(), requestId, "");
+                1L, 3L, 7L, UUID.randomUUID(), requestId, blankWorkflowConfig());
         Chapter chapter = new Chapter();
         chapter.setScenesText("existing storyboard");
         when(status.isMutationAuthorized(1L, 7L, requestId)).thenReturn(false);
@@ -44,11 +45,15 @@ class MangaToolSupportTest {
         MangaToolSupport support = new MangaToolSupport(status);
         UUID requestId = UUID.randomUUID();
         MangaAgentRuntimeContext context = new MangaAgentRuntimeContext(
-                1L, 3L, 7L, UUID.randomUUID(), requestId, "");
+                1L, 3L, 7L, UUID.randomUUID(), requestId, blankWorkflowConfig());
         Chapter chapter = new Chapter();
         chapter.setScenesText("existing storyboard");
         when(status.isMutationAuthorized(1L, 7L, requestId)).thenReturn(true);
 
         support.requireDestructiveWriteConfirmation(context, chapter, "save_storyboard_overwrite");
+    }
+
+    private static UserProviderConfig blankWorkflowConfig() {
+        return new UserProviderConfig("workflow", "", "", "", "", "");
     }
 }

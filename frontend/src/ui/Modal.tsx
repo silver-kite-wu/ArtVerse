@@ -1,5 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+﻿import { useEffect, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import OverlayPortal from './OverlayPortal';
 
 interface Props {
   open: boolean;
@@ -33,22 +34,23 @@ export default function Modal({ open, onClose, children, title, size = 'md', cla
   if (!open) return null;
 
   return (
-    <div
-      ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-bg-overlay p-4 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
-    >
+    <OverlayPortal>
       <div
-        className={`animate-scale-in w-full ${sizeClass[size]} glass-panel rounded-2xl shadow-xl ${className}`}
-        onClick={(e) => e.stopPropagation()}
+        ref={overlayRef}
+        className="absolute inset-0 z-50 flex items-center justify-center bg-bg-overlay p-4 backdrop-blur-sm"
+        onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
       >
+        <div
+          className={`animate-scale-in w-full ${sizeClass[size]} glass-panel rounded-2xl ${className}`}
+          onClick={(e) => e.stopPropagation()}
+        >
         {title && (
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <h2 className="font-display text-lg font-semibold text-text-primary">{title}</h2>
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-accent-soft hover:text-text-primary"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-accent-soft hover:text-text-primary"
             >
               <X size={16} />
             </button>
@@ -56,6 +58,7 @@ export default function Modal({ open, onClose, children, title, size = 'md', cla
         )}
         <div className={title ? 'p-6' : 'p-0'}>{children}</div>
       </div>
-    </div>
+      </div>
+    </OverlayPortal>
   );
 }

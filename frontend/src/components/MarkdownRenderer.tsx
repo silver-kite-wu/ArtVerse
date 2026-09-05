@@ -1,4 +1,4 @@
-import { Marked, Renderer } from 'marked';
+﻿import { Marked, Renderer } from 'marked';
 import { useMemo } from 'react';
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ class TailwindRenderer extends Renderer {
 
   code({ text }: { text: string }): string {
     const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return `<div class="relative group"><pre class="block bg-bg-surface rounded-lg p-4 overflow-x-auto my-3 border border-border"><code class="text-xs font-mono text-text-primary leading-relaxed">${escaped}</code></pre><button onclick="navigator.clipboard.writeText(this.closest('.group').querySelector('code').textContent)" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 text-xs rounded bg-bg-raised border border-border text-text-secondary hover:text-text-primary cursor-pointer" aria-label="复制代码">复制</button></div>`;
+    return `<div class="relative group"><pre class="block bg-bg-surface rounded-lg p-4 overflow-x-auto my-3 border border-border"><code class="text-xs font-mono text-text-primary leading-relaxed">${escaped}</code></pre><button onclick="navigator.clipboard.writeText(this.closest('.group').querySelector('code').textContent)" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 text-xs rounded-lg  bg-bg-raised border border-border text-text-secondary hover:text-text-primary cursor-pointer" aria-label="复制代码">复制</button></div>`;
   }
 
   link({ href, title, tokens }: { href: string; title?: string | null; tokens: any[] }): string {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import {
   RotateCw,
   RotateCcw,
@@ -8,6 +8,7 @@ import {
   X,
   Crop as CropIcon,
 } from 'lucide-react';
+import OverlayPortal from '../ui/OverlayPortal';
 
 interface CropRect {
   x: number;
@@ -226,7 +227,8 @@ function ImageEditor({
   } : null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm p-3 sm:p-4">
+    <OverlayPortal>
+      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm p-3 sm:p-4">
       <div
         ref={containerRef}
         className="bg-bg-raised border border-border rounded-xl w-full max-w-4xl shadow-modal overflow-hidden"
@@ -302,32 +304,32 @@ function ImageEditor({
           <div className="w-full sm:w-56 shrink-0 border-t sm:border-t-0 sm:border-l border-border bg-bg-surface/50 flex flex-col">
             {/* Rotate & Flip */}
             <div className="px-4 py-3">
-              <div className="text-[11px] font-medium text-text-secondary uppercase tracking-wider mb-2">旋转 & 翻转</div>
+              <div className="text-[0.6875rem] font-medium text-text-secondary uppercase tracking-wider mb-2">旋转 & 翻转</div>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   onClick={() => handleRotate(-1)}
-                  className="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-base transition-colors bg-bg-base"
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-base transition-colors bg-bg-base"
                 >
                   <RotateCcw size={14} />
                   左旋
                 </button>
                 <button
                   onClick={() => handleRotate(1)}
-                  className="flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-base transition-colors bg-bg-base"
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-base transition-colors bg-bg-base"
                 >
                   <RotateCw size={14} />
                   右旋
                 </button>
                 <button
                   onClick={() => setFlipH((v) => !v)}
-                  className={'flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs transition-colors ' + (flipH ? 'border-accent/40 bg-accent-muted/30 text-accent' : 'border-border text-text-secondary hover:text-text-primary hover:bg-bg-base bg-bg-base')}
+                  className={'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ' + (flipH ? 'border-accent/40 bg-accent-muted/30 text-accent' : 'border-border text-text-secondary hover:text-text-primary hover:bg-bg-base bg-bg-base')}
                 >
                   <FlipHorizontal size={14} />
                   翻转
                 </button>
                 <button
                   onClick={() => setFlipV((v) => !v)}
-                  className={'flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs transition-colors ' + (flipV ? 'border-accent/40 bg-accent-muted/30 text-accent' : 'border-border text-text-secondary hover:text-text-primary hover:bg-bg-base bg-bg-base')}
+                  className={'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ' + (flipV ? 'border-accent/40 bg-accent-muted/30 text-accent' : 'border-border text-text-secondary hover:text-text-primary hover:bg-bg-base bg-bg-base')}
                 >
                   <FlipVertical size={14} />
                   垂直
@@ -341,13 +343,13 @@ function ImageEditor({
             <div className="px-4 py-3 border-t border-border flex items-center gap-2">
               <button
                 onClick={onCancel}
-                className="flex-1 px-3 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors rounded-md border border-border bg-bg-base"
+                className="flex-1 px-3 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors rounded-lg border border-border bg-bg-base"
               >
                 取消
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
               >
                 <Check size={14} />
                 应用
@@ -355,8 +357,9 @@ function ImageEditor({
             </div>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </OverlayPortal>
   );
 }
 

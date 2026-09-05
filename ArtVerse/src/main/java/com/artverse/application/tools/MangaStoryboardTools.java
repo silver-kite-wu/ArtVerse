@@ -57,10 +57,11 @@ public class MangaStoryboardTools {
                         context.userId(), context.chapterId(), () -> {
                             if (!properties.getAgent().isStoryboardTwoPhaseEnabled()) {
                                 List<String> legacy = sceneService.generateScenes(
-                                        context.chapterId(), context.cozeApiKey());
+                                        context.chapterId(), context.workflowConfig());
                                 return legacyResult(chapter, legacy);
                             }
-                            List<String> scenes = sceneService.generateScenesDraft(context.chapterId(), context.cozeApiKey());
+                            List<String> scenes = sceneService.generateScenesDraft(
+                                    context.chapterId(), context.workflowConfig());
                             StoryboardArtifactService.ArtifactView draft = artifactService.createTextDraft(scenes, context);
                             StoryboardArtifactService.ArtifactView committed = artifactService.commit(draft.artifactId(), context);
                             return buildResultMap(chapter, scenes, committed);

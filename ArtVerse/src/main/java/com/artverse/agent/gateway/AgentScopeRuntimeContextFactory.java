@@ -4,6 +4,8 @@ package com.artverse.agent.gateway;
 import com.artverse.agent.AgentTaskType;
 import com.artverse.agent.MangaAgentRuntimeContext;
 import com.artverse.agent.AgentRunRequest;
+import com.artverse.application.ApiKeyService;
+import com.artverse.application.UserProviderConfig;
 
 import com.artverse.common.BusinessException;
 import io.agentscope.core.agent.RuntimeContext;
@@ -34,7 +36,7 @@ public class AgentScopeRuntimeContextFactory {
                     request.chapterId(),
                     request.conversationId(),
                     request.requestId(),
-                    String.valueOf(request.variables().getOrDefault("coze_api_key", "")),
+                    workflowConfig(request),
                     request.taskType(),
                     String.valueOf(request.variables().getOrDefault(
                             "step_id", request.taskType().sessionSuffix())),
@@ -42,6 +44,20 @@ public class AgentScopeRuntimeContextFactory {
             ));
         }
         return builder.build();
+    }
+
+    /**
+     * The workflow provider configuration always comes from the user's saved
+     * settings. A blank config is used when the request carries none, so the
+     * tool layer can surface a clear "configure it in Settings" error instead
+     * of silently falling back to operator credentials.
+     */
+    private static UserProviderConfig workflowConfig(AgentRunRequest request) {
+        Object value = request.variables().get("workflow_config");
+        if (value instanceof UserProviderConfig config) {
+            return config;
+        }
+        return new UserProviderConfig(ApiKeyService.SLOT_WORKFLOW, "", "", "", "", "");
     }
 
     static Long parseUserIdForTool(String userId) {

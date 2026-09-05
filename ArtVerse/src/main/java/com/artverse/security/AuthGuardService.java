@@ -60,7 +60,10 @@ public class AuthGuardService {
         if (decision.hardLimited()) {
             throw BusinessException.withCode(429, "登录请求过于频繁，请稍后重试", AuthErrorCodes.AUTH_RATE_LIMITED);
         }
-        if (!decision.challengeRequired() || !isChallengeEnabled()) {
+        boolean alwaysMode = properties.getAuth().getChallenge().getLoginChallengeMode()
+                == ArtVerseProperties.LoginChallengeMode.ALWAYS;
+        boolean needChallenge = (alwaysMode || decision.challengeRequired()) && isChallengeEnabled();
+        if (!needChallenge) {
             return;
         }
         if (isBlank(challengeToken)) {
@@ -115,9 +118,10 @@ public class AuthGuardService {
     }
 
     public String loginMode() {
-        return properties.getAuth().getChallenge().getMode() == ArtVerseProperties.ChallengeMode.DISABLED
-                ? "disabled"
-                : "adaptive";
+        if (properties.getAuth().getChallenge().getMode() == ArtVerseProperties.ChallengeMode.DISABLED) {
+            return "disabled";
+        }
+        return properties.getAuth().getChallenge().getLoginChallengeMode().name().toLowerCase();
     }
 
     private boolean isObserveMode() {

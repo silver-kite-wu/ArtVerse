@@ -4,5 +4,6 @@ export { default as AccentButton } from './AccentButton';
 export { default as PillBadge } from './PillBadge';
 export { default as StreamBubble } from './StreamBubble';
 export { default as Modal } from './Modal';
+export { default as OverlayPortal } from './OverlayPortal';
 export { default as InputField } from './InputField';
 export { default as Skeleton } from './Skeleton';

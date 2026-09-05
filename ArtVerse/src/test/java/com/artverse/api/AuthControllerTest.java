@@ -14,6 +14,8 @@ import com.artverse.domain.User;
 import com.artverse.security.AuthCookieService;
 import com.artverse.security.AuthErrorCodes;
 import com.artverse.security.AuthGuardService;
+import com.artverse.security.GraphicCaptchaService;
+import com.artverse.api.dto.AuthDtos.CaptchaImageResponse;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +51,8 @@ class AuthControllerTest {
     private AuthCookieService authCookieService;
     @Mock
     private AuthGuardService authGuardService;
+    @Mock
+    private GraphicCaptchaService graphicCaptchaService;
     @InjectMocks
     private AuthController controller;
 
@@ -68,14 +72,25 @@ class AuthControllerTest {
     @DisplayName("returns the public challenge configuration")
     void challengeConfig() {
         when(authGuardService.isChallengeEnabled()).thenReturn(true);
-        when(authGuardService.provider()).thenReturn("turnstile");
-        when(authGuardService.siteKey()).thenReturn("site-key");
+        when(authGuardService.provider()).thenReturn("graphic-captcha");
+        when(authGuardService.siteKey()).thenReturn("");
         when(authGuardService.requiresRegistrationChallenge()).thenReturn(true);
-        when(authGuardService.loginMode()).thenReturn("adaptive");
+        when(authGuardService.loginMode()).thenReturn("always");
 
         ResponseEntity<ChallengeConfigResponse> result = controller.challengeConfig();
 
-        assertThat(result.getBody()).isEqualTo(new ChallengeConfigResponse(true, "turnstile", "site-key", true, "adaptive"));
+        assertThat(result.getBody()).isEqualTo(new ChallengeConfigResponse(true, "graphic-captcha", "", true, "always"));
+    }
+
+    @Test
+    @DisplayName("returns a captcha image for the login page")
+    void captchaImage() {
+        when(graphicCaptchaService.generate()).thenReturn(
+                new GraphicCaptchaService.CaptchaImage("captcha-uuid", "data:image/png;base64,abc"));
+
+        ResponseEntity<CaptchaImageResponse> result = controller.captchaImage();
+
+        assertThat(result.getBody()).isEqualTo(new CaptchaImageResponse("captcha-uuid", "data:image/png;base64,abc"));
     }
 
     @Nested

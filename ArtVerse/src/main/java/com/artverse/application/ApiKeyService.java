@@ -202,6 +202,19 @@ public class ApiKeyService {
     }
 
     /**
+     * Resolves the user's active provider configuration without throwing when
+     * none is configured. Returns blank fields so callers can decide whether
+     * the capability is optional. Never falls back to operator credentials.
+     */
+    public UserProviderConfig activeUserProviderConfigOrBlank(User user, String slot) {
+        String normalizedSlot = requireSupportedSlot(slot);
+        return repository.findFirstByUserIdAndSlotAndActiveTrueOrderByCreatedAtAscIdAsc(
+                        user.getId(), normalizedSlot)
+                .map(entity -> toProviderConfig(entity, normalizedSlot))
+                .orElseGet(() -> new UserProviderConfig(normalizedSlot, "", "", "", "", ""));
+    }
+
+    /**
      * BYOK request resolution. New clients select a saved config and may
      * override only the model; legacy clients may still supply their own raw
      * key/base URL for one release cycle.
@@ -256,18 +269,6 @@ public class ApiKeyService {
         return new UserProviderConfig(
                 config.slot(), config.provider(), config.label(), config.apiKey(),
                 config.baseUrl(), selectedModel, config.configId());
-    }
-
-    public String requireActiveUserProviderKey(User user, String slot, String message) {        return requireActiveUserProviderConfig(user, slot, message).apiKey();
-    }
-
-    public String activeUserProviderKeyOrBlank(User user, String slot) {
-        String normalizedSlot = requireSupportedSlot(slotFromLegacyProvider(slot));
-        return repository.findFirstByUserIdAndSlotAndActiveTrueOrderByCreatedAtAscIdAsc(
-                        user.getId(), normalizedSlot)
-                .map(UserApiKey::getApiKey)
-                .map(this::decryptSecret)
-                .orElse("");
     }
 
     public UserProviderConfig requireProviderConfig(User user, UserProviderConfig override, String message) {
@@ -515,30 +516,35 @@ public class ApiKeyService {
         );
     }
 
+    /**
+     * Display-only metadata defaults (provider/label/model). Credentials and
+     * endpoints are never taken from operator configuration: every request
+     * must use the user's own saved provider configuration.
+     */
     private UserProviderConfig defaultConfigForSlot(String slot) {
         return switch (slot) {
             case SLOT_LLM -> new UserProviderConfig(
                     SLOT_LLM,
                     "deepseek",
                     "DeepSeek Official",
-                    safe(properties.getDeepseek().getApiKey()),
-                    safe(properties.getDeepseek().getBaseUrl()),
+                    "",
+                    "",
                     safe(properties.getDeepseek().getModel())
             );
             case SLOT_IMAGE -> new UserProviderConfig(
                     SLOT_IMAGE,
                     "image2",
                     "Image2 Official",
-                    safe(properties.getImage().getApiKey()),
-                    safe(properties.getImage().getBaseUrl()),
+                    "",
+                    "",
                     safe(properties.getImage().getModel())
             );
             case SLOT_WORKFLOW -> new UserProviderConfig(
                     SLOT_WORKFLOW,
                     "coze",
                     "Coze Official",
-                    safe(properties.getCoze().getApiKey()),
-                    safe(properties.getCoze().getBaseUrl()),
+                    "",
+                    "",
                     safe(properties.getCoze().getWorkflowId())
             );
             default -> throw new BusinessException(400, "Unsupported provider slot: " + slot);

@@ -100,7 +100,7 @@ public class KnowledgeController {
     }
 
     @PostMapping("/stories/{storyId}/knowledge/candidates/{candidateId}/approve")
-    @RateLimit(windowSeconds = 60, maxRequests = 5, key = "agent-control-write")
+    @RateLimit(windowSeconds = 60, maxRequests = 30, key = "knowledge-candidate-review")
     public KnowledgeCandidateService.CandidateView approveCandidate(
             @PathVariable Long storyId,
             @PathVariable Long candidateId) {
@@ -108,7 +108,7 @@ public class KnowledgeController {
     }
 
     @PostMapping("/stories/{storyId}/knowledge/candidates/{candidateId}/reject")
-    @RateLimit(windowSeconds = 60, maxRequests = 5, key = "agent-control-write")
+    @RateLimit(windowSeconds = 60, maxRequests = 30, key = "knowledge-candidate-review")
     public KnowledgeCandidateService.CandidateView rejectCandidate(
             @PathVariable Long storyId,
             @PathVariable Long candidateId,

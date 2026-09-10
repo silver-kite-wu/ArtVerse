@@ -38,8 +38,9 @@ const DEFAULT_CHALLENGE_CONFIG: ChallengeConfig = {
   loginMode: 'disabled',
 };
 
-const MIN_PASSWORD_LENGTH = 15;
-const PASSWORD_HINT = '注册密码建议使用短语式长密码，长度至少 15 个字符。';
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 16;
+const PASSWORD_HINT = '注册密码长度需在 8 到 16 个字符之间。';
 
 function codePointLength(value: string): number {
   return [...value].length;
@@ -188,9 +189,12 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
       setError('请填写邮箱');
       return;
     }
-    if (registerMode && codePointLength(password) < MIN_PASSWORD_LENGTH) {
-      setError(PASSWORD_HINT);
-      return;
+    if (registerMode) {
+      const passwordLength = codePointLength(password);
+      if (passwordLength < MIN_PASSWORD_LENGTH || passwordLength > MAX_PASSWORD_LENGTH) {
+        setError(PASSWORD_HINT);
+        return;
+      }
     }
     if (registerMode && password !== confirmPassword) {
       setError('两次输入的密码不一致');
@@ -239,6 +243,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
           id={id}
           type={visible ? 'text' : 'password'}
           value={value}
+          maxLength={registerMode ? MAX_PASSWORD_LENGTH : undefined}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           autoComplete={id === passwordId ? (registerMode ? 'new-password' : 'current-password') : 'new-password'}
@@ -367,7 +372,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
                 setPassword,
                 showPassword,
                 setShowPassword,
-                registerMode ? `输入至少 ${MIN_PASSWORD_LENGTH} 个字符的密码` : '输入密码',
+                registerMode ? `输入 ${MIN_PASSWORD_LENGTH} 到 ${MAX_PASSWORD_LENGTH} 个字符的密码` : '输入密码',
               )}
 
               {registerMode && renderPasswordField(

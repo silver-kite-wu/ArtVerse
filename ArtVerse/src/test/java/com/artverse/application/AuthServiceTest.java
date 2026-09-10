@@ -36,7 +36,7 @@ class AuthServiceTest {
     @InjectMocks
     private AuthService authService;
 
-    private static final String PASSWORD = "averylongpassword";
+    private static final String PASSWORD = "SecurePass123";
 
     @Nested
     @DisplayName("register")
@@ -90,9 +90,17 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("rejects password shorter than 15 characters")
+        @DisplayName("rejects password shorter than 8 characters")
         void rejectsShortPassword() {
-            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", "short-password"))
+            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", "short"))
+                    .isInstanceOf(BusinessException.class)
+                    .matches(ex -> ((BusinessException) ex).getStatus() == 400);
+        }
+
+        @Test
+        @DisplayName("rejects password longer than 16 characters")
+        void rejectsLongPassword() {
+            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", "12345678901234567"))
                     .isInstanceOf(BusinessException.class)
                     .matches(ex -> ((BusinessException) ex).getStatus() == 400);
         }

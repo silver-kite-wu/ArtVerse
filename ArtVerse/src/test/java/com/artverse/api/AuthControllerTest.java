@@ -105,14 +105,14 @@ class AuthControllerTest {
             User user = new User();
             user.setId(9L);
             user.setUsername("alice");
-            when(authService.login("alice", "averylongpassword")).thenReturn(user);
+            when(authService.login("alice", "SecurePass123")).thenReturn(user);
             when(refreshTokenService.issue(9L)).thenReturn("refresh-token");
             when(refreshTokenService.getTimeoutSeconds()).thenReturn(43_200L);
             SaTokenInfo tokenInfo = new SaTokenInfo();
             tokenInfo.setTokenTimeout(3_600);
             stpUtil.when(StpUtil::getTokenInfo).thenReturn(tokenInfo);
 
-            var result = controller.login(new LoginRequest("alice", "averylongpassword", "challenge-token"), request, response);
+            var result = controller.login(new LoginRequest("alice", "SecurePass123", "challenge-token"), request, response);
 
             verify(authGuardService).enforceLoginRisk("alice", "challenge-token", request);
             verify(authGuardService).clearLoginFailures("alice");
@@ -151,14 +151,14 @@ class AuthControllerTest {
             User user = new User();
             user.setId(5L);
             user.setUsername("alice");
-            when(authService.register("alice", "alice@example.com", "averylongpassword")).thenReturn(user);
+            when(authService.register("alice", "alice@example.com", "SecurePass123")).thenReturn(user);
             when(refreshTokenService.issue(5L)).thenReturn("refresh-token");
             when(refreshTokenService.getTimeoutSeconds()).thenReturn(43_200L);
             SaTokenInfo tokenInfo = new SaTokenInfo();
             tokenInfo.setTokenTimeout(3_600);
             stpUtil.when(StpUtil::getTokenInfo).thenReturn(tokenInfo);
 
-            controller.register(new RegisterRequest("alice", "alice@example.com", "averylongpassword", "token"), request, response);
+            controller.register(new RegisterRequest("alice", "alice@example.com", "SecurePass123", "token"), request, response);
 
             verify(authGuardService).enforceRegistrationChallenge("token", request);
             verify(authCookieService).writeRefreshCookie(response, "refresh-token", 43_200L);

@@ -18,7 +18,7 @@ public class AuthDtos {
             String email,
 
             @NotBlank(message = "密码不能为空")
-            @Size(min = 15, max = 128, message = "密码长度需在 15 到 128 个字符之间")
+            @Size(min = 8, max = 16, message = "密码长度需在 8 到 16 个字符之间")
             String password,
 
             @Size(max = 2048, message = "challenge token is too long")

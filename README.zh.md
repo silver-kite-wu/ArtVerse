@@ -2,13 +2,14 @@
 
 # ArtVerse
 
-**面向漫画创作流程的 AI 工作台，覆盖故事管理、分镜生成、漫画出图与章节级智能体协作。**
+**面向漫画创作流程的 AI 工作台，覆盖故事管理、分镜生成、漫画出图、作品社区与章节级智能体协作。**
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-green?logo=springboot)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite)](https://vite.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4?logo=tailwindcss)](https://tailwindcss.com/)
 
 [English README](./README.md)
 
@@ -16,70 +17,97 @@
 
 ## 项目简介
 
-ArtVerse 是一个全栈 AI 漫画创作平台，目标是把“故事设定、章节编排、分镜辅助、图片生成、智能体协作”整合进一套连续工作流。
+ArtVerse 是一个全栈 AI 漫画创作平台，目标是把"故事设定、章节编排、分镜辅助、图片生成、作品发布、智能体协作"整合进一套连续工作流。
 
-项目由 Spring Boot 后端、Vite React 前端，以及基于 AgentScope Harness 的漫画智能体组成，适合用于：
+项目由 Spring Boot 后端、Vite React 前端，以及基于 AgentScope Harness 的漫画智能体组成：
 
-- 管理故事、章节、角色与素材
-- 生成或重写分镜内容
-- 在章节上下文中与漫画智能体多轮协作
-- 通过流式事件观察智能体执行过程
-- 在关键节点接入人工决策，继续推进任务
+- 管理故事、章节、角色与素材，创作小说正文并获得 AI 对话辅助
+- 在章节上下文中与漫画智能体多轮协作，实时观察执行过程
+- 从分镜推进到漫画图片生成，全程带并发保护与幂等控制
+- 通过邮箱验证码完成注册、登录与找回密码
+- 在作品广场浏览作品，管理个人创作
 
-## 核心能力
+## 功能特性
 
-### 故事与章节工作区
+### 故事创作工作区
 
-- 故事、章节的创建与管理
-- 角色卡与参考图维护
-- 设定组复用视觉上下文
-- 故事数据导入、导出
+- 故事、章节、角色卡、参考图与设定组管理
+- 小说正文创作与 AI 对话辅助（按故事上下文）
+- 故事数据打包导入、导出
 
 ### 漫画智能体协作
 
 - 按章节隔离的对话与运行记录
-- 基于 AG-UI / SSE 的实时执行反馈
-- 支持中断后的人机协同恢复
-- 工具调用、运行状态、消息历史可追踪
+- 基于 AG-UI / SSE 的实时流式执行反馈
+- 支持中断后的人机协同（HITL）恢复
+- 知识库 RAG 注入与内置业务技能（manga / novel）
+- 运行看门狗、超时控制与多实例事件总线
 
-### 漫画图片生成
+### 分镜与图片生成
 
-- 基于提示词的图片生成接口
-- 支持参考图参与生成
-- 生成历史查询与删除
-- 带有并发保护与幂等控制的 guard 层
+- 分镜两阶段生成，支持 4–20 张的出图数量档位
+- 参考图参与生成、生成历史查询与删除
+- Redis guard 层提供限流（@RateLimit）与幂等（single-flight）保护
+- 图片缩略处理与 MinIO 对象存储
+
+### 账号与安全
+
+- 双登录方式：邮箱 + 密码、邮箱验证码
+- 注册需图形验证码；找回密码采用一次性 reset_ticket（验证码先验证，再重置）
+- 密码登录分级防爆破：5 分钟窗口内错 3 次追加图形验证码，错 6 次锁定 10 分钟
+- IP 维度限流（登录、注册分策略）
+- Sa-Token 会话：HttpOnly Cookie（SameSite=Strict）+ Redis 存储，支持 Refresh Token
+- 统一 Result 响应规范（code / message / data）
+
+### 作品广场
+
+- 作品与漫画浏览、站内阅读器
+- 我的作品管理与创作入口
 
 ### 平台基础设施
 
-- Spring Data JPA + Flyway 管理数据模型与迁移
-- Redis 支撑 guard、运行态协调与缓存能力
-- MinIO 兼容对象存储
-- Sa-Token 认证体系
+- Spring Data JPA + Flyway 管理数据模型（46 个迁移脚本）
+- pgvector 支撑知识库向量检索
+- Redis 承载会话、验证码、限流、幂等与运行态协调
+- Resilience4j 熔断与重试；Actuator 暴露 health / metrics / prometheus
 
 ## 技术栈
 
 | 分层 | 技术方案 |
 | --- | --- |
-| 后端 | Java 21、Spring Boot 3.3、Spring Web、Spring Data JPA、Flyway |
-| 前端 | React 19、TypeScript、Vite、Tailwind CSS |
-| 智能体运行时 | AgentScope Harness |
-| 数据与存储 | PostgreSQL、Redis、MinIO |
-| 认证与安全 | Sa-Token、BCrypt |
+| 后端 | Java 21、Spring Boot 3.3.5、Spring Web、Spring Data JPA、Flyway、Resilience4j |
+| 前端 | React 19、TypeScript 6、Vite 8、Tailwind CSS 4 |
+| 智能体运行时 | AgentScope Harness 2.0、AG-UI 协议（SSE 流式） |
+| 数据与存储 | PostgreSQL 16（pgvector）、Redis 7、MinIO |
+| 认证与安全 | Sa-Token（Redis 集成）、BCrypt、Spring Mail（SMTP 直连） |
 
 ## 仓库结构
 
 ```text
 ArtVerse/
-|- ArtVerse/              # Spring Boot 后端服务
-|- frontend/              # Vite + React 前端
-|- docs/knowledge/        # 业务知识与模块说明
-|- sql/                   # SQL 相关资源
-|- AGENTS.md              # 仓库协作规范
-|- README.md              # 英文首页 README
-`- README.zh.md           # 中文 README
+├─ ArtVerse/                        # Spring Boot 后端
+│  └─ src/main/java/com/artverse/
+│     ├─ api/                       # REST 控制器
+│     ├─ application/               # 业务服务层
+│     ├─ agent/ ai/ prompt/         # 智能体运行时、AI 网关与提示词
+│     ├─ mail/                      # 邮箱验证码与 SMTP 发信
+│     ├─ security/ guard/           # 认证风控 / 限流幂等
+│     ├─ media/ storage/            # 图片处理与对象存储
+│     └─ domain/ persistence/       # 领域模型与数据访问
+├─ frontend/                        # Vite + React 前端
+│  └─ src/components/               # 页面与业务组件
+├─ ArtVerse/AGENTS.md               # 仓库协作规范
+├─ README.md                        # 英文 README
+└─ README.zh.md                     # 中文 README
 ```
 
-## 快速启动
+## 快速开始
+
+### 环境要求
+
+- JDK 21
+- Node.js 22
+- Docker 与 Docker Compose
 
 ### 1. 启动本地依赖
 
@@ -88,15 +116,37 @@ cd ArtVerse
 docker compose up -d
 ```
 
-这一步会使用 `ArtVerse/docker-compose.yml` 启动 PostgreSQL、Redis 和 MinIO。
+会启动 PostgreSQL 16（pgvector）、Redis 7 和 MinIO（见 `ArtVerse/docker-compose.yml`）。
 
-### 2. 配置后端环境
+### 2. 配置环境变量
 
-启动后端前，请准备以下配置：
+后端通过 `spring.config.import` 自动加载仓库根目录的 `.env` 文件（同名操作系统环境变量优先）。在仓库根目录创建 `.env`：
 
-- `DEEPSEEK_API_KEY`
-- 如果启用 Coze 工具，需要配置 `COZE_API_KEY`
-- 数据库、Redis、对象存储配置可参考 `ArtVerse/src/main/resources/application.yml`
+```properties
+# 数据库（与 docker-compose.yml 保持一致）
+POSTGRES_PASSWORD=postgres
+
+# MinIO 对象存储
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+
+# 敏感数据加密密钥与风控 HMAC 密钥（生产必填，随机长字符串）
+ARTVERSE_SECRET_ENCRYPTION_KEY=
+ARTVERSE_AUTH_RISK_HMAC_KEY=
+
+# SMTP 邮箱验证码（以 QQ 邮箱为例，password 填授权码）
+ARTVERSE_MAIL_HOST=smtp.qq.com
+ARTVERSE_MAIL_PORT=465
+ARTVERSE_MAIL_USERNAME=you@qq.com
+ARTVERSE_MAIL_PASSWORD=your-smtp-authorization-code
+ARTVERSE_MAIL_FROM=you@qq.com
+```
+
+说明：
+
+- 未配置 `ARTVERSE_MAIL_HOST` 时邮件功能自动禁用，其余功能不受影响
+- AI 能力（LLM / 图像 / 工作流）的 API Key 与 Base URL 由每个用户在设置页自行保存，加密入库，仓库不内置任何运营方凭据
+- `.env` 已被 `.gitignore` 忽略，不会被提交
 
 ### 3. 启动后端
 
@@ -104,6 +154,8 @@ docker compose up -d
 cd ArtVerse
 mvn spring-boot:run
 ```
+
+后端监听 `http://localhost:8080`。
 
 ### 4. 启动前端
 
@@ -113,50 +165,52 @@ npm install
 npm run dev
 ```
 
+前端开发地址为 `http://localhost:5173`，已配置指向后端的跨域许可。
+
+## 环境变量参考
+
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `POSTGRES_PASSWORD` | PostgreSQL 密码 | `postgres` |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO 凭据 | 空（未配置则存储不可用） |
+| `ARTVERSE_SECRET_ENCRYPTION_KEY` | 用户凭据字段加密密钥 | 空 |
+| `ARTVERSE_AUTH_RISK_HMAC_KEY` | 登录风控 HMAC 密钥 | 空 |
+| `ARTVERSE_MAIL_HOST` / `PORT` | SMTP 服务器与端口 | 空 / `465` |
+| `ARTVERSE_MAIL_USERNAME` / `PASSWORD` | SMTP 登录账号与授权码 | 空 |
+| `ARTVERSE_MAIL_FROM` | 发件人地址（需与登录账号一致） | 空 |
+| `ARTVERSE_MAIL_SSL` | 是否启用 SSL | `true` |
+| `ARTVERSE_MAIL_ENABLED` | 是否启用邮件验证码功能 | `true` |
+| `ARTVERSE_AUTH_COOKIE_SECURE` | HTTPS 环境下置为 `true` | `false` |
+| `ARTVERSE_AUTH_CHALLENGE_MODE` | 图形验证码模式（`enforce` / 宽松模式） | `enforce` |
+
 ## 常用开发命令
 
 ### 后端
 
 ```bash
 cd ArtVerse
-mvn -q -DskipTests compile
-mvn test
+mvn -q -DskipTests compile   # 快速编译
+mvn test                     # 运行单元测试
 ```
 
 ### 前端
 
 ```bash
 cd frontend
-npm run build
-npm run lint
-npm run preview
+npm run dev       # 开发服务器
+npm run build     # 类型检查 + 生产构建
+npm run lint      # ESLint 检查
+npm run preview   # 预览生产构建
 ```
 
-## 架构说明
+## 生产部署要点
 
-- 后端接口层位于 `ArtVerse/src/main/java/com/artverse/api`
-- 业务服务层位于 `ArtVerse/src/main/java/com/artverse/application`
-- 幂等、限流、并发保护位于 `ArtVerse/src/main/java/com/artverse/guard`
-- 前端页面与组件位于 `frontend/src/components`
-- 前端 API 封装位于 `frontend/src/api.ts`
-
-## 文档入口
-
-- [英文 README](./README.md)
-- [业务知识索引](./docs/knowledge/INDEX.md)
-- [漫画智能体模块说明](./docs/knowledge/modules/manga-agent/SKILL.md)
-- [漫画智能体流程说明](./docs/knowledge/modules/manga-agent/flow.md)
-
-## 当前进展
-
-仓库当前已经包含这些核心能力：
-
-- 故事与章节管理流程
-- 角色卡与设定组管理
-- 漫画智能体会话与运行持久化
-- 图片生成接口
-- Guard 观测、幂等与并发保护
+- 前端 `npm run build` 产物由 Nginx 托管（SPA 路由 `try_files ... /index.html`），并反代 `/api` 与 SSE 接口（`proxy_buffering off`）
+- 后端打包为 JAR，由 systemd 托管（`Restart=always`），`.env` 与 JAR 同目录
+- 生产环境 docker-compose 端口建议绑定 `127.0.0.1`，仅暴露 Nginx 80/443
+- HTTPS 环境记得设置 `ARTVERSE_AUTH_COOKIE_SECURE=true`
+- 完整协作规范见 [ArtVerse/AGENTS.md](./ArtVerse/AGENTS.md)
 
 ## License
 
-当前仓库中还没有附带正式的 License 文件。
+当前仓库尚未附带开源 License 文件。

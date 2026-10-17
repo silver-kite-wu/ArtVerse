@@ -3,6 +3,8 @@ package com.artverse.application;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.Role;
 import com.artverse.domain.User;
+import com.artverse.mail.EmailVerificationService;
+import com.artverse.mail.VerificationScenario;
 import com.artverse.persistence.UserRepository;
 import com.artverse.security.PasswordHashService;
 import lombok.RequiredArgsConstructor;
@@ -23,17 +25,26 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordHashService passwordHashService;
+    private final EmailVerificationService emailVerificationService;
+    private final PasswordResetTicketService passwordResetTicketService;
 
     @Transactional
-    public User register(String username, String email, String password) {
+    public User register(String username, String email, String password, String emailCode) {
         String normalizedUsername = normalizeUsername(username);
         String normalizedEmail = normalizeEmail(email);
         validateUsername(normalizedUsername);
         validateEmail(normalizedEmail);
         validatePassword(password);
 
-        if (userRepository.existsByUsername(normalizedUsername) || userRepository.existsByEmail(normalizedEmail)) {
-            throw duplicateIdentity();
+        if (userRepository.existsByUsername(normalizedUsername)) {
+            throw new BusinessException(409, "用户名已被占用，请换一个用户名");
+        }
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            throw new BusinessException(409, "该邮箱已被注册，请直接登录或找回密码");
+        }
+
+        if (emailVerificationService.isEnabled()) {
+            emailVerificationService.consume(normalizedEmail, emailCode, VerificationScenario.REGISTER);
         }
 
         User user = new User();
@@ -49,9 +60,10 @@ public class AuthService {
     }
 
     @Transactional
-    public User login(String username, String password) {
-        String normalizedUsername = normalizeUsername(username);
-        User user = userRepository.findByUsername(normalizedUsername).orElse(null);
+    public User login(String email, String password) {
+        String normalizedEmail = normalizeEmail(email);
+        validateEmail(normalizedEmail);
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
         if (user == null) {
             passwordHashService.consumeDummyCheck(password);
             throw invalidCredentials();
@@ -64,6 +76,34 @@ public class AuthService {
             userRepository.save(user);
         }
         return user;
+    }
+
+    @Transactional
+    public User loginByCode(String email, String code) {
+        String normalizedEmail = normalizeEmail(email);
+        validateEmail(normalizedEmail);
+        emailVerificationService.consume(normalizedEmail, code, VerificationScenario.LOGIN);
+        return userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(this::invalidCredentials);
+    }
+
+    /** 找回密码第一步：校验验证码，通过后签发一次性重置票据 */
+    public String verifyPasswordResetCode(String email, String code) {
+        String normalizedEmail = normalizeEmail(email);
+        validateEmail(normalizedEmail);
+        emailVerificationService.consume(normalizedEmail, code, VerificationScenario.RESET_PASSWORD);
+        return passwordResetTicketService.issue(normalizedEmail);
+    }
+
+    /** 找回密码第二步：凭一次性票据重置密码，票据即身份凭证，无需再传邮箱 */
+    @Transactional
+    public void resetPassword(String resetTicket, String newPassword) {
+        validatePassword(newPassword);
+        String normalizedEmail = passwordResetTicketService.consume(resetTicket);
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new BusinessException(400, "账号不存在"));
+        user.setPasswordHash(passwordHashService.encode(newPassword));
+        userRepository.save(user);
     }
 
     private void validateUsername(String username) {
@@ -113,6 +153,6 @@ public class AuthService {
     }
 
     private BusinessException invalidCredentials() {
-        return new BusinessException(401, "用户名或密码错误");
+        return new BusinessException(401, "邮箱或密码错误");
     }
 }

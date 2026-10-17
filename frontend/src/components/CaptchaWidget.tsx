@@ -104,7 +104,7 @@ export default function CaptchaWidget({
         maxLength={6}
         autoComplete="off"
         disabled={loading || !captchaImage}
-        className="min-w-0 flex-1 rounded-[18px] border border-border/80 bg-bg-surface/85 px-4 py-3.5 text-base tracking-[0.2em] text-text-primary outline-none transition-[border-color,box-shadow] placeholder:tracking-normal placeholder:text-text-muted focus:border-accent/50 focus:shadow-[0_0_0_4px_var(--color-accent-soft)] disabled:opacity-60"
+        className="min-w-0 flex-1 rounded-[18px] border border-border/80 bg-bg-surface/85 px-4 py-3.5 text-base tracking-[0.2em] text-text-primary outline-none! transition-[border-color] placeholder:tracking-normal placeholder:text-text-muted focus:border-accent/50 disabled:opacity-60"
       />
       <button
         type="button"

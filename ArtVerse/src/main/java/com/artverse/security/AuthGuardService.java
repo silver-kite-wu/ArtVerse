@@ -53,51 +53,54 @@ public class AuthGuardService {
         throw BusinessException.withCode(403, "人机验证失败，请重试", AuthErrorCodes.CHALLENGE_FAILED);
     }
 
-    public void enforceLoginRisk(String username, String challengeToken, HttpServletRequest request) {
-        String normalizedUsername = normalize(username);
+    /**
+     * 登录入口（密码登录与邮箱验证码登录共用）：
+     * 不再要求图形验证码，仅保留 IP 维度硬限流；
+     * 密码错误锁定由 PasswordLoginGuard 语义（AuthRiskService）在 Controller 层执行。
+     */
+    public void enforceLoginRisk(String username, HttpServletRequest request) {
         String clientIp = clientIpResolver.resolve(request);
-        AuthRiskService.LoginRiskDecision decision = authRiskService.recordLoginAttempt(normalizedUsername, clientIp);
-        if (decision.hardLimited()) {
-            throw BusinessException.withCode(429, "登录请求过于频繁，请稍后重试", AuthErrorCodes.AUTH_RATE_LIMITED);
-        }
-        boolean alwaysMode = properties.getAuth().getChallenge().getLoginChallengeMode()
-                == ArtVerseProperties.LoginChallengeMode.ALWAYS;
-        boolean needChallenge = (alwaysMode || decision.challengeRequired()) && isChallengeEnabled();
-        if (!needChallenge) {
+        authRiskService.enforceLoginIpLimit(clientIp);
+    }
+
+    public void recordPasswordFailure(String username) {
+        authRiskService.recordPasswordFailure(normalize(username));
+    }
+
+    /** 密码失败达到挑战阈值（未锁定）时，要求附加图形验证码 */
+    public boolean requiresPasswordChallenge(String username) {
+        return authRiskService.requiresPasswordChallenge(normalize(username));
+    }
+
+    /** 密码登录被要求挑战时强制校验图形验证码（与注册同一套人机验证） */
+    public void enforcePasswordChallenge(String challengeToken, HttpServletRequest request) {
+        String clientIp = clientIpResolver.resolve(request);
+        if (!isChallengeEnabled()) {
             return;
         }
         if (isBlank(challengeToken)) {
             if (isObserveMode()) {
-                log.info("Login challenge skipped in observe mode for attempt threshold");
+                log.info("Password login challenge skipped in observe mode");
                 return;
             }
             throw challengeRequired();
         }
-
         HumanVerificationService.VerificationResult verification = humanVerificationService.verify("login", challengeToken, clientIp);
-        if (verification.status() == HumanVerificationService.Status.SUCCESS) {
-            return;
-        }
-        if (isObserveMode()) {
-            log.info("Login challenge observe result: {}", verification.errorCodes());
+        if (verification.status() == HumanVerificationService.Status.SUCCESS || isObserveMode()) {
             return;
         }
         if (verification.status() == HumanVerificationService.Status.UNAVAILABLE) {
-            if (authRiskService.allowDegradedLogin(normalizedUsername, clientIp)) {
-                log.warn("Login challenge degraded due to upstream availability for clientIp={}", clientIp);
-                return;
-            }
             throw BusinessException.withCode(503, "人机验证服务暂时不可用，请稍后重试", AuthErrorCodes.CHALLENGE_UNAVAILABLE);
         }
-        throw BusinessException.withCode(403, "请先完成人机验证", AuthErrorCodes.CHALLENGE_FAILED);
+        throw BusinessException.withCode(403, "人机验证失败，请重试", AuthErrorCodes.CHALLENGE_FAILED);
     }
 
-    public void recordLoginFailure(String username) {
-        authRiskService.recordLoginFailure(normalize(username));
+    public boolean isPasswordLoginLocked(String username) {
+        return authRiskService.isPasswordLoginLocked(normalize(username));
     }
 
-    public void clearLoginFailures(String username) {
-        authRiskService.clearLoginFailures(normalize(username));
+    public void clearPasswordFailures(String username) {
+        authRiskService.clearPasswordFailures(normalize(username));
     }
 
     public boolean isChallengeEnabled() {
@@ -115,13 +118,6 @@ public class AuthGuardService {
 
     public String siteKey() {
         return humanVerificationService.siteKey();
-    }
-
-    public String loginMode() {
-        if (properties.getAuth().getChallenge().getMode() == ArtVerseProperties.ChallengeMode.DISABLED) {
-            return "disabled";
-        }
-        return properties.getAuth().getChallenge().getLoginChallengeMode().name().toLowerCase();
     }
 
     private boolean isObserveMode() {

@@ -42,6 +42,19 @@ type ReadingState = {
 
 const readingKey = (storyId: number, format: ContentFormat) => `artverse.square.reading.${storyId}.${format}`;
 
+const LAST_LIST_KEY = 'artverse.square.lastList';
+
+function readLastListRoute(): SquareLocation | null {
+  try {
+    const raw = sessionStorage.getItem(LAST_LIST_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SquareLocation;
+    return parsed?.kind === 'list' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function location(): SquareLocation {
   const raw = window.location.hash.slice(1);
   const [path, queryString = ''] = raw.split('?');
@@ -138,6 +151,7 @@ function chapterMetaLabel(chapter: SquareStoryDetail['chapters'][number], format
 
 export default function SquarePage() {
   const [route, setRoute] = useState<SquareLocation>(location);
+  const lastListRef = useRef<SquareLocation | null>(null);
 
   useEffect(() => {
     const onHash = () => setRoute(location());
@@ -145,7 +159,29 @@ export default function SquarePage() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  return route.kind === 'list' ? <SquareList route={route} /> : <StoryView route={route} />;
+  // 记录最近一次广场列表状态（分栏/页码/搜索词），供详情页“返回广场”还原。
+  useEffect(() => {
+    if (route.kind !== 'list') return;
+    lastListRef.current = route;
+    try {
+      sessionStorage.setItem(LAST_LIST_KEY, JSON.stringify(route));
+    } catch {
+      // sessionStorage 不可用时忽略，返回逻辑仍有兜底
+    }
+  }, [route]);
+
+  const backToList = useCallback(() => {
+    // 本标签页内来过列表：直接回退历史，精确保留列表的翻页与搜索状态。
+    if (lastListRef.current && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    // 直接打开详情链接（分享/刷新）：替换到记忆中的列表位置，兜底到该分栏首页。
+    const fallback = readLastListRoute() ?? { kind: 'list' as const, format: route.format, page: 0, query: '' };
+    go(fallback, true);
+  }, [route]);
+
+  return route.kind === 'list' ? <SquareList route={route} /> : <StoryView route={route} onBackToSquare={backToList} />;
 }
 
 function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }> }) {
@@ -297,10 +333,8 @@ function StoryCard({ story }: { story: SquareStory }) {
     <article className="group overflow-hidden rounded-2xl border border-border bg-bg-surface transition duration-200 hover:-translate-y-0.5 hover:border-accent/40">
       <a
         href={storyHref(story.format, story.id)}
-        target="_blank"
-        rel="noopener noreferrer"
         className="flex min-h-48 w-full gap-4 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-accent"
-        aria-label={`在新标签页打开${story.title}`}
+        aria-label={`查看${story.title}`}
       >
         <BookCover story={story} variant="card" />
         <div className="flex min-w-0 flex-1 flex-col py-0.5">
@@ -424,10 +458,18 @@ function Empty({
   );
 }
 
-function StoryView({ route }: { route: Extract<SquareLocation, { kind: 'detail' }> }) {
+function StoryView({
+  route,
+  onBackToSquare,
+}: {
+  route: Extract<SquareLocation, { kind: 'detail' }>;
+  onBackToSquare: () => void;
+}) {
   const [detail, setDetail] = useState<SquareStoryDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // 首次挂载就位于章节路由，说明是分享链接/刷新直达，历史上一条并非作品详情。
+  const enteredOnChapterRef = useRef(route.chapterId != null);
 
   useEffect(() => {
     let active = true;
@@ -465,14 +507,20 @@ function StoryView({ route }: { route: Extract<SquareLocation, { kind: 'detail' 
           icon={<BookOpenText size={42} />}
           text={error}
           action="返回广场"
-          onAction={() => go({ kind: 'list', format: route.format, page: 0, query: '' })}
+          onAction={onBackToSquare}
         />
       </div>
     );
   }
 
   if (route.chapterId == null) {
-    return <Detail detail={detail} onRead={(chapterId) => go({ kind: 'detail', format: detail.format, storyId: detail.id, chapterId })} />;
+    return (
+      <Detail
+        detail={detail}
+        onRead={(chapterId) => go({ kind: 'detail', format: detail.format, storyId: detail.id, chapterId })}
+        onBackToSquare={onBackToSquare}
+      />
+    );
   }
 
   const current = detail.chapters.find((chapter) => chapter.id === route.chapterId);
@@ -483,21 +531,33 @@ function StoryView({ route }: { route: Extract<SquareLocation, { kind: 'detail' 
           icon={<BookOpenText size={42} />}
           text="章节不存在或尚未公开。"
           action="返回作品详情"
-          onAction={() => go({ kind: 'detail', format: detail.format, storyId: detail.id })}
+          onAction={() => go({ kind: 'detail', format: detail.format, storyId: detail.id }, true)}
         />
       </div>
     );
   }
 
-  return <Reader detail={detail} chapterId={current.id} onBack={() => go({ kind: 'detail', format: detail.format, storyId: detail.id })} />;
+  const backToDetail = () => {
+    // 应用内进入阅读器：上一条历史就是作品详情，直接回退保持历史栈干净。
+    if (!enteredOnChapterRef.current && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    // 直接打开章节链接（分享/刷新）：替换到详情页，兜底保证可返回。
+    go({ kind: 'detail', format: detail.format, storyId: detail.id }, true);
+  };
+
+  return <Reader detail={detail} chapterId={current.id} onBack={backToDetail} />;
 }
 
 function Detail({
   detail,
   onRead,
+  onBackToSquare,
 }: {
   detail: SquareStoryDetail;
   onRead: (chapterId: number) => void;
+  onBackToSquare: () => void;
 }) {
   const saved = useMemo(() => readReadingState(detail.id, detail.format), [detail.format, detail.id]);
   const chapterCount = detail.chapters.length;
@@ -509,20 +569,13 @@ function Detail({
   const otherFormats = detail.available_formats.filter((format) => format !== detail.format);
   const intro = detail.description?.trim() || '作者暂未留下简介。';
   const savedProgress = progressPercent(saved.progress);
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-    go({ kind: 'list', format: detail.format, page: 0, query: '' }, true);
-  };
 
   return (
     <main className="fanqie-detail-shell flex min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         <button
           className="mb-5 inline-flex min-h-11 items-center gap-2 text-sm text-text-secondary transition hover:text-text-primary"
-          onClick={handleBack}
+          onClick={onBackToSquare}
         >
           <ArrowLeft size={18} />
           返回广场
@@ -594,7 +647,7 @@ function Detail({
                   <button
                     key={format}
                     className="fanqie-cta-secondary"
-                    onClick={() => go({ kind: 'detail', format, storyId: detail.id })}
+                    onClick={() => go({ kind: 'detail', format, storyId: detail.id }, true)}
                   >
                     查看{formatLabel(format)}版
                   </button>
@@ -646,7 +699,7 @@ function Detail({
                 icon={<LibraryBig size={42} />}
                 text="作品还没有公开章节。"
                 action="返回广场"
-                onAction={() => go({ kind: 'list', format: detail.format, page: 0, query: '' })}
+                onAction={onBackToSquare}
               />
             </div>
           ) : (
@@ -823,7 +876,7 @@ function Reader({
 
   const navigate = (offset: -1 | 1) => {
     const next = detail.chapters[index + offset];
-    if (next) go({ kind: 'detail', format: detail.format, storyId: detail.id, chapterId: next.id });
+    if (next) go({ kind: 'detail', format: detail.format, storyId: detail.id, chapterId: next.id }, true);
   };
 
   // Keyboard navigation
@@ -995,7 +1048,7 @@ function Reader({
                   format: detail.format,
                   storyId: detail.id,
                   chapterId: Number(event.target.value),
-                })}
+                }, true)}
               >
                 {detail.chapters.map((item) => (
                   <option key={item.id} value={item.id}>{chapterTitle(item)}</option>

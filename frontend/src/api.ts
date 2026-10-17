@@ -19,7 +19,6 @@ export interface ChallengeConfig {
   provider: string;
   siteKey: string;
   registrationRequired: boolean;
-  loginMode: 'always' | 'adaptive' | 'disabled';
 }
 
 interface ChallengeConfigResponse {
@@ -27,14 +26,13 @@ interface ChallengeConfigResponse {
   provider?: string;
   site_key?: string;
   registration_required?: boolean;
-  login_mode?: 'always' | 'adaptive' | 'disabled';
 }
 
 export class ApiError extends Error {
-  code?: string;
+  code?: number;
   status?: number;
 
-  constructor(message: string, options?: { code?: string; status?: number }) {
+  constructor(message: string, options?: { code?: number; status?: number }) {
     super(message);
     this.name = 'ApiError';
     this.code = options?.code;
@@ -179,13 +177,11 @@ export async function getChallengeConfig(): Promise<ChallengeConfig> {
   });
   if (!res.ok) throw await toApiError(res);
   const payload = await res.json() as ChallengeConfigResponse;
-  const mode = payload.login_mode;
   return {
     enabled: Boolean(payload.enabled),
     provider: payload.provider ?? '',
     siteKey: payload.site_key ?? '',
     registrationRequired: Boolean(payload.registration_required),
-    loginMode: mode === 'always' ? 'always' : mode === 'adaptive' ? 'adaptive' : 'disabled',
   };
 }
 
@@ -198,12 +194,21 @@ export async function getCaptchaImage(): Promise<{ captchaId: string; image: str
   return { captchaId: payload.captcha_id, image: payload.image };
 }
 
-export async function loginUser(username: string, password: string, challengeToken?: string): Promise<void> {
+export async function getMailConfig(): Promise<{ enabled: boolean }> {
+  const res = await fetch(`${BASE}/api/mail/config`, {
+    credentials: 'same-origin',
+  });
+  if (!res.ok) throw await toApiError(res);
+  const payload = await res.json();
+  return { enabled: Boolean(payload.data) };
+}
+
+export async function loginUser(email: string, password: string, challengeToken?: string): Promise<void> {
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
     headers: requestHeaders('POST', true),
     credentials: 'same-origin',
-    body: JSON.stringify({ username, password, challenge_token: challengeToken }),
+    body: JSON.stringify({ email, password, challenge_token: challengeToken }),
   });
   if (!res.ok) throw await toApiError(res);
   await fetchAndCacheUser();
@@ -211,17 +216,74 @@ export async function loginUser(username: string, password: string, challengeTok
   clearAppDataStorage();
 }
 
-export async function registerUser(username: string, email: string, password: string, challengeToken?: string): Promise<void> {
+export async function registerUser(
+  username: string,
+  email: string,
+  password: string,
+  challengeToken?: string,
+  emailCode?: string,
+): Promise<void> {
   const res = await fetch(`${BASE}/api/auth/register`, {
     method: 'POST',
     headers: requestHeaders('POST', true),
     credentials: 'same-origin',
-    body: JSON.stringify({ username, email, password, challenge_token: challengeToken }),
+    body: JSON.stringify({ username, email, password, challenge_token: challengeToken, email_code: emailCode }),
   });
   if (!res.ok) throw await toApiError(res);
   await fetchAndCacheUser();
   clearLegacyAuthStorage();
   clearAppDataStorage();
+}
+
+export type EmailCodeScenario = 'register' | 'login' | 'reset_password';
+
+export async function sendEmailCode(email: string, scenario: EmailCodeScenario): Promise<void> {
+  const res = await fetch(`${BASE}/api/mail/send-code`, {
+    method: 'POST',
+    headers: requestHeaders('POST', true),
+    credentials: 'same-origin',
+    body: JSON.stringify({ email, scenario }),
+  });
+  if (!res.ok) throw await toApiError(res);
+}
+
+export async function loginByCode(email: string, code: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/auth/login-by-code`, {
+    method: 'POST',
+    headers: requestHeaders('POST', true),
+    credentials: 'same-origin',
+    body: JSON.stringify({ email, code }),
+  });
+  if (!res.ok) throw await toApiError(res);
+  await fetchAndCacheUser();
+  clearLegacyAuthStorage();
+  clearAppDataStorage();
+}
+
+/** 找回密码第一步：校验验证码，成功返回一次性重置票据 */
+export async function verifyResetCode(email: string, code: string): Promise<string> {
+  const res = await fetch(`${BASE}/api/auth/password/verify-code`, {
+    method: 'POST',
+    headers: requestHeaders('POST', true),
+    credentials: 'same-origin',
+    body: JSON.stringify({ email, code }),
+  });
+  if (!res.ok) throw await toApiError(res);
+  const payload = await res.json();
+  const ticket = typeof payload?.reset_ticket === 'string' ? payload.reset_ticket : '';
+  if (!ticket) throw new Error('验证码校验响应缺少重置凭证');
+  return ticket;
+}
+
+/** 找回密码第二步：凭一次性票据重置密码 */
+export async function resetPassword(resetTicket: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/auth/password/reset`, {
+    method: 'POST',
+    headers: requestHeaders('POST', true),
+    credentials: 'same-origin',
+    body: JSON.stringify({ reset_ticket: resetTicket, new_password: newPassword }),
+  });
+  if (!res.ok) throw await toApiError(res);
 }
 
 export async function logoutUser(): Promise<void> {
@@ -1096,35 +1158,32 @@ export interface ImportStoryProgress {
   message: string;
 }
 
-function parseApiErrorResponse(text: string): { detail: string; code?: string } {
+function parseApiErrorResponse(text: string): { message: string; code?: number } {
   try {
     const data = JSON.parse(text);
-    if (typeof data?.detail === 'string') {
-      return { detail: data.detail, code: typeof data?.code === 'string' ? data.code : undefined };
+    if (typeof data?.message === 'string') {
+      return { message: data.message, code: typeof data?.code === 'number' ? data.code : undefined };
     }
-    if (Array.isArray(data?.detail)) {
-      return {
-        detail: data.detail.map((item: any) => item?.msg || JSON.stringify(item)).join('; '),
-        code: typeof data?.code === 'string' ? data.code : undefined,
-      };
+    if (typeof data?.detail === 'string') {
+      return { message: data.detail, code: typeof data?.code === 'number' ? data.code : undefined };
     }
     if (typeof data?.error === 'string') {
-      return { detail: data.error, code: typeof data?.code === 'string' ? data.code : undefined };
+      return { message: data.error, code: typeof data?.code === 'number' ? data.code : undefined };
     }
   } catch {
     // Plain text response.
   }
-  return { detail: text || 'Request failed' };
+  return { message: text || 'Request failed' };
 }
 
 function parseApiError(text: string): string {
-  return parseApiErrorResponse(text).detail;
+  return parseApiErrorResponse(text).message;
 }
 
 async function toApiError(response: Response): Promise<ApiError> {
   const text = await response.text();
   const parsed = parseApiErrorResponse(text);
-  return new ApiError(parsed.detail, { code: parsed.code, status: response.status });
+  return new ApiError(parsed.message, { code: parsed.code, status: response.status });
 }
 
 export function importStoryPackage(

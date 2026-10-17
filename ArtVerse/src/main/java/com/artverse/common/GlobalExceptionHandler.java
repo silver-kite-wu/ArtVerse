@@ -21,7 +21,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Map<String, Object>> handleBusiness(BusinessException ex) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("detail", ex.getMessage());
+        body.put("message", ex.getMessage());
         if (ex.getCode() != null) {
             body.put("code", ex.getCode());
         }
@@ -36,7 +36,7 @@ public class GlobalExceptionHandler {
         log.info("Authentication required: method={}, uri={}, reason={}",
                 request.getMethod(), request.getRequestURI(), ex.getMessage());
         return ResponseEntity.status(401).body(Map.of(
-                "detail", "Login expired",
+                "message", "Login expired",
                 "code", AuthErrorCodes.AUTH_EXPIRED));
     }
 
@@ -46,7 +46,7 @@ public class GlobalExceptionHandler {
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .findFirst()
                 .orElse("Validation failed");
-        return ResponseEntity.badRequest().body(Map.of("detail", detail));
+        return ResponseEntity.badRequest().body(Map.of("message", detail));
     }
 
     @ExceptionHandler(Exception.class)
@@ -56,7 +56,7 @@ public class GlobalExceptionHandler {
             return ResponseEntity.noContent().build();
         }
         log.error("Unhandled exception", ex);
-        return ResponseEntity.internalServerError().body(Map.of("detail", "Internal server error"));
+        return ResponseEntity.internalServerError().body(Map.of("message", "Internal server error"));
     }
 
     private boolean isClientDisconnect(Throwable ex) {

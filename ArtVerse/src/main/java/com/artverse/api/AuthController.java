@@ -5,9 +5,13 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.api.dto.AuthDtos.AuthResponse;
 import com.artverse.api.dto.AuthDtos.CaptchaImageResponse;
 import com.artverse.api.dto.AuthDtos.ChallengeConfigResponse;
+import com.artverse.api.dto.AuthDtos.LoginByCodeRequest;
 import com.artverse.api.dto.AuthDtos.LoginRequest;
 import com.artverse.api.dto.AuthDtos.RefreshRequest;
+import com.artverse.api.dto.AuthDtos.ResetPasswordRequest;
 import com.artverse.api.dto.AuthDtos.RegisterRequest;
+import com.artverse.api.dto.AuthDtos.VerifyResetCodeRequest;
+import com.artverse.api.dto.AuthDtos.VerifyResetCodeResponse;
 import com.artverse.application.AuthService;
 import com.artverse.application.RefreshTokenService;
 import com.artverse.application.RefreshTokenService.Consumption;
@@ -53,8 +57,7 @@ public class AuthController {
                         authGuardService.isChallengeEnabled(),
                         authGuardService.provider(),
                         authGuardService.siteKey(),
-                        authGuardService.requiresRegistrationChallenge(),
-                        authGuardService.loginMode()
+                        authGuardService.requiresRegistrationChallenge()
                 ));
     }
 
@@ -75,7 +78,7 @@ public class AuthController {
             HttpServletResponse response
     ) {
         authGuardService.enforceRegistrationChallenge(req.challengeToken(), request);
-        User user = authService.register(req.username(), req.email(), req.password());
+        User user = authService.register(req.username(), req.email(), req.password(), req.emailCode());
         StpUtil.login(user.getId(), "PC");
         String refreshToken = refreshTokenService.issue(user.getId());
         authCookieService.writeRefreshCookie(response, refreshToken, refreshTokenService.getTimeoutSeconds());
@@ -90,10 +93,21 @@ public class AuthController {
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        authGuardService.enforceLoginRisk(req.username(), req.challengeToken(), request);
+        authGuardService.enforceLoginRisk(req.email(), request);
+        if (authGuardService.isPasswordLoginLocked(req.email())) {
+            throw BusinessException.withCode(403,
+                    "密码错误次数过多，请 10 分钟后重试，或改用邮箱验证码登录 / 找回密码",
+                    AuthErrorCodes.PASSWORD_LOGIN_LOCKED);
+        }
+        // 分级防爆破：窗口内已错 3 次（未达 6 次锁定）时，要求附加图形验证码；
+        // 挑战阶段的请求同样计为一次失败尝试，否则计数停滞在阈值、永远无法升级到锁定
+        if (authGuardService.requiresPasswordChallenge(req.email())) {
+            authGuardService.recordPasswordFailure(req.email());
+            authGuardService.enforcePasswordChallenge(req.challengeToken(), request);
+        }
         try {
-            User user = authService.login(req.username(), req.password());
-            authGuardService.clearLoginFailures(req.username());
+            User user = authService.login(req.email(), req.password());
+            authGuardService.clearPasswordFailures(req.email());
             StpUtil.login(user.getId(), "PC");
             String refreshToken = refreshTokenService.issue(user.getId());
             authCookieService.writeRefreshCookie(response, refreshToken, refreshTokenService.getTimeoutSeconds());
@@ -101,10 +115,52 @@ public class AuthController {
             return noStore(toResponse(StpUtil.getTokenInfo()));
         } catch (BusinessException ex) {
             if (ex.getStatus() == 401) {
-                authGuardService.recordLoginFailure(req.username());
+                authGuardService.recordPasswordFailure(req.email());
+                // 错误次数已达挑战阈值时，在凭据错误响应上标记 40301，引导前端追加图形验证码
+                if (authGuardService.requiresPasswordChallenge(req.email())) {
+                    throw BusinessException.withCode(401, "邮箱或密码错误，请完成图形验证码后重试",
+                            AuthErrorCodes.CHALLENGE_REQUIRED);
+                }
             }
             throw ex;
         }
+    }
+
+    @PostMapping("/login-by-code")
+    @RateLimit(windowSeconds = 60, maxRequests = 10, key = "login-code")
+    public ResponseEntity<AuthResponse> loginByCode(
+            @Valid @RequestBody LoginByCodeRequest req,
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) {
+        authGuardService.enforceLoginRisk(req.email(), request);
+        User user = authService.loginByCode(req.email(), req.code());
+        StpUtil.login(user.getId(), "PC");
+        String refreshToken = refreshTokenService.issue(user.getId());
+        authCookieService.writeRefreshCookie(response, refreshToken, refreshTokenService.getTimeoutSeconds());
+        log.info("User logged in by code: id={}, username={}", user.getId(), user.getUsername());
+        return noStore(toResponse(StpUtil.getTokenInfo()));
+    }
+
+    /** 找回密码第一步：校验验证码，签发一次性重置票据 */
+    @PostMapping("/password/verify-code")
+    @RateLimit(windowSeconds = 60, maxRequests = 10, key = "password-verify")
+    public ResponseEntity<VerifyResetCodeResponse> verifyPasswordResetCode(@Valid @RequestBody VerifyResetCodeRequest req) {
+        String ticket = authService.verifyPasswordResetCode(req.email(), req.code());
+        log.info("Password reset code verified: email={}", req.email());
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new VerifyResetCodeResponse(ticket));
+    }
+
+    /** 找回密码第二步：凭一次性票据重置密码 */
+    @PostMapping("/password/reset")
+    @RateLimit(windowSeconds = 60, maxRequests = 5, key = "password-reset")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
+        authService.resetPassword(req.resetTicket(), req.newPassword());
+        return ResponseEntity.noContent()
+                .cacheControl(CacheControl.noStore())
+                .build();
     }
 
     @PostMapping("/logout")

@@ -75,11 +75,10 @@ class AuthControllerTest {
         when(authGuardService.provider()).thenReturn("graphic-captcha");
         when(authGuardService.siteKey()).thenReturn("");
         when(authGuardService.requiresRegistrationChallenge()).thenReturn(true);
-        when(authGuardService.loginMode()).thenReturn("always");
 
         ResponseEntity<ChallengeConfigResponse> result = controller.challengeConfig();
 
-        assertThat(result.getBody()).isEqualTo(new ChallengeConfigResponse(true, "graphic-captcha", "", true, "always"));
+        assertThat(result.getBody()).isEqualTo(new ChallengeConfigResponse(true, "graphic-captcha", "", true));
     }
 
     @Test
@@ -105,17 +104,19 @@ class AuthControllerTest {
             User user = new User();
             user.setId(9L);
             user.setUsername("alice");
-            when(authService.login("alice", "SecurePass123")).thenReturn(user);
+            when(authService.login("alice@example.com", "SecurePass123")).thenReturn(user);
             when(refreshTokenService.issue(9L)).thenReturn("refresh-token");
             when(refreshTokenService.getTimeoutSeconds()).thenReturn(43_200L);
             SaTokenInfo tokenInfo = new SaTokenInfo();
             tokenInfo.setTokenTimeout(3_600);
             stpUtil.when(StpUtil::getTokenInfo).thenReturn(tokenInfo);
+            when(authGuardService.isPasswordLoginLocked("alice@example.com")).thenReturn(false);
+            when(authGuardService.requiresPasswordChallenge("alice@example.com")).thenReturn(false);
 
-            var result = controller.login(new LoginRequest("alice", "SecurePass123", "challenge-token"), request, response);
+            var result = controller.login(new LoginRequest("alice@example.com", "SecurePass123", null), request, response);
 
-            verify(authGuardService).enforceLoginRisk("alice", "challenge-token", request);
-            verify(authGuardService).clearLoginFailures("alice");
+            verify(authGuardService).enforceLoginRisk("alice@example.com", request);
+            verify(authGuardService).clearPasswordFailures("alice@example.com");
             stpUtil.verify(() -> StpUtil.login(9L, "PC"));
             verify(authCookieService).writeRefreshCookie(response, "refresh-token", 43_200L);
             assertThat(result.getBody().authenticated()).isTrue();
@@ -127,15 +128,75 @@ class AuthControllerTest {
         void recordsFailureOn401() {
             MockHttpServletRequest request = new MockHttpServletRequest();
             MockHttpServletResponse response = new MockHttpServletResponse();
-            when(authService.login("alice", "wrong-password"))
-                    .thenThrow(new BusinessException(401, "用户名或密码错误"));
+            when(authGuardService.isPasswordLoginLocked("alice@example.com")).thenReturn(false);
+            when(authGuardService.requiresPasswordChallenge("alice@example.com")).thenReturn(false);
+            when(authService.login("alice@example.com", "wrong-password"))
+                    .thenThrow(new BusinessException(401, "邮箱或密码错误"));
 
-            assertThatThrownBy(() -> controller.login(new LoginRequest("alice", "wrong-password", null), request, response))
+            assertThatThrownBy(() -> controller.login(new LoginRequest("alice@example.com", "wrong-password", null), request, response))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("用户名或密码错误");
+                    .hasMessageContaining("邮箱或密码错误");
 
-            verify(authGuardService).recordLoginFailure("alice");
+            verify(authGuardService).recordPasswordFailure("alice@example.com");
             verify(authCookieService, never()).writeRefreshCookie(any(HttpServletResponse.class), any(), any(Long.class));
+        }
+
+        @Test
+        @DisplayName("rejects password login with 40304 when failures exceed the limit")
+        void rejectsWhenPasswordLoginLocked() {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            when(authGuardService.isPasswordLoginLocked("alice@example.com")).thenReturn(true);
+
+            assertThatThrownBy(() -> controller.login(new LoginRequest("alice@example.com", "SecurePass123", null), request, response))
+                    .isInstanceOf(BusinessException.class)
+                    .matches(ex -> ((BusinessException) ex).getStatus() == 403)
+                    .matches(ex -> Integer.valueOf(AuthErrorCodes.PASSWORD_LOGIN_LOCKED).equals(((BusinessException) ex).getCode()));
+
+            verify(authService, never()).login(any(), any());
+            verify(authCookieService, never()).writeRefreshCookie(any(HttpServletResponse.class), any(), any(Long.class));
+        }
+
+        @Test
+        @DisplayName("enforces graphic challenge when failures reach the challenge threshold")
+        void enforcesChallengeWhenRequired() {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            User user = new User();
+            user.setId(9L);
+            user.setUsername("alice");
+            when(authGuardService.isPasswordLoginLocked("alice@example.com")).thenReturn(false);
+            when(authGuardService.requiresPasswordChallenge("alice@example.com")).thenReturn(true);
+            when(authService.login("alice@example.com", "SecurePass123")).thenReturn(user);
+            when(refreshTokenService.issue(9L)).thenReturn("refresh-token");
+            when(refreshTokenService.getTimeoutSeconds()).thenReturn(43_200L);
+            SaTokenInfo tokenInfo = new SaTokenInfo();
+            tokenInfo.setTokenTimeout(3_600);
+            stpUtil.when(StpUtil::getTokenInfo).thenReturn(tokenInfo);
+
+            controller.login(new LoginRequest("alice@example.com", "SecurePass123", "challenge-token"), request, response);
+
+            verify(authGuardService).recordPasswordFailure("alice@example.com");
+            verify(authGuardService).enforcePasswordChallenge("challenge-token", request);
+        }
+
+        @Test
+        @DisplayName("marks challenge required (40301) on a failed login after the threshold")
+        void flagsChallengeRequiredOn401() {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            when(authGuardService.isPasswordLoginLocked("alice@example.com")).thenReturn(false);
+            // 入口检查时尚未达到阈值，记录失败后达到 → catch 中标记 40301
+            when(authGuardService.requiresPasswordChallenge("alice@example.com")).thenReturn(false, true);
+            when(authService.login("alice@example.com", "wrong-password"))
+                    .thenThrow(new BusinessException(401, "邮箱或密码错误"));
+
+            assertThatThrownBy(() -> controller.login(new LoginRequest("alice@example.com", "wrong-password", null), request, response))
+                    .isInstanceOf(BusinessException.class)
+                    .matches(ex -> ((BusinessException) ex).getStatus() == 401)
+                    .matches(ex -> Integer.valueOf(AuthErrorCodes.CHALLENGE_REQUIRED).equals(((BusinessException) ex).getCode()));
+
+            verify(authGuardService).recordPasswordFailure("alice@example.com");
         }
     }
 
@@ -151,14 +212,14 @@ class AuthControllerTest {
             User user = new User();
             user.setId(5L);
             user.setUsername("alice");
-            when(authService.register("alice", "alice@example.com", "SecurePass123")).thenReturn(user);
+            when(authService.register("alice", "alice@example.com", "SecurePass123", "123456")).thenReturn(user);
             when(refreshTokenService.issue(5L)).thenReturn("refresh-token");
             when(refreshTokenService.getTimeoutSeconds()).thenReturn(43_200L);
             SaTokenInfo tokenInfo = new SaTokenInfo();
             tokenInfo.setTokenTimeout(3_600);
             stpUtil.when(StpUtil::getTokenInfo).thenReturn(tokenInfo);
 
-            controller.register(new RegisterRequest("alice", "alice@example.com", "SecurePass123", "token"), request, response);
+            controller.register(new RegisterRequest("alice", "alice@example.com", "SecurePass123", "123456", "token"), request, response);
 
             verify(authGuardService).enforceRegistrationChallenge("token", request);
             verify(authCookieService).writeRefreshCookie(response, "refresh-token", 43_200L);
@@ -221,7 +282,7 @@ class AuthControllerTest {
             assertThatThrownBy(() -> controller.refresh(null, request, response))
                     .isInstanceOf(BusinessException.class)
                     .matches(ex -> ((BusinessException) ex).getStatus() == 401)
-                    .matches(ex -> AuthErrorCodes.AUTH_EXPIRED.equals(((BusinessException) ex).getCode()));
+                    .matches(ex -> Integer.valueOf(AuthErrorCodes.AUTH_EXPIRED).equals(((BusinessException) ex).getCode()));
         }
     }
 

@@ -20,30 +20,41 @@ public class AuthRiskService {
         this.rateLimiter = rateLimiter;
     }
 
-    public LoginRiskDecision recordLoginAttempt(String username, String clientIp) {
+    /** 仅做 IP 维度硬限流：超过 login-ip-hard-limit 直接 429 */
+    public void enforceLoginIpLimit(String clientIp) {
         ArtVerseProperties.Risk risk = properties.getAuth().getRisk();
         long ipCount = rateLimiter.increment(key("login-ip", clientIp), risk.getLoginIpWindowSeconds());
-        long failureCount = rateLimiter.count(key("login-failure", username), risk.getLoginFailureWindowSeconds());
-        boolean hardLimited = ipCount > risk.getLoginIpHardLimit();
-        boolean challengeRequired = failureCount >= risk.getLoginFailureChallengeThreshold()
-                || ipCount > risk.getLoginIpChallengeThreshold();
-        return new LoginRiskDecision(challengeRequired, hardLimited, ipCount, failureCount);
+        if (ipCount > risk.getLoginIpHardLimit()) {
+            throw BusinessException.withCode(429, "登录请求过于频繁，请稍后重试", AuthErrorCodes.AUTH_RATE_LIMITED);
+        }
     }
 
-    public void recordLoginFailure(String username) {
+    /** 记录一次密码登录失败：窗口期内累计，用于分级防爆破 */
+    public void recordPasswordFailure(String username) {
         ArtVerseProperties.Risk risk = properties.getAuth().getRisk();
-        rateLimiter.increment(key("login-failure", username), risk.getLoginFailureWindowSeconds());
+        rateLimiter.increment(key("password-failure", username), risk.getPasswordFailureWindowSeconds());
     }
 
-    public void clearLoginFailures(String username) {
-        rateLimiter.clear(key("login-failure", username));
-    }
-
-    public boolean allowDegradedLogin(String username, String clientIp) {
+    /**
+     * 分级防爆破第一档：窗口内密码失败达到 challengeThreshold（且尚未锁定）时，
+     * 后续密码登录必须附加图形验证码
+     */
+    public boolean requiresPasswordChallenge(String username) {
         ArtVerseProperties.Risk risk = properties.getAuth().getRisk();
-        long accountCount = rateLimiter.increment(key("login-degraded-account", username), risk.getDegradedLoginAccountWindowSeconds());
-        long ipCount = rateLimiter.increment(key("login-degraded-ip", clientIp), risk.getDegradedLoginIpWindowSeconds());
-        return accountCount <= risk.getDegradedLoginAccountLimit() && ipCount <= risk.getDegradedLoginIpLimit();
+        long failures = rateLimiter.count(key("password-failure", username), risk.getPasswordFailureWindowSeconds());
+        return failures >= risk.getPasswordChallengeThreshold() && failures < risk.getPasswordFailureLimit();
+    }
+
+    /** 分级防爆破第二档：窗口内密码失败达到 passwordFailureLimit 后锁定密码登录 */
+    public boolean isPasswordLoginLocked(String username) {
+        ArtVerseProperties.Risk risk = properties.getAuth().getRisk();
+        long failures = rateLimiter.count(key("password-failure", username), risk.getPasswordFailureWindowSeconds());
+        return failures >= risk.getPasswordFailureLimit();
+    }
+
+    /** 登录成功后清空密码失败计数 */
+    public void clearPasswordFailures(String username) {
+        rateLimiter.clear(key("password-failure", username));
     }
 
     public void enforceRegistrationLimit(String clientIp) {
@@ -74,13 +85,5 @@ public class AuthRiskService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();
-    }
-
-    public record LoginRiskDecision(
-            boolean challengeRequired,
-            boolean hardLimited,
-            long ipCount,
-            long failureCount
-    ) {
     }
 }

@@ -3,6 +3,7 @@ package com.artverse.application;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.Role;
 import com.artverse.domain.User;
+import com.artverse.mail.EmailVerificationService;
 import com.artverse.persistence.UserRepository;
 import com.artverse.security.PasswordHashService;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,8 @@ class AuthServiceTest {
     private UserRepository userRepository;
     @Mock
     private PasswordHashService passwordHashService;
+    @Mock
+    private EmailVerificationService emailVerificationService;
     @InjectMocks
     private AuthService authService;
 
@@ -56,7 +59,7 @@ class AuthServiceTest {
             saved.setRole(Role.USER);
             when(userRepository.saveAndFlush(any(User.class))).thenReturn(saved);
 
-            User result = authService.register("  Alice  ", " Test@Example.com ", PASSWORD);
+            User result = authService.register("  Alice  ", " Test@Example.com ", PASSWORD, "123456");
 
             ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
             verify(userRepository).saveAndFlush(userCaptor.capture());
@@ -67,13 +70,26 @@ class AuthServiceTest {
         }
 
         @Test
-        @DisplayName("rejects duplicate username or email")
+        @DisplayName("rejects duplicate username with a specific message")
         void rejectsDuplicateIdentity() {
             when(userRepository.existsByUsername("Alice")).thenReturn(true);
 
-            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", PASSWORD))
+            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", PASSWORD, "123456"))
                     .isInstanceOf(BusinessException.class)
-                    .matches(ex -> ((BusinessException) ex).getStatus() == 409);
+                    .matches(ex -> ((BusinessException) ex).getStatus() == 409)
+                    .hasMessageContaining("用户名已被占用");
+        }
+
+        @Test
+        @DisplayName("rejects duplicate email with a specific message")
+        void rejectsDuplicateEmail() {
+            when(userRepository.existsByUsername("Alice")).thenReturn(false);
+            when(userRepository.existsByEmail("test@example.com")).thenReturn(true);
+
+            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", PASSWORD, "123456"))
+                    .isInstanceOf(BusinessException.class)
+                    .matches(ex -> ((BusinessException) ex).getStatus() == 409)
+                    .hasMessageContaining("该邮箱已被注册");
         }
 
         @Test
@@ -84,7 +100,7 @@ class AuthServiceTest {
             when(passwordHashService.encode(PASSWORD)).thenReturn("argon-hash");
             when(userRepository.saveAndFlush(any(User.class))).thenThrow(new DataIntegrityViolationException("duplicate"));
 
-            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", PASSWORD))
+            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", PASSWORD, "123456"))
                     .isInstanceOf(BusinessException.class)
                     .matches(ex -> ((BusinessException) ex).getStatus() == 409);
         }
@@ -92,7 +108,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("rejects password shorter than 8 characters")
         void rejectsShortPassword() {
-            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", "short"))
+            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", "short", "123456"))
                     .isInstanceOf(BusinessException.class)
                     .matches(ex -> ((BusinessException) ex).getStatus() == 400);
         }
@@ -100,7 +116,7 @@ class AuthServiceTest {
         @Test
         @DisplayName("rejects password longer than 16 characters")
         void rejectsLongPassword() {
-            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", "12345678901234567"))
+            assertThatThrownBy(() -> authService.register("Alice", "test@example.com", "12345678901234567", "123456"))
                     .isInstanceOf(BusinessException.class)
                     .matches(ex -> ((BusinessException) ex).getStatus() == 400);
         }
@@ -123,12 +139,12 @@ class AuthServiceTest {
         @Test
         @DisplayName("upgrades legacy password hash after successful login")
         void upgradesLegacyHash() {
-            when(userRepository.findByUsername("Alice")).thenReturn(Optional.of(user));
+            when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(user));
             when(passwordHashService.matches(PASSWORD, "$2a$10$legacy")).thenReturn(true);
             when(passwordHashService.requiresUpgrade("$2a$10$legacy")).thenReturn(true);
             when(passwordHashService.encode(PASSWORD)).thenReturn("argon-hash");
 
-            User result = authService.login(" Alice ", PASSWORD);
+            User result = authService.login(" Alice@Example.COM ", PASSWORD);
 
             assertThat(result.getPasswordHash()).isEqualTo("argon-hash");
             verify(userRepository).save(user);
@@ -137,9 +153,9 @@ class AuthServiceTest {
         @Test
         @DisplayName("does dummy verification for nonexistent users")
         void consumesDummyHashForMissingUser() {
-            when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
+            when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> authService.login("ghost", PASSWORD))
+            assertThatThrownBy(() -> authService.login("ghost@example.com", PASSWORD))
                     .isInstanceOf(BusinessException.class)
                     .matches(ex -> ((BusinessException) ex).getStatus() == 401);
 
@@ -150,13 +166,13 @@ class AuthServiceTest {
         @Test
         @DisplayName("returns generic 401 for wrong password")
         void wrongPassword() {
-            when(userRepository.findByUsername("Alice")).thenReturn(Optional.of(user));
+            when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(user));
             when(passwordHashService.matches("wrong-password-value", "$2a$10$legacy")).thenReturn(false);
 
-            assertThatThrownBy(() -> authService.login("Alice", "wrong-password-value"))
+            assertThatThrownBy(() -> authService.login("alice@example.com", "wrong-password-value"))
                     .isInstanceOf(BusinessException.class)
                     .matches(ex -> ((BusinessException) ex).getStatus() == 401)
-                    .hasMessageContaining("用户名或密码错误");
+                    .hasMessageContaining("邮箱或密码错误");
         }
     }
 }

@@ -63,7 +63,6 @@ public class ArtVerseProperties {
     public static class Challenge {
         private ChallengeMode mode = ChallengeMode.ENFORCE;
         private String provider = "graphic-captcha";
-        private LoginChallengeMode loginChallengeMode = LoginChallengeMode.ALWAYS;
         private int captchaLength = 4;
         private int captchaImageWidth = 160;
         private int captchaImageHeight = 50;
@@ -78,25 +77,16 @@ public class ArtVerseProperties {
         ENFORCE
     }
 
-    public enum LoginChallengeMode {
-        ALWAYS,
-        ADAPTIVE
-    }
-
     @Data
     public static class Risk {
         private String hmacKey = "";
-        private int loginFailureChallengeThreshold = 3;
-        private int loginFailureWindowSeconds = 900;
-        private int loginIpChallengeThreshold = 20;
+        private int passwordChallengeThreshold = 3;
+        private int passwordFailureLimit = 6;
+        private int passwordFailureWindowSeconds = 300;
         private int loginIpHardLimit = 100;
         private int loginIpWindowSeconds = 300;
         private int registerIpLimit = 10;
         private int registerIpWindowSeconds = 3_600;
-        private int degradedLoginAccountLimit = 3;
-        private int degradedLoginIpLimit = 10;
-        private int degradedLoginAccountWindowSeconds = 900;
-        private int degradedLoginIpWindowSeconds = 300;
     }
 
     @Data

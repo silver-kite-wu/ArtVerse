@@ -2,6 +2,10 @@ server:
   port: 8080
 
 spring:
+  # 加载 .env（properties 格式）：开发环境在仓库根目录 ../.env，生产在 JAR 同目录 .env；
+  # 同名操作系统环境变量优先级更高，缺失不报错
+  config:
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
   datasource:
     # 三重保险：
     #   1. options=-c client_encoding=UTF8 → 建链时直接发 SET 命令
@@ -11,7 +15,7 @@ spring:
     #      解读字节，导致双重 UTF-8 编码的中文以 Latin-1 形式读出。
     url: jdbc:postgresql://localhost:5432/manga_novel?ApplicationName=artverse&stringtype=unspecified&options=-c%20client_encoding%3DUTF8&charSet=UTF-8
     username: postgres
-    password: postgres
+    password: ${POSTGRES_PASSWORD:postgres}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -31,10 +35,26 @@ spring:
     scheduling:
       pool:
         size: 4
+  # SMTP 直连发信（原独立 mail-service 已并入主后端）
+  # 凭据一律来自 .env / 环境变量，此处不留明文；未配置 host 时发信功能自动禁用
+  mail:
+    host: ${ARTVERSE_MAIL_HOST:}
+    port: ${ARTVERSE_MAIL_PORT:465}
+    username: ${ARTVERSE_MAIL_USERNAME:}
+    password: ${ARTVERSE_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: ${ARTVERSE_MAIL_SSL:true}
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 5000
 
 artverse:
   secrets:
-    encryption-key: ${ARTVERSE_SECRET_ENCRYPTION_KEY:ArtVerse!ApiKey1}
+    encryption-key: ${ARTVERSE_SECRET_ENCRYPTION_KEY:}
     active-key-version: 2
   auth:
     cookie:
@@ -45,7 +65,6 @@ artverse:
     challenge:
       mode: ${ARTVERSE_AUTH_CHALLENGE_MODE:enforce}
       provider: graphic-captcha
-      login-challenge-mode: always
       captcha-length: 4
       captcha-image-width: 160
       captcha-image-height: 50
@@ -53,18 +72,15 @@ artverse:
       captcha-font-size: 28
       captcha-interference-lines: 5
     risk:
-      hmac-key: ${ARTVERSE_AUTH_RISK_HMAC_KEY:dev-auth-risk-hmac}
-      login-failure-challenge-threshold: 3
-      login-failure-window-seconds: 900
-      login-ip-challenge-threshold: 20
+      hmac-key: ${ARTVERSE_AUTH_RISK_HMAC_KEY:}
+      # 密码登录分级防爆破：5 分钟窗口内错 3 次 → 附加图形验证码；错 6 次 → 锁定密码登录（邮箱验证码登录与找回密码不受影响）
+      password-challenge-threshold: 3
+      password-failure-limit: 6
+      password-failure-window-seconds: 300
       login-ip-hard-limit: 100
       login-ip-window-seconds: 300
       register-ip-limit: 10
       register-ip-window-seconds: 3600
-      degraded-login-account-limit: 3
-      degraded-login-ip-limit: 10
-      degraded-login-account-window-seconds: 900
-      degraded-login-ip-window-seconds: 300
     proxy:
       trusted-cidrs: []
     csrf:
@@ -107,8 +123,8 @@ artverse:
     endpoint: http://localhost:9000
     bucket: artverse-manga
     region: us-east-1
-    access-key: "minioadmin"
-    secret-key: "minioadmin"
+    access-key: ${MINIO_ACCESS_KEY:}
+    secret-key: ${MINIO_SECRET_KEY:}
     secure: false
     public-base-url: ""
     presigned-url-expire-seconds: 3600
@@ -121,6 +137,14 @@ artverse:
     # 幂等（单飞模式）默认值
     enabled: true
     default-ttl-seconds: 30
+  mail:
+    enabled: ${ARTVERSE_MAIL_ENABLED:true}
+    from: ${ARTVERSE_MAIL_FROM:}
+    code-length: 6
+    code-ttl-seconds: 300
+    resend-cooldown-seconds: 60
+    max-verify-attempts: 5
+    subject-prefix: "ArtVerse-墨染"
   agent:
     first-event-timeout-seconds: 90
     model-idle-timeout-seconds: 180
@@ -207,6 +231,10 @@ management:
     web:
       exposure:
         include: health,metrics,prometheus,circuitbreakers,retries
+  # 关闭 mail 健康探测：每次探测都会做一次 SMTP 登录，频繁探测会被 QQ 限流
+  health:
+    mail:
+      enabled: false
   endpoint:
     health:
       show-details: always

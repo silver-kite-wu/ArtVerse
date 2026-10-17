@@ -33,6 +33,11 @@ public class SaTokenConfig implements WebMvcConfigurer {
                     || path.equals("/api/auth/refresh")
                     || path.equals("/api/auth/challenge/config")
                     || path.equals("/api/auth/captcha/image")
+                    || path.equals("/api/auth/login-by-code")
+                    || path.equals("/api/auth/password/verify-code")
+                    || path.equals("/api/auth/password/reset")
+                    || path.equals("/api/mail/send-code")
+                    || path.equals("/api/mail/config")
                     || path.equals("/actuator/health")) {
                 return;
             }

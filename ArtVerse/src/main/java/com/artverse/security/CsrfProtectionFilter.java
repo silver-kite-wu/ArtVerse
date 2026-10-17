@@ -56,6 +56,6 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
         response.setStatus(403);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write("{\"detail\":\"CSRF verification failed\",\"code\":\"" + AuthErrorCodes.CSRF_REJECTED + "\"}");
+        response.getWriter().write("{\"message\":\"CSRF verification failed\",\"code\":" + AuthErrorCodes.CSRF_REJECTED + "}");
     }
 }

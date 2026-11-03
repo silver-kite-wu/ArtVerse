@@ -2,7 +2,7 @@ package com.artverse.api.dto;
 
 import com.artverse.domain.MangaAgentMessage;
 import com.artverse.application.AgentUserInputRequest;
-import com.artverse.application.MangaAgentRunService;
+import com.artverse.application.MangaAgentRunSnapshots;
 import com.artverse.application.workflow.MangaWorkflowRoute;
 import com.artverse.application.workflow.MangaRouteSource;
 import com.artverse.domain.AgentRunType;
@@ -80,10 +80,10 @@ public final class MangaAgentDtos {
                                    Long knowledgeSnapshotId,
                                    Map<String, Object> budgetUsage,
                                    Map<String, Object> runAttributes,
-                                   MangaAgentRunService.RunContextSnapshot contextSnapshot,
-                                   List<MangaAgentRunService.RunStepSnapshot> steps,
-                                   List<MangaAgentRunService.RunArtifactSnapshot> artifacts) {
-        public static RunStateResponse from(MangaAgentRunService.RunSnapshot snapshot) {
+                                   MangaAgentRunSnapshots.RunContextSnapshot contextSnapshot,
+                                   List<MangaAgentRunSnapshots.RunStepSnapshot> steps,
+                                   List<MangaAgentRunSnapshots.RunArtifactSnapshot> artifacts) {
+        public static RunStateResponse from(MangaAgentRunSnapshots.RunSnapshot snapshot) {
             return new RunStateResponse(
                     snapshot.requestId(),
                     snapshot.runType(),
@@ -118,7 +118,7 @@ public final class MangaAgentDtos {
     }
 
     public record RunEventDto(Long eventId, String eventName, Map<String, Object> data, OffsetDateTime createdAt) {
-        public static RunEventDto from(MangaAgentRunService.RunEventSnapshot event) {
+        public static RunEventDto from(MangaAgentRunSnapshots.RunEventSnapshot event) {
             return new RunEventDto(event.eventId(), event.eventName(), event.data(), event.createdAt());
         }
     }

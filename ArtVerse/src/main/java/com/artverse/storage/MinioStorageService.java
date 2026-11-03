@@ -64,6 +64,27 @@ public class MinioStorageService implements ObjectStorageService {
     }
 
     @Override
+    public StoredObject put(String objectKey, InputStream content, long sizeBytes, String contentType) {
+        if (content == null || sizeBytes <= 0) throw new IllegalArgumentException("Image content must not be empty");
+        try {
+            ArtVerseProperties.Minio cfg = properties.getMinio();
+            boolean found = minioClient.bucketExists(BucketExistsArgs.builder().bucket(cfg.getBucket()).build());
+            if (!found) {
+                minioClient.makeBucket(MakeBucketArgs.builder().bucket(cfg.getBucket()).build());
+            }
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(cfg.getBucket())
+                    .object(objectKey)
+                    .stream(content, sizeBytes, -1)
+                    .contentType(contentType)
+                    .build());
+            return new StoredObject(cfg.getBucket(), objectKey, contentType, sizeBytes);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to upload to MinIO: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     public InputStream get(String bucket, String objectKey) {
         try {
             return minioClient.getObject(

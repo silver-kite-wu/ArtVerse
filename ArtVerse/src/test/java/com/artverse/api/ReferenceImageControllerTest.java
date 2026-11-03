@@ -76,6 +76,11 @@ class ReferenceImageControllerTest {
     }
 
     private static class CapturingStorage implements ObjectStorageService {
+        @Override
+        public StoredObject put(String objectKey, java.io.InputStream content, long sizeBytes, String contentType) {
+            throw new UnsupportedOperationException();
+        }
+
         private String uploadedKey;
         private long uploadedBytes;
 

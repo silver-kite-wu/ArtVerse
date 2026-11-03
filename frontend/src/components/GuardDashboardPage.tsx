@@ -1,6 +1,8 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import ImageGenerationReviews from './ImageGenerationReviews';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, Gauge, RefreshCw, ShieldCheck, TimerReset, Zap } from 'lucide-react';
 import {
+  errorMessage,
   getGuardEvents,
   getGuardMetrics,
   getGuardStats,
@@ -147,30 +149,42 @@ export default function GuardDashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  const load = async (quiet = false) => {
+  const fetchDashboard = useCallback(() => Promise.all([getGuardStats(), getGuardEvents(100)]), []);
+
+  const load = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true);
-    else setLoading(true);
-    setError('');
     try {
-      const [statsPayload, eventsPayload] = await Promise.all([
-        getGuardStats(),
-        getGuardEvents(100),
-      ]);
+      const [statsPayload, eventsPayload] = await fetchDashboard();
+      setError('');
       setData(statsPayload);
       setEvents(eventsPayload.events || []);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load guard stats');
+    } catch (err) {
+      setError(errorMessage(err) || 'Failed to load guard stats');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [fetchDashboard]);
 
   useEffect(() => {
-    load();
+    let active = true;
+    fetchDashboard()
+      .then(([statsPayload, eventsPayload]) => {
+        if (!active) return;
+        setError('');
+        setData(statsPayload);
+        setEvents(eventsPayload.events || []);
+      })
+      .catch((err: unknown) => {
+        if (active) setError(errorMessage(err) || 'Failed to load guard stats');
+      })
+      .finally(() => { if (active) setLoading(false); });
     const timer = window.setInterval(() => load(true), 30000);
-    return () => window.clearInterval(timer);
-  }, []);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [fetchDashboard, load]);
 
   useEffect(() => {
     const range = metricBucket === 'MINUTE' ? 60 : metricBucket === 'DAY' ? 30 : 24;
@@ -209,6 +223,8 @@ export default function GuardDashboardPage() {
             {error}
           </div>
         )}
+
+        <ImageGenerationReviews />
 
         <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard icon={<Activity size={18} />} label="Total" value={number(summary.total)} accent="text-accent-tertiary" />

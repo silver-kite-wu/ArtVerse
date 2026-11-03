@@ -48,6 +48,14 @@ public class AgentBudgetService {
         UUID requestId = requireRequestId(request.requestId());
         long userId = parseUserId(request.userId());
         long limit = modelLimit(request.taskType());
+        if(jdbcTemplate!=null&&request.conversationId()!=null) {
+            var automation=jdbcTemplate.queryForList("SELECT id,state,(definition_snapshot->'limits'->>'maxModelCallsPerRun')::integer AS model_limit FROM automation_run WHERE id=? AND user_id=?",request.conversationId(),userId);
+            if(!automation.isEmpty()) {
+                if(!"RUNNING".equals(automation.getFirst().get("state")))throw new BusinessException(409,"定时任务已停止或不再处于执行状态");
+                requestId=(UUID)automation.getFirst().get("id");
+                limit=Math.min(limit,((Number)automation.getFirst().get("model_limit")).longValue());
+            }
+        }
         return consume(userId, requestId, request.taskType(), "MODEL_CALL", limit);
     }
 
@@ -56,6 +64,10 @@ public class AgentBudgetService {
             return 0;
         }
         long limit = toolLimit(context.taskType());
+        if(jdbcTemplate!=null&&context.conversationId()!=null) {
+            var roots=jdbcTemplate.queryForList("SELECT state FROM automation_run WHERE id=? AND user_id=?",context.conversationId(),context.userId());
+            if(!roots.isEmpty()&&!"RUNNING".equals(roots.getFirst().get("state")))throw new BusinessException(409,"定时任务已停止");
+        }
         return consume(context.userId(), requireRequestId(context.requestId()), context.taskType(),
                 "TOOL_CALL", limit, Map.of("tool", toolName == null ? "unknown" : toolName));
     }
@@ -184,6 +196,7 @@ public class AgentBudgetService {
         return switch (taskType) {
             case MANGA_ROUTER -> agent.getRouterMaxModelCalls();
             case MANGA_CONVERSATION, MANGA_CREATIVE -> agent.getConversationMaxModelCalls();
+            case READER_CHARACTER_CHAT -> agent.getConversationMaxModelCalls();
             case MANGA_STORYBOARD -> agent.getStoryboardMaxModelCalls();
             case MANGA_REVIEW -> agent.getReviewMaxModelCalls();
             case MANGA_DIRECTOR -> agent.getDirectorMaxModelCalls();
@@ -204,6 +217,7 @@ public class AgentBudgetService {
 
     private boolean isMangaTask(AgentTaskType taskType) {
         return taskType == AgentTaskType.MANGA_ROUTER
+                || taskType == AgentTaskType.READER_CHARACTER_CHAT
                 || (taskType != null && taskType.isMangaExecutionTask());
     }
 

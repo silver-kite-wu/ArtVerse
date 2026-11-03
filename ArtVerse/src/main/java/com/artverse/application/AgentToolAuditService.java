@@ -132,7 +132,7 @@ public class AgentToolAuditService {
     }
 
     private String resultHash(Map<String, Object> payload) {
-        if (payload == null || payload.isEmpty()) {
+        if (payload == null) {
             return null;
         }
         try {

@@ -1,55 +1,31 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 type Mode = 'dark' | 'light';
-
-const KEY_MODE = 'artverse.mode';
-
-function getSystemMode(): Mode {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'dark';
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+export type ThemePreference = Mode | 'system';
+const KEY = 'artverse.mode';
+const listeners = new Set<() => void>();
+const media = window.matchMedia('(prefers-color-scheme: light)');
+function stored(): ThemePreference {
+  try { const value = localStorage.getItem(KEY); return value === 'dark' || value === 'light' ? value : 'system'; }
+  catch { return 'system'; }
 }
-
-function getStoredMode(): Mode | null {
-  try {
-    const v = localStorage.getItem(KEY_MODE);
-    if (v === 'dark' || v === 'light') return v;
-  } catch { /* noop */ }
-  return null;
-}
-
-function apply(mode: Mode) {
+let preference = stored();
+let mode: Mode = preference === 'system' ? (media.matches ? 'light' : 'dark') : preference;
+function sync() {
+  mode = preference === 'system' ? (media.matches ? 'light' : 'dark') : preference;
   document.documentElement.setAttribute('data-mode', mode);
-  document.documentElement.removeAttribute('data-theme');
+  listeners.forEach(listener => listener());
 }
-
+function setPreference(value: ThemePreference) {
+  preference = value;
+  try { localStorage.setItem(KEY, value); } catch { /* Storage can be disabled. */ }
+  sync();
+}
+function subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+media.addEventListener('change', sync);
+window.addEventListener('storage', event => { if (event.key === KEY || event.key === null) { preference = stored(); sync(); } });
+sync();
 export function useTheme() {
-  const [mode, setModeState] = useState<Mode>(() => getStoredMode() ?? getSystemMode());
-
-  useEffect(() => { apply(mode); }, [mode]);
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const handler = (e: MediaQueryListEvent) => {
-      if (!getStoredMode()) setModeState(e.matches ? 'light' : 'dark');
-    };
-    if (typeof mq.addEventListener !== 'function') return;
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  const setMode = useCallback((m: Mode) => {
-    setModeState(m);
-    try { localStorage.setItem(KEY_MODE, m); } catch { /* noop */ }
-  }, []);
-
-  const toggleMode = useCallback(() => {
-    setModeState(prev => {
-      const next: Mode = prev === 'dark' ? 'light' : 'dark';
-      try { localStorage.setItem(KEY_MODE, next); } catch { /* noop */ }
-      return next;
-    });
-  }, []);
-
-  return { mode, setMode, toggleMode };
+  useSyncExternalStore(subscribe, () => `${preference}:${mode}`);
+  return { mode, preference, setPreference, setMode: setPreference, toggleMode: () => setPreference(mode === 'dark' ? 'light' : 'dark') };
 }

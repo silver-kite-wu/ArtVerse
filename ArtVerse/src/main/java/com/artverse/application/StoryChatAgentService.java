@@ -10,7 +10,6 @@ import com.artverse.agent.gateway.AgentScopeHarnessAgentGateway;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.AgentRunType;
 import com.artverse.domain.ChatMessage;
-import com.artverse.domain.ChatMessageCompletionStatus;
 import com.artverse.domain.MangaAgentConversation;
 import com.artverse.domain.MangaAgentRun;
 import com.artverse.domain.MessageRole;
@@ -31,6 +30,7 @@ import io.agentscope.core.event.ToolCallStartEvent;
 import io.agentscope.core.event.ToolResultEndEvent;
 import io.agentscope.core.event.ToolResultStartEvent;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class StoryChatAgentService {
 
     private final AiConversationService conversationService;
@@ -66,6 +67,37 @@ public class StoryChatAgentService {
 
     @Qualifier("mangaGenerationExecutor")
     private final ExecutorService executor;
+    private final StoryChatPreparationService preparation;
+
+    public void runBackground(MangaAgentConversation conversation,String message,UUID requestId,UserProviderConfig config) {
+        var sink=eventPublisher.newPersistentSink();
+        var ref=new AtomicReference<MangaAgentRun>();
+        var permit=concurrencyGate.acquireOrReject(conversation.getUser().getId(),requestId);
+        try { runTask(()->execute(conversation,message,requestId,config,sink,ref,false),conversation,requestId,sink,ref); }
+        finally { concurrencyGate.release(permit); }
+    }
+
+    public void resumeBackground(MangaAgentConversation conversation,UUID requestId,String decision,UUID artifactId,String answer,UserProviderConfig config) {
+        var sink=eventPublisher.newPersistentSink();
+        var ref=new AtomicReference<MangaAgentRun>();
+        var permit=concurrencyGate.acquireOrReject(conversation.getUser().getId(),requestId);
+        try { runTask(()-> {
+            var snapshot=requireWaitingSnapshot(conversation,requestId);
+            if("answer".equals(decision)) {
+                if(answer==null||answer.isBlank())throw new BusinessException(400,"请填写补充说明");
+                execute(conversation,"用户补充说明："+answer+"。本次回复不代表确认写入原文；需要修改时重新准备草稿并等待确认。",requestId,config,sink,ref,true);
+                return;
+            }
+            UUID selected=artifactId==null?artifactFromWaiting(snapshot):artifactId;
+            if("discard".equals(decision)) {
+                artifactService.reject(conversation.getUser().getId(),conversation.getChapter().getId(),requestId,selected);
+                runService.markSucceeded(conversation,requestId,"已放弃本次草稿。");return;
+            }
+            if(!"confirm".equals(decision))throw new BusinessException(400,"decision must be confirm or discard");
+            toolStatus.authorizeMutationArtifact(conversation.getUser().getId(),conversation.getChapter().getId(),requestId,selected);
+            execute(conversation,"用户已确认写入小说原文 artifact_id="+selected+"。调用 commit_novel_content 提交该 artifact。",requestId,config,sink,ref,true);
+        },conversation,requestId,sink,ref); } finally { concurrencyGate.release(permit); }
+    }
 
     @Transactional(readOnly = true)
     public List<ChatMessage> listMessages(Long chapterId, User user) {
@@ -73,50 +105,62 @@ public class StoryChatAgentService {
         return chatMessageRepository.findByConversationIdOrderByCreatedAtAscIdAsc(conversation.getId());
     }
 
+    @Transactional(readOnly = true)
+    public List<ChatMessage> listMessages(Long chapterId, UUID conversationId, User user) {
+        MangaAgentConversation conversation = requireConversation(chapterId, conversationId, user);
+        return chatMessageRepository.findByConversationIdOrderByCreatedAtAscIdAsc(conversation.getId());
+    }
+
     public SseEmitter runAgUiStream(Long chapterId, UUID conversationId, String message,
                                     UUID requestId, User user, UserProviderConfig llmConfig) {
         MangaAgentConversation conversation = requireConversation(chapterId, conversationId, user);
         UUID effectiveRequestId = requestId == null ? UUID.randomUUID() : requestId;
-        conversationService.autoTitle(conversation, message);
-        conversationService.touch(conversation);
+        StoryChatPreparationService.Scope taskScope = scopeOf(conversation);
+        preparation.touch(taskScope, message);
         SseEmitter emitter = new SseEmitter(0L);
         MangaAgentRunEventPublisher.RunEventSink sink = eventPublisher.newSink(emitter);
         AtomicReference<MangaAgentRun> runRef = new AtomicReference<>();
-        submit(user.getId(), effectiveRequestId, () -> runTask(() ->
-                execute(conversation, message, effectiveRequestId, llmConfig, sink, runRef, false),
-                conversation, effectiveRequestId, sink, runRef));
+        submit(user.getId(), effectiveRequestId, () -> {
+            MangaAgentConversation reference = taskScope.reference();
+            runTask(() -> execute(reference, message, effectiveRequestId, llmConfig, sink, runRef, false),
+                    reference, effectiveRequestId, sink, runRef);
+        });
         return emitter;
     }
 
     public SseEmitter resumeAgUiStream(Long chapterId, UUID conversationId, UUID requestId,
                                        String decision, UUID artifactId, String answer,
                                        User user, UserProviderConfig llmConfig) {
-        MangaAgentConversation conversation = requireConversation(chapterId, conversationId, user);
+        StoryChatPreparationService.Scope taskScope = scopeOf(requireConversation(chapterId, conversationId, user));
+        Long userId = user.getId();
         SseEmitter emitter = new SseEmitter(0L);
         MangaAgentRunEventPublisher.RunEventSink sink = eventPublisher.newSink(emitter);
         AtomicReference<MangaAgentRun> runRef = new AtomicReference<>();
-        submit(user.getId(), requestId, () -> runTask(() -> {
-            MangaAgentRunService.RunSnapshot snapshot = requireWaitingSnapshot(conversation, requestId);
-            UUID effectiveArtifactId = artifactId == null ? artifactFromWaiting(snapshot) : artifactId;
-            if ("discard".equalsIgnoreCase(decision)) {
-                artifactService.reject(user.getId(), chapterId, requestId, effectiveArtifactId);
-                String reply = "已放弃本次小说原文草稿，章节原文未改变。";
-                saveAssistantMessage(conversation, reply, requestId, "{}");
-                MangaAgentRun run = runService.findRun(conversation, requestId)
-                        .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
-                runRef.set(run);
-                runService.markSucceeded(conversation, requestId, reply);
-                sink.sendDone(run, reply, requestId);
-                return;
-            }
-            if (!"confirm".equalsIgnoreCase(decision)) {
-                throw new BusinessException(400, "decision must be confirm or discard");
-            }
-            toolStatus.authorizeMutationArtifact(user.getId(), chapterId, requestId, effectiveArtifactId);
-            String resumeMessage = "用户已确认写入小说原文 artifact_id=" + effectiveArtifactId
-                    + "。现在调用 commit_novel_content 提交该 artifact，并只在工具成功后声明已保存。";
-            execute(conversation, resumeMessage, requestId, llmConfig, sink, runRef, true);
-        }, conversation, requestId, sink, runRef));
+        submit(userId, requestId, () -> {
+            MangaAgentConversation conversation = taskScope.reference();
+            runTask(() -> {
+                MangaAgentRunSnapshots.RunSnapshot snapshot = requireWaitingSnapshot(conversation, requestId);
+                UUID effectiveArtifactId = artifactId == null ? artifactFromWaiting(snapshot) : artifactId;
+                if ("discard".equalsIgnoreCase(decision)) {
+                    artifactService.reject(userId, chapterId, requestId, effectiveArtifactId);
+                    String reply = "已放弃本次小说原文草稿，章节原文未改变。";
+                    saveAssistantMessage(conversation, reply, requestId, "{}");
+                    MangaAgentRun run = runService.findRun(conversation, requestId)
+                            .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
+                    runRef.set(run);
+                    runService.markSucceeded(conversation, requestId, reply);
+                    sink.sendDone(run, reply, requestId);
+                    return;
+                }
+                if (!"confirm".equalsIgnoreCase(decision)) {
+                    throw new BusinessException(400, "decision must be confirm or discard");
+                }
+                toolStatus.authorizeMutationArtifact(userId, chapterId, requestId, effectiveArtifactId);
+                String resumeMessage = "用户已确认写入小说原文 artifact_id=" + effectiveArtifactId
+                        + "。现在调用 commit_novel_content 提交该 artifact，并只在工具成功后声明已保存。";
+                execute(conversation, resumeMessage, requestId, llmConfig, sink, runRef, true);
+            }, conversation, requestId, sink, runRef);
+        });
         return emitter;
     }
 
@@ -125,14 +169,14 @@ public class StoryChatAgentService {
         return new OptionalRun(runService.findLatestOpenRun(conversation).map(runService::snapshot).orElse(null));
     }
 
-    public MangaAgentRunService.RunSnapshot getRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
+    public MangaAgentRunSnapshots.RunSnapshot getRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
         MangaAgentConversation conversation = requireConversation(chapterId, conversationId, user);
         return runService.findRun(conversation, requestId)
                 .map(runService::snapshot)
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
     }
 
-    public MangaAgentRunService.RunSnapshot cancelRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
+    public MangaAgentRunSnapshots.RunSnapshot cancelRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
         MangaAgentConversation conversation = requireConversation(chapterId, conversationId, user);
         MangaAgentRun run = runService.cancel(conversation, requestId, "Story chat run cancelled by user");
         toolStatus.markCancelled(user.getId(), chapterId, requestId);
@@ -154,7 +198,12 @@ public class StoryChatAgentService {
         MangaAgentRun run = runService.startOrReuse(conversation, requestId, message,
                 AgentRunType.STORY_CHAT, com.artverse.application.workflow.MangaWorkflowRoute.CONVERSATION, route.name());
         runRef.set(run);
-        sink.sendStatus(run, "小说对话智能体正在处理章节。", requestId);
+        if (runService.isTerminal(conversation, requestId)) {
+            throw new BusinessException(409, "该请求已经结束，请重新发送消息。");
+        }
+        sink.recordProgress(run, "PREPARING_CONTEXT");
+        run.setCurrentPhase("PREPARING_CONTEXT");
+        sink.sendStatus(run, "正在读取章节内容", requestId);
         saveUserMessage(conversation, message, requestId);
         try (AgentRunToolStatus.RunScope scope = toolStatus.start(
                 conversation.getUser().getId(), conversation.getChapter().getId(), requestId,
@@ -163,15 +212,25 @@ public class StoryChatAgentService {
                     sink.recordToolProgress(active);
                     sink.sendToolEvent(active, event);
                 })) {
-            List<AgentMessage> messages = contextAssembler.assemble(
-                    conversation, message, route, conversation.getUser().getId());
-            AgentRunRequest request = agentRequest(conversation, requestId, route, messages, llmConfig, run);
+            StoryChatContextSnapshot snapshot = preparation.snapshot(scopeOf(conversation), requestId, message);
+            requireActive(conversation, requestId, scope);
+            sink.sendPhase(run, requestId, "BUILDING_REQUEST", "正在整理创作上下文");
+            List<AgentMessage> messages = contextAssembler.assemble(snapshot, message, route);
+            AgentRunRequest request = agentRequest(snapshot, route, messages, llmConfig, run);
+            requireActive(conversation, requestId, scope);
+            sink.sendPhase(run, requestId, "WAITING_MODEL", "正在分析本章");
             StringBuilder reply = new StringBuilder();
             for (AgentEvent event : gateway.streamEvents(request).toIterable()) {
-                if (scope.state().isCancelled()) {
-                    throw new BusinessException(409, "Story chat run was cancelled");
+                if (scope.state().isCancelled()) throw new BusinessException(409, "任务已停止。");
+                if (event instanceof ModelCallStartEvent || event instanceof ToolCallStartEvent) {
+                    requireActive(conversation, requestId, scope);
                 }
-                sink.recordProgress(runRef.get(), "MODEL");
+                if (event instanceof TextBlockDeltaEvent && !"GENERATING".equals(run.getCurrentPhase())) {
+                    sink.sendPhase(run, requestId, "GENERATING", "正在生成回复");
+                } else if (event instanceof ModelCallStartEvent) {
+                    sink.sendPhase(run, requestId, "WAITING_MODEL", "正在分析本章");
+                }
+                sink.recordProgress(runRef.get(), run.getCurrentPhase());
                 Optional<AgentRunEvent> mapped = mapAgentScopeEvent(event);
                 mapped.ifPresent(agentRunEvent -> {
                     sink.sendRunEvent(runRef.get(), agentRunEvent);
@@ -182,6 +241,19 @@ public class StoryChatAgentService {
             }
             if (scope.state().userInputRequest() != null) {
                 throw new AgentUserInputRequiredException(scope.state().userInputRequest());
+            }
+            requireActive(conversation, requestId, scope);
+            if (!resume && (route == StoryChatRoute.WRITE || route == StoryChatRoute.POLISH)) {
+                var draft = artifactService.list(snapshot.userId(), snapshot.chapterId(), requestId).stream()
+                        .filter(item -> "VALIDATED".equals(item.status()))
+                        .reduce((left, right) -> right);
+                if (draft.isPresent()) {
+                    // Persist waiting even when the model omitted ask_user or its external pause was lost.
+                    throw new AgentUserInputRequiredException(new AgentUserInputRequest(
+                            "请在正文区审阅本章修改。", List.of(), false,
+                            "artifact_id=" + draft.get().artifactId(), "BUSINESS_CONFIRMATION"));
+                }
+                throw new BusinessException(409, "AI 未生成可审阅的修改草稿，请重试本次优化。");
             }
             String finalReply = reply.toString().trim();
             if (finalReply.isBlank() && route == StoryChatRoute.WRITE
@@ -198,10 +270,10 @@ public class StoryChatAgentService {
         }
     }
 
-    private AgentRunRequest agentRequest(MangaAgentConversation conversation, UUID requestId, StoryChatRoute route,
+    private AgentRunRequest agentRequest(StoryChatContextSnapshot snapshot, StoryChatRoute route,
                                          List<AgentMessage> messages, UserProviderConfig llmConfig,
                                          MangaAgentRun run) {
-        AgentTaskType taskType = route == StoryChatRoute.WRITE
+        AgentTaskType taskType = route == StoryChatRoute.WRITE || route == StoryChatRoute.POLISH
                 ? AgentTaskType.STORY_CHAT_WRITE
                 : AgentTaskType.STORY_CHAT_READ;
         String latestUser = messages.stream()
@@ -210,18 +282,22 @@ public class StoryChatAgentService {
                 .map(AgentMessage::content)
                 .orElse("");
         BusinessSkillSelection selection = skillRegistry.selectionForNovelMode(
-                skillRouter.classify(latestUser).mode());
+                route == StoryChatRoute.POLISH ? NovelBusinessSkillMode.PROSE_POLISH : skillRouter.classify(latestUser).mode());
+        if (llmConfig == null || llmConfig.model().isBlank() || llmConfig.apiKey().isBlank()) {
+            throw new BusinessException(400, "请先配置可用的 AI 模型。");
+        }
         return new AgentRunRequest(
-                String.valueOf(conversation.getUser().getId()),
-                conversation.getStory().getId(),
-                conversation.getChapter().getId(),
+                String.valueOf(snapshot.userId()),
+                snapshot.storyId(),
+                snapshot.chapterId(),
                 taskType,
-                messages,
-                Map.of("fencing_token", run.getFencingToken(), "step_id", "story-chat:" + route.name()),
+                List.copyOf(messages),
+                Map.of("fencing_token", run.getFencingToken(), "step_id", "story-chat:" + route.name(),
+                        "chapter_version", snapshot.chapterVersion()),
                 modelSpecFactory.fromProviderConfig(llmConfig),
                 llmConfig.apiKey(),
-                requestId,
-                conversation.getConversationUuid(),
+                snapshot.requestId(),
+                snapshot.conversationId(),
                 selection
         );
     }
@@ -238,8 +314,14 @@ public class StoryChatAgentService {
             }
             sink.sendUserInputRequested(run, requestId, e.request());
         } catch (Exception error) {
-            String detail = error.getMessage() == null ? "Story chat agent request failed" : error.getMessage();
             MangaAgentRun run = runRef.get();
+            String phase = run == null ? "PREPARING_CONTEXT" : run.getCurrentPhase();
+            log.error("Story chat failed requestId={} conversationId={} phase={}",
+                    requestId, conversation.getConversationUuid(), phase, error);
+            String detail = error instanceof BusinessException ? error.getMessage()
+                    : "PREPARING_CONTEXT".equals(phase) ? "章节内容准备失败，请重试。"
+                    : "BUILDING_REQUEST".equals(phase) ? "创作上下文整理失败，请重试。"
+                    : "AI 回复失败，请稍后重试。";
             if (run != null && !runService.isTerminal(conversation, requestId)) {
                 runService.markFailed(conversation, requestId, detail);
             }
@@ -265,18 +347,20 @@ public class StoryChatAgentService {
         }
     }
 
-    private MangaAgentRunService.RunSnapshot requireWaitingSnapshot(MangaAgentConversation conversation, UUID requestId) {
-        MangaAgentRunService.RunSnapshot snapshot = runService.findRun(conversation, requestId)
+    private MangaAgentRunSnapshots.RunSnapshot requireWaitingSnapshot(MangaAgentConversation conversation, UUID requestId) {
+        MangaAgentRunSnapshots.RunSnapshot snapshot = runService.findRun(conversation, requestId)
                 .map(runService::snapshot)
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
         if (snapshot.status() != com.artverse.domain.MangaAgentRunStatus.WAITING_USER) {
-            throw new BusinessException(409, "Can only resume a paused run");
+            throw new BusinessException(409, "该任务已不在等待确认，请刷新章节后审阅最新草稿。");
         }
         return snapshot;
     }
 
-    private UUID artifactFromWaiting(MangaAgentRunService.RunSnapshot snapshot) {
-        String reason = snapshot.userInputRequest() == null ? "" : snapshot.userInputRequest().reason();
+    private UUID artifactFromWaiting(MangaAgentRunSnapshots.RunSnapshot snapshot) {
+        String reason = snapshot.userInputRequest() == null ? "" :
+                java.util.Objects.toString(snapshot.userInputRequest().reason(), "") + "\n"
+                        + java.util.Objects.toString(snapshot.userInputRequest().question(), "");
         java.util.regex.Matcher matcher = java.util.regex.Pattern
                 .compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
                 .matcher(reason == null ? "" : reason);
@@ -287,46 +371,33 @@ public class StoryChatAgentService {
     }
 
     private MangaAgentConversation requireConversation(Long chapterId, UUID conversationId, User user) {
-        MangaAgentConversation conversation = conversationService.storyConversation(user, chapterId);
-        if (conversationId != null && !conversation.getConversationUuid().equals(conversationId)) {
-            throw new BusinessException(404, "Story chat conversation not found");
+        UUID selected = conversationId == null
+                ? conversationService.storyConversation(user, chapterId).getConversationUuid() : conversationId;
+        return preparation.resolve(user.getId(), chapterId, selected).reference();
+    }
+
+    private StoryChatPreparationService.Scope scopeOf(MangaAgentConversation conversation) {
+        return new StoryChatPreparationService.Scope(conversation.getId(), conversation.getConversationUuid(),
+                conversation.getUser().getId(), conversation.getStory() == null ? null : conversation.getStory().getId(),
+                conversation.getChapter().getId());
+    }
+
+    private void requireActive(MangaAgentConversation conversation, UUID requestId, AgentRunToolStatus.RunScope scope) {
+        if (scope.state().isCancelled() || runService.isTerminal(conversation, requestId)) {
+            throw new BusinessException(409, "任务已停止。");
         }
-        return conversation;
     }
 
     @Transactional
     public ChatMessage saveUserMessage(MangaAgentConversation conversation, String content, UUID requestId) {
-        return chatMessageRepository.findByConversationIdAndRequestIdAndRole(
-                        conversation.getId(), requestId, MessageRole.USER)
-                .orElseGet(() -> {
-                    ChatMessage message = new ChatMessage();
-                    message.setChapter(conversation.getChapter());
-                    message.setConversation(conversation);
-                    message.setRole(MessageRole.USER);
-                    message.setContent(content);
-                    message.setRequestId(requestId);
-                    message.setCompletionStatus(ChatMessageCompletionStatus.COMPLETE);
-                    return chatMessageRepository.save(message);
-                });
+        return preparation.saveMessage(scopeOf(conversation), MessageRole.USER, content, requestId, null);
     }
 
     @Transactional
     public ChatMessage saveAssistantMessage(MangaAgentConversation conversation, String content,
                                             UUID requestId, String skillVersionsJson) {
-        return chatMessageRepository.findByConversationIdAndRequestIdAndRole(
-                        conversation.getId(), requestId, MessageRole.ASSISTANT)
-                .orElseGet(() -> {
-                    ChatMessage message = new ChatMessage();
-                    message.setChapter(conversation.getChapter());
-                    message.setConversation(conversation);
-                    message.setRole(MessageRole.ASSISTANT);
-                    message.setContent(content);
-                    message.setRequestId(requestId);
-                    message.setCompletionStatus(ChatMessageCompletionStatus.COMPLETE);
-                    message.setSkillVersionsJson(skillVersionsJson == null || skillVersionsJson.isBlank()
-                            ? "{}" : skillVersionsJson);
-                    return chatMessageRepository.save(message);
-                });
+        return preparation.saveMessage(scopeOf(conversation), MessageRole.ASSISTANT, content, requestId,
+                skillVersionsJson == null || skillVersionsJson.isBlank() ? "{}" : skillVersionsJson);
     }
 
     private String writeSkillVersions(BusinessSkillSelection selection) {
@@ -384,5 +455,5 @@ public class StoryChatAgentService {
         return Optional.empty();
     }
 
-    public record OptionalRun(MangaAgentRunService.RunSnapshot run) { }
+    public record OptionalRun(MangaAgentRunSnapshots.RunSnapshot run) { }
 }

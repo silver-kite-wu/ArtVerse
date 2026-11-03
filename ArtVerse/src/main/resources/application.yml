@@ -16,6 +16,20 @@ spring:
     url: jdbc:postgresql://localhost:5432/manga_novel?ApplicationName=artverse&stringtype=unspecified&options=-c%20client_encoding%3DUTF8&charSet=UTF-8
     username: postgres
     password: ${POSTGRES_PASSWORD:postgres}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: ${RABBITMQ_VHOST:artverse}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    connection-timeout: 5s
+    requested-heartbeat: 30s
+  lifecycle:
+    timeout-per-shutdown-phase: 16m
   jpa:
     hibernate:
       ddl-auto: validate
@@ -30,7 +44,8 @@ spring:
       host: localhost
       port: 6379
       database: 0
-      timeout: 5000
+      timeout: 500ms
+      password: ${REDIS_PASSWORD:}
   task:
     scheduling:
       pool:
@@ -53,13 +68,16 @@ spring:
           writetimeout: 5000
 
 artverse:
+  image-queue:
+    producer-enabled: ${ARTVERSE_IMAGE_PRODUCER_ENABLED:false}
+    worker-enabled: ${ARTVERSE_IMAGE_WORKER_ENABLED:false}
+    coordinator-enabled: ${ARTVERSE_IMAGE_COORDINATOR_ENABLED:false}
   secrets:
     encryption-key: ${ARTVERSE_SECRET_ENCRYPTION_KEY:}
     active-key-version: 2
   auth:
     cookie:
       secure: ${ARTVERSE_AUTH_COOKIE_SECURE:false}
-      refresh-body-fallback-enabled: true
       refresh-cookie-name: artverse-refresh
       refresh-token-timeout-seconds: 43200
     challenge:
@@ -84,12 +102,10 @@ artverse:
     proxy:
       trusted-cidrs: []
     csrf:
-      mode: report
+      mode: enforce
       header-name: X-ArtVerse-Client
       header-value: web
-  cors-origins:
-    - http://localhost:5173
-    - http://127.0.0.1:5173
+  cors-origins: ${ARTVERSE_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   storage:
     root: ./manga_outputs
   upload:
@@ -113,12 +129,21 @@ artverse:
       - 20
   manga-generation:
     max-concurrent-jobs: 4
+  automations:
+    enabled: ${ARTVERSE_AUTOMATIONS_ENABLED:true}
+    poll-interval-ms: ${ARTVERSE_AUTOMATIONS_POLL_INTERVAL_MS:5000}
+    max-active-plans-per-user: ${ARTVERSE_AUTOMATIONS_MAX_ACTIVE_PLANS_PER_USER:10}
+  scheduled-manga:
+    poll-interval-ms: 5000
+    progress-poll-interval-ms: 1000
+    default-timezone: ${ARTVERSE_SCHEDULED_MANGA_TIMEZONE:Asia/Shanghai}
+    max-active-tasks-per-user: 3
   # 图像/LLM/工作流服务的 API Key 与 Base URL 均来自用户在设置页保存的
   # Provider 配置（数据库存储），此处不再提供任何运营方兜底凭据。
   coze:
     workflow-id: "7645642109203103763"
   flyway:
-    auto-repair-checksum-mismatch: true
+    auto-repair-checksum-mismatch: false
   minio:
     endpoint: http://localhost:9000
     bucket: artverse-manga
@@ -237,4 +262,4 @@ management:
       enabled: false
   endpoint:
     health:
-      show-details: always
+      show-details: never

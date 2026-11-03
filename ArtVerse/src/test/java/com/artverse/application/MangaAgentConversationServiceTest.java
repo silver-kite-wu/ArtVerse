@@ -150,7 +150,7 @@ class MangaAgentConversationServiceTest {
         ChapterAccessService accessService = mock(ChapterAccessService.class);
         MangaAgentConversationWriteService conversationWriteService = mock(MangaAgentConversationWriteService.class);
         MangaAgentConversationService service = new MangaAgentConversationService(
-                conversationRepository, messageRepository, accessService, conversationWriteService);
+                conversationRepository, messageRepository, accessService, conversationWriteService, mock(AiConversationService.class));
         User user = user(1L);
         Chapter chapter = chapter(user);
         MangaAgentConversation conversation = conversation(user, chapter);

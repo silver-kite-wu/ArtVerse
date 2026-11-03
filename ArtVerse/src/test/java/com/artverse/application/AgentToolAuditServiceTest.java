@@ -21,6 +21,13 @@ import static org.mockito.Mockito.when;
 class AgentToolAuditServiceTest {
 
     @Test
+    void emptyToolResultStillHasValidAuditEnvelope() {
+        var service=new AgentToolAuditService(new AgentRunToolStatus(redisTemplate()));
+        assertThat(service.around("ask_user",1L,7L,()->Map.of()))
+                .containsEntry("success",true).containsEntry("resultHash",ToolIdempotencyService.sha256("{}"));
+    }
+
+    @Test
     void extractsRequestIdFromRuntimeContext() {
         AgentRunToolStatus status = new AgentRunToolStatus(redisTemplate());
         AgentToolAuditService service = new AgentToolAuditService(status);

@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   RotateCw,
   RotateCcw,
@@ -131,7 +131,7 @@ function ImageEditor({
     const dx = pos.x - dragStartRef.current.x;
     const dy = pos.y - dragStartRef.current.y;
     const r = dragRectRef.current;
-    let nr = { ...r };
+    const nr = { ...r };
     const clampW = (v: number) => clamp(v, 40, imgNatural.w);
     const clampH = (v: number) => clamp(v, 40, imgNatural.h);
 
@@ -231,7 +231,7 @@ function ImageEditor({
       <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-sm p-3 sm:p-4">
       <div
         ref={containerRef}
-        className="bg-bg-raised border border-border rounded-xl w-full max-w-4xl shadow-modal overflow-hidden"
+        className="bg-bg-raised border border-border rounded-xl w-full max-w-4xl shadow-xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -349,7 +349,7 @@ function ImageEditor({
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 btn-accent text-sm font-medium rounded-lg transition-all duration-200"
               >
                 <Check size={14} />
                 应用

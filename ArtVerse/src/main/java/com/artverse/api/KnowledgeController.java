@@ -61,7 +61,8 @@ public class KnowledgeController {
 
     @PutMapping("/stories/{storyId}/knowledge/{unitId}")
     public KnowledgeService.UnitView update(@PathVariable Long storyId, @PathVariable Long unitId, @RequestBody Map<String, Object> body) {
-        return knowledgeService.update(storyId, unitId, user().getId(), input(body));
+        return body.containsKey("base_version") ? knowledgeService.updateVersioned(storyId,unitId,user().getId(),integer(body,"base_version"),input(body))
+            : knowledgeService.update(storyId, unitId, user().getId(), input(body));
     }
 
     @DeleteMapping("/stories/{storyId}/knowledge/{unitId}")
@@ -103,8 +104,21 @@ public class KnowledgeController {
     @RateLimit(windowSeconds = 60, maxRequests = 30, key = "knowledge-candidate-review")
     public KnowledgeCandidateService.CandidateView approveCandidate(
             @PathVariable Long storyId,
-            @PathVariable Long candidateId) {
-        return knowledgeCandidateService.approve(storyId, candidateId, user().getId());
+            @PathVariable Long candidateId,@RequestBody(required=false) Map<String,Object> body) {
+        return knowledgeCandidateService.approve(storyId, candidateId, user().getId(),body==null?null:longValue(body,"version"));
+    }
+
+    @GetMapping("/stories/{storyId}/knowledge/candidates/{candidateId}")
+    public KnowledgeCandidateService.CandidateView candidate(@PathVariable Long storyId,@PathVariable Long candidateId) {
+        return knowledgeCandidateService.detail(storyId,candidateId,user().getId());
+    }
+    @PutMapping("/stories/{storyId}/knowledge/candidates/{candidateId}")
+    public KnowledgeCandidateService.CandidateView editCandidate(@PathVariable Long storyId,@PathVariable Long candidateId,@RequestBody Map<String,Object> body) {
+        return knowledgeCandidateService.edit(storyId,candidateId,user().getId(),longValue(body,"version"),input(body),longValue(body,"target_unit_id"),integer(body,"base_version"));
+    }
+    @PostMapping("/stories/{storyId}/knowledge/candidates/{candidateId}/acknowledge-source")
+    public KnowledgeCandidateService.CandidateView acknowledgeSource(@PathVariable Long storyId,@PathVariable Long candidateId,@RequestBody Map<String,Object> body) {
+        return knowledgeCandidateService.acknowledgeSource(storyId,candidateId,user().getId(),longValue(body,"version"),str(body,"source_hash"));
     }
 
     @PostMapping("/stories/{storyId}/knowledge/candidates/{candidateId}/reject")
@@ -125,10 +139,11 @@ public class KnowledgeController {
     @SuppressWarnings("unchecked")
     private KnowledgeService.UnitInput input(Map<String, Object> body) {
         Object structured = body.get("structured_data");
+        if(structured!=null && !(structured instanceof Map<?,?>)) throw new com.artverse.common.BusinessException(400,"structured_data 必须是 JSON 对象");
         return new KnowledgeService.UnitInput(str(body, "type"), str(body, "title"), str(body, "body"), str(body, "summary"),
                 structured instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of(), integer(body, "importance"), integer(body, "effective_from_chapter"), integer(body, "effective_to_chapter"));
     }
     private static String str(Map<String, Object> body, String key) { Object value = body.get(key); return value == null ? "" : String.valueOf(value); }
     private static Integer integer(Map<String, Object> body, String key) { Object value = body.get(key); return value instanceof Number n ? n.intValue() : value == null || String.valueOf(value).isBlank() ? null : Integer.valueOf(String.valueOf(value)); }
-    private static Long longValue(Map<String, Object> body, String key) { Integer value = integer(body, key); return value == null ? null : value.longValue(); }
+    private static Long longValue(Map<String, Object> body, String key) { Object v=body.get(key);return v==null?null:Long.valueOf(v.toString()); }
 }

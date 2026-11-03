@@ -96,11 +96,11 @@ public record ChapterDto(
 
     public record MangaImageDto(Long id, Integer imageNumber, String imagePath, String storageProvider,
                                 String bucket, String objectKey, String contentType, Long sizeBytes,
-                                String prompt, OffsetDateTime createdAt) {
+                                String prompt, OffsetDateTime createdAt, String imageVersion) {
         public static MangaImageDto from(MangaImage m) {
             return new MangaImageDto(m.getId(), m.getImageNumber(), m.getImagePath(),
                     m.getStorageProvider().name().toLowerCase(), m.getBucket(), m.getObjectKey(),
-                    m.getContentType(), m.getSizeBytes(), m.getPrompt(), m.getCreatedAt());
+                    m.getContentType(), m.getSizeBytes(), m.getPrompt(), m.getCreatedAt(), m.imageVersion());
         }
     }
 }

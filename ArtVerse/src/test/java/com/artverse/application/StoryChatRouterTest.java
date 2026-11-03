@@ -27,4 +27,17 @@ class StoryChatRouterTest {
         assertThat(router.classify("你觉得这个角色动机合理吗"))
                 .isEqualTo(StoryChatRoute.READ);
     }
+
+    @Test
+    void optimizationAndRevisionPrepareReviewableEdits() {
+        assertThat(router.classify("将本章节进行优化一下吧，要求人物角色立体，语言逻辑清晰合理")).isEqualTo(StoryChatRoute.POLISH);
+        assertThat(router.classify("帮我修改这一章")).isEqualTo(StoryChatRoute.POLISH);
+    }
+
+    @Test
+    void qualityAuditUsesReviewRouteAndReviewSkill() {
+        String input = "审核本章创作质量";
+        assertThat(router.classify(input)).isEqualTo(StoryChatRoute.REVIEW);
+        assertThat(new NovelBusinessSkillRouter().classify(input).mode()).isEqualTo(NovelBusinessSkillMode.REVIEW);
+    }
 }

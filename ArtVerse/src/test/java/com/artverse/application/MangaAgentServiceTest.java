@@ -91,7 +91,7 @@ class MangaAgentServiceTest {
         Fixture fixture = fixture();
         UUID requestId = UUID.randomUUID();
         MangaAgentConversation conversation = fixture.conversation;
-        MangaAgentRunService.RunSnapshot snapshot = new MangaAgentRunService.RunSnapshot(
+        MangaAgentRunSnapshots.RunSnapshot snapshot = new MangaAgentRunSnapshots.RunSnapshot(
                 requestId,
                 com.artverse.domain.MangaAgentRunStatus.WAITING_USER,
                 "continue",
@@ -146,7 +146,7 @@ class MangaAgentServiceTest {
         when(conversationWriteService.activeOrCreate(7L, user)).thenReturn(conversation);
 
         MangaAgentConversationService conversationService =
-                new MangaAgentConversationService(conversationRepository, messageRepository, accessService, conversationWriteService);
+                new MangaAgentConversationService(conversationRepository, messageRepository, accessService, conversationWriteService, mock(AiConversationService.class));
 
         ExecutorService rejectingExecutor = Executors.newSingleThreadExecutor();
         rejectingExecutor.shutdown(); // now rejects new tasks
@@ -190,7 +190,7 @@ class MangaAgentServiceTest {
         when(conversationWriteService.activeOrCreate(7L, user)).thenReturn(conversation);
 
         MangaAgentConversationService conversationService =
-                new MangaAgentConversationService(conversationRepository, messageRepository, accessService, conversationWriteService);
+                new MangaAgentConversationService(conversationRepository, messageRepository, accessService, conversationWriteService, mock(AiConversationService.class));
         AgentConcurrencyGate concurrencyGate = mock(AgentConcurrencyGate.class);
         MangaAgentService service = new MangaAgentService(
                 conversationService,

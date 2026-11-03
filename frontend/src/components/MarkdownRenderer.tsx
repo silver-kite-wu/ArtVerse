@@ -1,4 +1,4 @@
-﻿import { Marked, Renderer } from 'marked';
+﻿import { Marked, Renderer, type Tokens } from 'marked';
 import { useMemo } from 'react';
 
 // ---------------------------------------------------------------------------
@@ -13,7 +13,7 @@ import { useMemo } from 'react';
 // ---------------------------------------------------------------------------
 
 class TailwindRenderer extends Renderer {
-  heading({ tokens, depth }: { tokens: any[]; depth: number }): string {
+  heading({ tokens, depth }: Tokens.Heading): string {
     const text = this.parser.parseInline(tokens);
     if (depth === 2) return `<h2 class="text-lg font-semibold text-text-primary mt-6 mb-3 pb-2 border-b border-border">${text}</h2>`;
     if (depth === 3) return `<h3 class="text-base font-semibold text-text-primary mt-5 mb-2">${text}</h3>`;
@@ -21,12 +21,12 @@ class TailwindRenderer extends Renderer {
     return `<h${depth} class="text-sm font-semibold text-text-primary my-2">${text}</h${depth}>`;
   }
 
-  paragraph({ tokens }: { tokens: any[] }): string {
+  paragraph({ tokens }: Tokens.Paragraph): string {
     const text = this.parser.parseInline(tokens);
     return `<p class="text-sm text-text-primary leading-relaxed my-2">${text}</p>`;
   }
 
-  list({ items, ordered, start }: { items: any[]; ordered: boolean; start: number | '' }): string {
+  list({ items, ordered, start }: Tokens.List): string {
     const tag = ordered ? 'ol' : 'ul';
     const cls = ordered
       ? 'list-decimal pl-5 space-y-1 my-3 text-sm text-text-primary leading-relaxed'
@@ -39,7 +39,7 @@ class TailwindRenderer extends Renderer {
     return `<${tag} class="${cls}"${startAttr}>${body}</${tag}>`;
   }
 
-  listitem(item: { tokens: any[]; task?: boolean; checked?: boolean; loose?: boolean }): string {
+  listitem(item: Tokens.ListItem): string {
     const content = this.parser.parseInline(item.tokens);
     let checkbox = '';
     if (item.task) {
@@ -54,7 +54,7 @@ class TailwindRenderer extends Renderer {
     return '<hr class="border-border my-6" />';
   }
 
-  blockquote({ tokens }: { tokens: any[] }): string {
+  blockquote({ tokens }: Tokens.Blockquote): string {
     const content = this.parser.parseInline(tokens);
     return `<blockquote class="border-l-4 border-accent-secondary/40 bg-accent-secondary/5 px-4 py-2 my-3 rounded-r-lg text-sm text-text-secondary italic">${content}</blockquote>`;
   }
@@ -65,10 +65,10 @@ class TailwindRenderer extends Renderer {
 
   code({ text }: { text: string }): string {
     const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return `<div class="relative group"><pre class="block bg-bg-surface rounded-lg p-4 overflow-x-auto my-3 border border-border"><code class="text-xs font-mono text-text-primary leading-relaxed">${escaped}</code></pre><button onclick="navigator.clipboard.writeText(this.closest('.group').querySelector('code').textContent)" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 text-xs rounded-lg  bg-bg-raised border border-border text-text-secondary hover:text-text-primary cursor-pointer" aria-label="复制代码">复制</button></div>`;
+    return `<div class="relative group"><pre class="block bg-bg-surface rounded-lg p-4 overflow-x-auto my-3 border border-border"><code class="text-xs font-mono text-text-primary leading-relaxed">${escaped}</code></pre><button onclick="navigator.clipboard?.writeText(this.closest('.group').querySelector('code').textContent)" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 text-xs rounded-lg  bg-bg-raised border border-border text-text-secondary hover:text-text-primary cursor-pointer" aria-label="复制代码">复制</button></div>`;
   }
 
-  link({ href, title, tokens }: { href: string; title?: string | null; tokens: any[] }): string {
+  link({ href, title, tokens }: Tokens.Link): string {
     const text = this.parser.parseInline(tokens);
     const safeHref = href ?? '';
     const titleAttr = title ? ` title="${title}"` : '';
@@ -81,17 +81,17 @@ class TailwindRenderer extends Renderer {
     return `<img src="${safeHref}" alt="${text}"${titleAttr} class="max-w-full rounded-lg my-2" />`;
   }
 
-  strong({ tokens }: { tokens: any[] }): string {
+  strong({ tokens }: Tokens.Strong): string {
     const text = this.parser.parseInline(tokens);
     return `<strong class="font-semibold text-text-primary">${text}</strong>`;
   }
 
-  em({ tokens }: { tokens: any[] }): string {
+  em({ tokens }: Tokens.Em): string {
     const text = this.parser.parseInline(tokens);
     return `<em class="italic">${text}</em>`;
   }
 
-  del({ tokens }: { tokens: any[] }): string {
+  del({ tokens }: Tokens.Del): string {
     const text = this.parser.parseInline(tokens);
     return `<del class="line-through text-text-secondary">${text}</del>`;
   }
@@ -100,7 +100,7 @@ class TailwindRenderer extends Renderer {
   // The engine supplies us with parsed Table token; we render header and
   // body by calling this.tablecell / this.tablerow the same way the
   // default renderer does.
-  table({ header, rows, align }: { header: any[]; rows: any[][]; align: Array<'center' | 'left' | 'right' | null> }): string {
+  table({ header, rows, align }: Tokens.Table): string {
     // header row
     let headHtml = '<tr>';
     for (let i = 0; i < header.length; i++) {
@@ -121,7 +121,7 @@ class TailwindRenderer extends Renderer {
     return `<div class="overflow-x-auto rounded-lg border border-border my-4"><table class="w-full border-collapse"><thead class="bg-bg-base text-white">${headHtml}</thead><tbody>${bodyHtml}</tbody></table></div>`;
   }
 
-  tablecell({ tokens, header: isHeader, align }: { tokens: any[]; header: boolean; align: 'center' | 'left' | 'right' | null }): string {
+  tablecell({ tokens, header: isHeader, align }: Tokens.TableCell): string {
     const content = this.parser.parseInline(tokens);
     const alignCls = align ? ` text-${align}` : '';
     if (isHeader) {
@@ -156,7 +156,7 @@ function convertSpaceAlignedTables(src: string): string {
     if (blockLines.length >= 2 && blockCols >= 2) {
       const gfmRows: string[] = [];
       for (const line of blockLines) {
-        const cells = line.split(/\s{2,}|\t|　+/).map(c => c.trim()).filter(c => c !== '');
+        const cells = line.split(/\s{2,}|\t|\u3000+/).map(c => c.trim()).filter(c => c !== '');
         while (cells.length < blockCols) cells.push('');
         gfmRows.push('| ' + cells.slice(0, blockCols).join(' | ') + ' |');
       }
@@ -196,7 +196,7 @@ function convertSpaceAlignedTables(src: string): string {
     }
 
     // Count columns separated by 2+ spaces, a tab, or full-width space(s)
-    const cells = line.split(/\s{2,}|\t|　+/).map(c => c.trim()).filter(c => c !== '');
+    const cells = line.split(/\s{2,}|\t|\u3000+/).map(c => c.trim()).filter(c => c !== '');
     if (cells.length >= 2) {
       if (blockCols === 0) {
         blockLines.push(line);

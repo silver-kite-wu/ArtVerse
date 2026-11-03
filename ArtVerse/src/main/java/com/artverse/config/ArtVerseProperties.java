@@ -38,7 +38,7 @@ public class ArtVerseProperties {
 
     @Data
     public static class Secrets {
-        private String encryptionKey = "ArtVerse!ApiKey1";
+        private String encryptionKey = "";
         private int activeKeyVersion = 2;
     }
 
@@ -54,7 +54,6 @@ public class ArtVerseProperties {
     @Data
     public static class Cookie {
         private boolean secure = false;
-        private boolean refreshBodyFallbackEnabled = true;
         private String refreshCookieName = "artverse-refresh";
         private long refreshTokenTimeoutSeconds = 43_200;
     }
@@ -96,7 +95,7 @@ public class ArtVerseProperties {
 
     @Data
     public static class Csrf {
-        private EnforcementMode mode = EnforcementMode.REPORT;
+        private EnforcementMode mode = EnforcementMode.ENFORCE;
         private String headerName = "X-ArtVerse-Client";
         private String headerValue = "web";
     }
@@ -168,7 +167,7 @@ public class ArtVerseProperties {
 
     @Data
     public static class Flyway {
-        private boolean autoRepairChecksumMismatch = true;
+        private boolean autoRepairChecksumMismatch = false;
     }
 
     @Data
@@ -233,6 +232,17 @@ public class ArtVerseProperties {
         private double routingReadOnlyThreshold = 0.55;
         private int agentCacheMaxSize = 256;
         private int agentCacheExpireAfterMinutes = 30;
+        private Mcp mcp = new Mcp();
+
+        @Data
+        public static class Mcp {
+            private boolean enabled = true;
+            private String baseUrl = "http://127.0.0.1:8080/internal/mcp";
+            // Ephemeral default is suitable for a single local process. Multi-instance or
+            // split deployments must provide the same high-entropy secret to both services.
+            private String sharedSecret = java.util.UUID.randomUUID().toString();
+            private int tokenLifetimeSeconds = 3600;
+        }
 
         // Retry
         private int maxRetries = 2;

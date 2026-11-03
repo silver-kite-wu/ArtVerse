@@ -15,14 +15,11 @@ import com.artverse.application.workflow.MangaWorkflowRoute;
 import com.artverse.application.workflow.MangaRouteSource;
 import com.artverse.application.workflow.RoutingDecision;
 import com.artverse.application.workflow.ExecutionPlan;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.artverse.persistence.MangaAgentRunEventRepository;
 import com.artverse.persistence.MangaAgentRunRepository;
 import com.artverse.persistence.MangaAgentRunStepRepository;
 import com.artverse.persistence.MangaAgentRunArtifactRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,12 +28,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import static com.artverse.application.MangaAgentRunSnapshots.*;
 
 @Slf4j
 @Service
@@ -53,6 +51,7 @@ public class MangaAgentRunService {
     private final MangaAgentRunStepRepository stepRepository;
     private final MangaAgentRunArtifactRepository artifactRepository;
     private final AgentRunLeaseService leaseService;
+    private final MangaAgentRunSnapshotReader snapshotReader;
 
     @Autowired
     public MangaAgentRunService(MangaAgentRunRepository runRepository,
@@ -60,13 +59,25 @@ public class MangaAgentRunService {
                                 ObjectMapper objectMapper,
                                 MangaAgentRunStepRepository stepRepository,
                                 MangaAgentRunArtifactRepository artifactRepository,
-                                AgentRunLeaseService leaseService) {
+                                AgentRunLeaseService leaseService,
+                                MangaAgentRunSnapshotReader snapshotReader) {
         this.runRepository = runRepository;
         this.eventRepository = eventRepository;
         this.objectMapper = objectMapper;
         this.stepRepository = stepRepository;
         this.artifactRepository = artifactRepository;
         this.leaseService = leaseService;
+        this.snapshotReader = snapshotReader;
+    }
+
+    public MangaAgentRunService(MangaAgentRunRepository runRepository,
+                                MangaAgentRunEventRepository eventRepository,
+                                ObjectMapper objectMapper,
+                                MangaAgentRunStepRepository stepRepository,
+                                MangaAgentRunArtifactRepository artifactRepository,
+                                AgentRunLeaseService leaseService) {
+        this(runRepository, eventRepository, objectMapper, stepRepository, artifactRepository, leaseService,
+                new MangaAgentRunSnapshotReader(runRepository, eventRepository, stepRepository, artifactRepository, objectMapper));
     }
 
     public MangaAgentRunService(MangaAgentRunRepository runRepository,
@@ -377,41 +388,17 @@ public class MangaAgentRunService {
 
     @Transactional(readOnly = true)
     public AgentUserInputRequest waitingInput(MangaAgentRun run) {
-        if (run.getUserInputRequestJson() == null || run.getUserInputRequestJson().isBlank()) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(run.getUserInputRequestJson(), AgentUserInputRequest.class);
-        } catch (Exception e) {
-            log.warn("Failed to parse stored user input request JSON for run {}; treating as absent", run.getId(), e);
-            return null;
-        }
+        return snapshotReader.waitingInput(run);
     }
 
     @Transactional(readOnly = true)
     public RoutingDecision routingDecision(MangaAgentRun run) {
-        if (run.getRoutingDecisionJson() == null || run.getRoutingDecisionJson().isBlank()) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(run.getRoutingDecisionJson(), RoutingDecision.class);
-        } catch (Exception e) {
-            log.warn("Failed to parse stored routing decision JSON for run {}; treating as absent", run.getId(), e);
-            return null;
-        }
+        return snapshotReader.routingDecision(run);
     }
 
     @Transactional(readOnly = true)
     public ExecutionPlan executionPlan(MangaAgentRun run) {
-        if (run == null || run.getExecutionPlanJson() == null || run.getExecutionPlanJson().isBlank()) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(run.getExecutionPlanJson(), ExecutionPlan.class);
-        } catch (Exception error) {
-            log.warn("Failed to parse stored execution plan for run {}", run.getId(), error);
-            return null;
-        }
+        return snapshotReader.executionPlan(run);
     }
 
     @Transactional
@@ -671,106 +658,21 @@ public class MangaAgentRunService {
 
     @Transactional(readOnly = true)
     public RunSnapshot snapshot(MangaAgentRun run) {
-        List<RunEventSnapshot> events = eventRepository.findByRunIdOrderByIdAsc(run.getId())
-                .stream()
-                .map(this::toPayload)
-                .toList();
-        List<RunStepSnapshot> steps = stepRepository == null ? List.of()
-                : stepRepository.findByRunIdOrderByStepSequenceAsc(run.getId()).stream()
-                .map(step -> new RunStepSnapshot(step.getPlanId(), step.getStepSequence(), step.getRoute(),
-                        step.getStatus(), step.isMutating(), step.getSkillKey(), step.getSkillVersion(),
-                        step.getInputSummary(), step.getOutputSummary(), step.getStartedAt(), step.getCompletedAt()))
-                .toList();
-        List<RunArtifactSnapshot> artifacts = artifactRepository == null ? List.of()
-                : artifactRepository.findByRunIdOrderByCreatedAtAsc(run.getId()).stream()
-                .map(artifact -> new RunArtifactSnapshot(artifact.getArtifactUuid(), artifact.getArtifactType(),
-                        artifact.getStatus(), artifact.getSchemaVersion(), readMap(artifact.getEvaluation()),
-                        artifact.getChecksum()))
-                .toList();
-        return new RunSnapshot(
-                run.getRequestId(),
-                run.getRunType() == null ? AgentRunType.MANGA_AGENT : run.getRunType(),
-                run.getStatus(),
-                run.getInputMessage(),
-                run.getFinalReply(),
-                run.getErrorMessage(),
-                run.getRoute() == null ? MangaWorkflowRoute.DIRECTOR : run.getRoute(),
-                run.getRouteKey() == null || run.getRouteKey().isBlank()
-                        ? (run.getRoute() == null ? MangaWorkflowRoute.DIRECTOR.name() : run.getRoute().name())
-                        : run.getRouteKey(),
-                waitingInput(run),
-                events,
-                run.getCreatedAt(),
-                run.getUpdatedAt(),
-                run.getCompletedAt(),
-                run.getLastProgressAt(),
-                run.getCurrentPhase(),
-                run.getRouteSource(),
-                run.getRouteConfidence(),
-                run.getRouterVersion(),
-                run.getWorkflowVersion(),
-                run.getTraceId(),
-                readMap(run.getSkillVersionsJson()),
-                run.getModelConfigId(),
-                run.getKnowledgeSnapshotId(),
-                readMap(run.getBudgetUsageJson()),
-                readMap(run.getRunAttributesJson()),
-                readContextSnapshot(run.getContextSnapshotJson()),
-                steps,
-                artifacts
-        );
+        return snapshotReader.snapshot(run);
     }
 
-    /**
-     * Reads a bounded, owner-scoped page from the durable run event log. This is
-     * intentionally independent of the Redis notification stream: Redis wakes
-     * live consumers, while PostgreSQL remains the replay and audit source.
-     */
     @Transactional(readOnly = true)
     public RunEventReplayPage replayEvents(Long userId, Long chapterId, UUID requestId, long afterEventId) {
-        MangaAgentRun run = runRepository.findByUserIdAndChapterIdAndRequestId(userId, chapterId, requestId)
-                .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
-        List<RunEventSnapshot> events = eventRepository
-                .findTop200ByRunIdAndIdGreaterThanOrderByIdAsc(run.getId(), Math.max(0L, afterEventId))
-                .stream()
-                .map(this::toPayload)
-                .toList();
-        long lastEventId = events.isEmpty()
-                ? Math.max(0L, afterEventId)
-                : events.get(events.size() - 1).eventId();
-        return new RunEventReplayPage(run.getStatus(), lastEventId, events);
+        return snapshotReader.replayEvents(userId, chapterId, requestId, afterEventId);
     }
 
-    /**
-     * Lightweight resume context that skips the event history query.
-     * Only reads fields needed by the resume path: status, route, and user input request.
-     */
     @Transactional(readOnly = true)
     public ResumeContext resumeContext(MangaAgentRun run) {
-        return new ResumeContext(
-                run.getStatus(),
-                run.getRoute() == null ? MangaWorkflowRoute.DIRECTOR : run.getRoute(),
-                waitingInput(run)
-        );
+        return snapshotReader.resumeContext(run);
     }
 
     public Map<String, Object> toPayload(AgentRunEvent event) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("type", event.type());
-        payload.put("phase", event.phase());
-        payload.put("label", event.label());
-        if (event.toolName() != null) {
-            payload.put("toolName", event.toolName());
-        }
-        if (event.status() != null) {
-            payload.put("status", event.status());
-        }
-        if (event.text() != null) {
-            payload.put("text", event.text());
-        }
-        payload.put("data", event.data());
-        payload.put("createdAt", event.createdAt().toString());
-        return payload;
+        return snapshotReader.toPayload(event);
     }
 
     private MangaAgentRun markTerminal(UUID requestId, Long userId, Long chapterId, MangaAgentRunStatus status,
@@ -818,26 +720,10 @@ public class MangaAgentRunService {
             return "MODEL";
         }
         return switch (phase.toUpperCase()) {
-            case "ROUTER", "AGENT", "TOOL", "MODEL" -> phase.toUpperCase();
+            case "ROUTER", "AGENT", "TOOL", "MODEL", "PREPARING_CONTEXT", "BUILDING_REQUEST",
+                    "WAITING_MODEL", "GENERATING" -> phase.toUpperCase();
             default -> "MODEL";
         };
-    }
-
-    private RunEventSnapshot toPayload(MangaAgentRunEventRecord event) {
-        try {
-            Map<String, Object> payload = objectMapper.readValue(event.getPayloadJson(), new TypeReference<>() {
-            });
-            return new RunEventSnapshot(event.getId(), event.getEventName(), payload, event.getCreatedAt());
-        } catch (Exception e) {
-            Map<String, Object> fallback = new LinkedHashMap<>();
-            fallback.put("type", event.getEventType());
-            fallback.put("phase", event.getPhase());
-            fallback.put("label", event.getLabel());
-            fallback.put("status", event.getStatus());
-            fallback.put("createdAt", event.getCreatedAt().toString());
-            fallback.put("data", Map.of());
-            return new RunEventSnapshot(event.getId(), event.getEventName(), fallback, event.getCreatedAt());
-        }
     }
 
     private String toJson(Object value) {
@@ -849,85 +735,19 @@ public class MangaAgentRunService {
     }
 
     private Map<String, Object> readMap(String value) {
-        if (value == null || value.isBlank()) return Map.of();
-        try {
-            return objectMapper.readValue(value, new TypeReference<>() { });
-        } catch (Exception error) {
-            log.warn("Failed to parse run metadata JSON", error);
-            return Map.of();
-        }
+        return snapshotReader.readMap(value);
     }
 
     private RunContextSnapshot readContextSnapshot(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            RunContextSnapshot snapshot = objectMapper.readValue(value, RunContextSnapshot.class);
-            return snapshot.isEmpty() ? null : snapshot;
-        } catch (Exception error) {
-            log.warn("Failed to parse run context snapshot JSON", error);
-            return null;
-        }
+        return snapshotReader.readContextSnapshot(value);
     }
 
     private RunContextSnapshot withKnowledgeRecallHash(RunContextSnapshot current, String knowledgeRecallHash) {
-        RunContextSnapshot base = current == null ? new RunContextSnapshot(
-                null, null, null, null, 0, 0, null, null, List.of(), List.of("knowledge_recall_missing")) : current;
-        java.util.LinkedHashSet<String> warnings = new java.util.LinkedHashSet<>(base.warnings());
-        if (knowledgeRecallHash == null || knowledgeRecallHash.isBlank()) {
-            warnings.add("knowledge_recall_missing");
-        } else {
-            warnings.remove("knowledge_recall_missing");
-        }
-        return new RunContextSnapshot(
-                base.storyId(),
-                base.chapterId(),
-                base.storyTitle(),
-                base.chapterDisplayName(),
-                base.sceneCount(),
-                base.imageCount(),
-                base.contextHash(),
-                knowledgeRecallHash,
-                base.requiredFields(),
-                List.copyOf(warnings)
-        );
+        return snapshotReader.withKnowledgeRecallHash(current, knowledgeRecallHash);
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Object> deepMerge(Map<String, Object> base, Map<String, Object> updates) {
-        LinkedHashMap<String, Object> merged = new LinkedHashMap<>(base == null ? Map.of() : base);
-        for (Map.Entry<String, Object> entry : updates.entrySet()) {
-            Object current = merged.get(entry.getKey());
-            Object incoming = entry.getValue();
-            if (current instanceof Map<?, ?> currentMap && incoming instanceof Map<?, ?> incomingMap) {
-                merged.put(entry.getKey(), deepMerge((Map<String, Object>) currentMap, (Map<String, Object>) incomingMap));
-                continue;
-            }
-            if ("tool_contract_status".equals(entry.getKey())) {
-                merged.put(entry.getKey(), strongerStatus(asString(current), asString(incoming)));
-                continue;
-            }
-            if (current instanceof List<?> currentList && incoming instanceof List<?> incomingList) {
-                ArrayList<Object> combined = new ArrayList<>(currentList);
-                combined.addAll(incomingList);
-                merged.put(entry.getKey(), List.copyOf(combined));
-                continue;
-            }
-            merged.put(entry.getKey(), incoming);
-        }
-        return Map.copyOf(merged);
-    }
-
-    private String strongerStatus(String current, String incoming) {
-        if (current == null || current.isBlank()) {
-            return incoming;
-        }
-        if (incoming == null || incoming.isBlank()) {
-            return current;
-        }
-        List<String> order = List.of("PASSED", "DEGRADED", "FAILED");
-        return order.indexOf(incoming) > order.indexOf(current) ? incoming : current;
+        return snapshotReader.deepMerge(base, updates);
     }
 
     private Map<String, Object> toolAuditPayload(MangaAgentRun run, AgentRunToolStatus.ToolEvent event) {
@@ -963,124 +783,5 @@ public class MangaAgentRunService {
 
     private String asString(Object value) {
         return value == null ? null : String.valueOf(value);
-    }
-
-    public record ResumeContext(
-            MangaAgentRunStatus status,
-            MangaWorkflowRoute route,
-            AgentUserInputRequest userInputRequest
-    ) {
-    }
-
-    public record RunSnapshot(
-            UUID requestId,
-            AgentRunType runType,
-            MangaAgentRunStatus status,
-            String inputMessage,
-            String finalReply,
-            String errorMessage,
-            MangaWorkflowRoute route,
-            String routeKey,
-            AgentUserInputRequest userInputRequest,
-            List<RunEventSnapshot> events,
-            OffsetDateTime createdAt,
-            OffsetDateTime updatedAt,
-            OffsetDateTime completedAt,
-            OffsetDateTime lastProgressAt,
-            String currentPhase,
-            MangaRouteSource routeSource,
-            Double routeConfidence,
-            String routerVersion,
-            String workflowVersion,
-            UUID traceId,
-            Map<String, Object> skillVersions,
-            Long modelConfigId,
-            Long knowledgeSnapshotId,
-            Map<String, Object> budgetUsage,
-            Map<String, Object> runAttributes,
-            RunContextSnapshot contextSnapshot,
-            List<RunStepSnapshot> steps,
-            List<RunArtifactSnapshot> artifacts
-    ) {
-        public RunSnapshot(UUID requestId, MangaAgentRunStatus status, String inputMessage, String finalReply,
-                           String errorMessage, MangaWorkflowRoute route, AgentUserInputRequest userInputRequest,
-                           List<RunEventSnapshot> events, OffsetDateTime createdAt, OffsetDateTime updatedAt,
-                           OffsetDateTime completedAt, OffsetDateTime lastProgressAt, String currentPhase) {
-            this(requestId, AgentRunType.MANGA_AGENT, status, inputMessage, finalReply, errorMessage, route,
-                    route == null ? MangaWorkflowRoute.DIRECTOR.name() : route.name(), userInputRequest, events,
-                    createdAt, updatedAt, completedAt, lastProgressAt, currentPhase, MangaRouteSource.AUTO, null, null,
-                    "manga-workflow-v1", null, Map.of(), null, null, Map.of(), Map.of(), null, List.of(), List.of());
-        }
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record RunContextSnapshot(
-            Long storyId,
-            Long chapterId,
-            String storyTitle,
-            String chapterDisplayName,
-            int sceneCount,
-            int imageCount,
-            String contextHash,
-            String knowledgeRecallHash,
-            List<String> requiredFields,
-            List<String> warnings
-    ) {
-        public RunContextSnapshot {
-            requiredFields = requiredFields == null ? List.of() : List.copyOf(requiredFields);
-            warnings = warnings == null ? List.of() : List.copyOf(warnings);
-        }
-
-        @JsonIgnore
-        public boolean isEmpty() {
-            return storyId == null
-                    && chapterId == null
-                    && (storyTitle == null || storyTitle.isBlank())
-                    && (chapterDisplayName == null || chapterDisplayName.isBlank())
-                    && sceneCount == 0
-                    && imageCount == 0
-                    && (contextHash == null || contextHash.isBlank())
-                    && (knowledgeRecallHash == null || knowledgeRecallHash.isBlank())
-                    && requiredFields.isEmpty()
-                    && warnings.isEmpty();
-        }
-    }
-
-    public record RunStepSnapshot(
-            String planId,
-            int sequence,
-            MangaWorkflowRoute route,
-            String status,
-            boolean mutating,
-            String skillKey,
-            String skillVersion,
-            String inputSummary,
-            String outputSummary,
-            OffsetDateTime startedAt,
-            OffsetDateTime completedAt
-    ) { }
-
-    public record RunArtifactSnapshot(
-            UUID artifactId,
-            String type,
-            String status,
-            String schemaVersion,
-            Map<String, Object> evaluation,
-            String checksum
-    ) { }
-
-    public record RunEventSnapshot(
-            Long eventId,
-            String eventName,
-            Map<String, Object> data,
-            OffsetDateTime createdAt
-    ) {
-    }
-
-    public record RunEventReplayPage(
-            MangaAgentRunStatus status,
-            long lastEventId,
-            List<RunEventSnapshot> events
-    ) {
     }
 }

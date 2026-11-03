@@ -4,7 +4,6 @@ import cn.dev33.satoken.stp.SaTokenInfo;
 import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.api.dto.AuthDtos.ChallengeConfigResponse;
 import com.artverse.api.dto.AuthDtos.LoginRequest;
-import com.artverse.api.dto.AuthDtos.RefreshRequest;
 import com.artverse.api.dto.AuthDtos.RegisterRequest;
 import com.artverse.application.AuthService;
 import com.artverse.application.RefreshTokenService;
@@ -34,6 +33,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -244,7 +244,7 @@ class AuthControllerTest {
             tokenInfo.setTokenTimeout(1_800);
             stpUtil.when(StpUtil::getTokenInfo).thenReturn(tokenInfo);
 
-            var result = controller.refresh(null, request, response);
+            var result = controller.refresh(request, response);
 
             stpUtil.verify(() -> StpUtil.login(1L, "PC"));
             verify(authCookieService).writeRefreshCookie(response, "rotated-token", 43_200L);
@@ -252,22 +252,18 @@ class AuthControllerTest {
         }
 
         @Test
-        @DisplayName("falls back to request body token during the migration window")
-        void fallsBackToBodyToken() {
+        @DisplayName("does not restore a session from a request body token")
+        void rejectsBodyTokenWithoutRefreshCookie() {
             MockHttpServletRequest request = new MockHttpServletRequest();
             MockHttpServletResponse response = new MockHttpServletResponse();
             when(authCookieService.readRefreshToken(request)).thenReturn(null);
-            when(authCookieService.isRefreshBodyFallbackEnabled()).thenReturn(true);
-            when(refreshTokenService.consume("body-token", null)).thenReturn(Consumption.valid(3L));
-            when(refreshTokenService.issue(3L)).thenReturn("new-cookie-token");
-            when(refreshTokenService.getTimeoutSeconds()).thenReturn(43_200L);
             stpUtil.when(StpUtil::isLogin).thenReturn(false);
-            stpUtil.when(StpUtil::getTokenInfo).thenReturn(new SaTokenInfo());
 
-            controller.refresh(new RefreshRequest("body-token"), request, response);
+            assertThatThrownBy(() -> controller.refresh(request, response))
+                    .isInstanceOf(BusinessException.class)
+                    .matches(ex -> ((BusinessException) ex).getStatus() == 401);
 
-            verify(refreshTokenService).consume("body-token", null);
-            verify(authCookieService).writeRefreshCookie(response, "new-cookie-token", 43_200L);
+            verify(refreshTokenService, never()).consume(anyString(), any());
         }
 
         @Test
@@ -276,10 +272,9 @@ class AuthControllerTest {
             MockHttpServletRequest request = new MockHttpServletRequest();
             MockHttpServletResponse response = new MockHttpServletResponse();
             when(authCookieService.readRefreshToken(request)).thenReturn(null);
-            when(authCookieService.isRefreshBodyFallbackEnabled()).thenReturn(false);
             stpUtil.when(StpUtil::isLogin).thenReturn(false);
 
-            assertThatThrownBy(() -> controller.refresh(null, request, response))
+            assertThatThrownBy(() -> controller.refresh(request, response))
                     .isInstanceOf(BusinessException.class)
                     .matches(ex -> ((BusinessException) ex).getStatus() == 401)
                     .matches(ex -> Integer.valueOf(AuthErrorCodes.AUTH_EXPIRED).equals(((BusinessException) ex).getCode()));

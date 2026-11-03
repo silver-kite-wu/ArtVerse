@@ -35,6 +35,12 @@ public class AiConversationController {
         return summary(service.rename(currentUserService.requireCurrentUser(), conversationId, body.get("title")));
     }
 
+    @DeleteMapping("/{conversationId}")
+    @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID conversationId) {
+        service.delete(currentUserService.requireCurrentUser(), conversationId);
+    }
+
     @PostMapping("/{conversationId}/archive")
     public Map<String, Object> archive(@PathVariable UUID conversationId) {
         return summary(service.archive(currentUserService.requireCurrentUser(), conversationId));

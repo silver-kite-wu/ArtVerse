@@ -2,6 +2,7 @@ package com.artverse.agent.gateway.tools;
 
 import com.artverse.agent.AgentTaskType;
 import io.agentscope.core.tool.Toolkit;
+import io.agentscope.core.tool.mcp.McpClientWrapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
@@ -22,10 +23,11 @@ class AgentToolConfigurationRegistryTest {
                 EnumSet.of(AgentTaskType.MANGA_DIRECTOR)));
         AgentToolConfigurationRegistry registry = new AgentToolConfigurationRegistry(List.of(manga, remaining));
         Toolkit toolkit = mock(Toolkit.class);
+        McpClientWrapper businessTools = mock(McpClientWrapper.class);
 
-        registry.configure(toolkit, AgentTaskType.MANGA_DIRECTOR);
+        registry.configure(toolkit, AgentTaskType.MANGA_DIRECTOR, businessTools);
 
-        verify(manga).configure(toolkit);
+        verify(manga).configure(toolkit, businessTools);
     }
 
     @Test

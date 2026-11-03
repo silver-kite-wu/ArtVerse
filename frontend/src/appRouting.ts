@@ -1,7 +1,12 @@
-export type AppView = 'square' | 'workspace' | 'editor' | 'imagegen' | 'myworks' | 'settings';
+export type AppView = 'square' | 'workspace' | 'editor' | 'imagegen' | 'myworks' | 'settings' | 'automations' | 'profile';
+
+let leaveGuard: (() => boolean) | null = null;
+export function setRouteLeaveGuard(guard: (() => boolean) | null): void { leaveGuard = guard; }
+export function confirmRouteLeave(): boolean { return leaveGuard?.() ?? true; }
 
 export type AppRoute =
-  | { view: Exclude<AppView, 'editor'> }
+  | { view: Exclude<AppView, 'editor' | 'automations'> }
+  | { view: 'automations'; automationId?: string; runId?: string }
   | { view: 'editor'; storyId: number }
   | { view: 'square'; format: 'novel' | 'manga'; storyId: number; chapterId?: number };
 
@@ -11,6 +16,8 @@ const SIMPLE_VIEWS = new Set<Exclude<AppView, 'editor'>>([
   'imagegen',
   'myworks',
   'settings',
+  'profile',
+  'automations',
 ]);
 
 export function parseAppHash(hash: string): AppRoute | null {
@@ -18,8 +25,10 @@ export function parseAppHash(hash: string): AppRoute | null {
   const [pathname] = path.split('?');
   if (!path) return null;
 
+  const automationMatch = /^automations(?:\/([0-9a-f-]{36}))?$/.exec(pathname);
+  if (automationMatch) return { view: 'automations', automationId: automationMatch[1], runId: new URLSearchParams(path.split('?')[1] || '').get('run') || undefined };
   if (SIMPLE_VIEWS.has(pathname as Exclude<AppView, 'editor'>)) {
-    return { view: pathname as Exclude<AppView, 'editor'> };
+    return { view: pathname as Exclude<AppView, 'editor' | 'automations'> };
   }
 
   const editorMatch = /^editor\/(\d+)$/.exec(path);
@@ -32,6 +41,7 @@ export function parseAppHash(hash: string): AppRoute | null {
 }
 
 export function appRouteHash(route: AppRoute): string {
+  if (route.view === 'automations') return `#/automations${route.automationId ? `/${route.automationId}` : ''}${route.runId ? `?run=${route.runId}` : ''}`;
   if (route.view === 'editor') return `#/editor/${route.storyId}`;
   if (route.view === 'square' && 'storyId' in route) return `#/square/${route.format}/${route.storyId}${route.chapterId ? `/chapter/${route.chapterId}` : ''}`;
   return `#/${route.view}`;

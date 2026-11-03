@@ -28,7 +28,9 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/")
+        String path = request.getRequestURI();
+        boolean protectedPath = path.startsWith("/api/") || path.equals("/actuator") || path.startsWith("/actuator/");
+        return !protectedPath
                 || !UNSAFE_METHODS.contains(request.getMethod())
                 || "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
@@ -56,6 +58,7 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
         response.setStatus(403);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write("{\"message\":\"CSRF verification failed\",\"code\":" + AuthErrorCodes.CSRF_REJECTED + "}");
+        response.getWriter().write("{\"code\":" + AuthErrorCodes.CSRF_REJECTED
+                + ",\"message\":\"CSRF verification failed\",\"data\":null}");
     }
 }

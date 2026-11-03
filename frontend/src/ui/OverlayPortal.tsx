@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 interface Props {
@@ -17,14 +17,7 @@ interface Props {
  * /internal pages, unit tests).
  */
 export default function OverlayPortal({ children }: Props) {
-  const [host, setHost] = useState<HTMLElement | null>(() =>
-    typeof document === 'undefined' ? null : document.getElementById('overlay-root'),
-  );
-
-  useEffect(() => {
-    setHost((current) => current ?? document.getElementById('overlay-root'));
-  }, []);
-
+  const host = typeof document === 'undefined' ? null : document.getElementById('overlay-root');
   if (host) return createPortal(children, host);
   return <>{children}</>;
 }

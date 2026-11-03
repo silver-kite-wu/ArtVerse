@@ -28,6 +28,12 @@ public class CharacterProfile {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "terminal_chapter_number")
+    private Integer terminalChapterNumber;
+
+    @Column(name = "terminal_confirmed", nullable = false)
+    private Boolean terminalConfirmed = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 

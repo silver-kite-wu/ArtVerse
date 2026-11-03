@@ -24,6 +24,14 @@ public class SaTokenConfig implements WebMvcConfigurer {
             }
 
             String path = SaHolder.getRequest().getRequestPath();
+            if (path.equals("/actuator") || path.startsWith("/actuator/")) {
+                if (path.equals("/actuator/health")) {
+                    return;
+                }
+                StpUtil.checkLogin();
+                StpUtil.checkRole("ADMIN");
+                return;
+            }
             if (!path.startsWith("/api/")) {
                 return;
             }
@@ -37,8 +45,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
                     || path.equals("/api/auth/password/verify-code")
                     || path.equals("/api/auth/password/reset")
                     || path.equals("/api/mail/send-code")
-                    || path.equals("/api/mail/config")
-                    || path.equals("/actuator/health")) {
+                    || path.equals("/api/mail/config")) {
                 return;
             }
             StpUtil.checkLogin();
@@ -57,6 +64,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
 
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
         GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer();
+        jsonSerializer.configure(mapper -> mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()));
 
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);

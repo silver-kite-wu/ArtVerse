@@ -1,62 +1,71 @@
 package com.artverse.common;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import cn.dev33.satoken.exception.NotRoleException;
 import com.artverse.security.AuthErrorCodes;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.artverse.application.imagequeue.ImageRequestException.class)
+    public ResponseEntity<Result<?>> handleImageRequest(com.artverse.application.imagequeue.ImageRequestException ex) {
+        return ResponseEntity.status(ex.getHttpStatus()).body(Result.fail(ex.getNumericCode(), ex.getMessage(), ex.getData()));
+    }
+
     @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<Map<String, Object>> handleBusiness(BusinessException ex) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("message", ex.getMessage());
-        if (ex.getCode() != null) {
-            body.put("code", ex.getCode());
-        }
-        if (ex.getProvider() != null) {
-            body.put("provider", ex.getProvider());
-        }
-        return ResponseEntity.status(ex.getStatus()).body(body);
+    public ResponseEntity<Result<?>> handleBusiness(BusinessException ex) {
+        Object data = ex.getProvider() == null ? null : Map.of("provider", ex.getProvider());
+        int code = ex.getCode() == null ? ex.getStatus() : ex.getCode();
+        return ResponseEntity.status(ex.getStatus()).body(Result.fail(code, ex.getMessage(), data));
     }
 
     @ExceptionHandler(NotLoginException.class)
-    public ResponseEntity<Map<String, Object>> handleNotLogin(NotLoginException ex, HttpServletRequest request) {
+    public ResponseEntity<Result<?>> handleNotLogin(NotLoginException ex, HttpServletRequest request) {
         log.info("Authentication required: method={}, uri={}, reason={}",
                 request.getMethod(), request.getRequestURI(), ex.getMessage());
-        return ResponseEntity.status(401).body(Map.of(
-                "message", "Login expired",
-                "code", AuthErrorCodes.AUTH_EXPIRED));
+        return ResponseEntity.status(401).body(Result.fail(AuthErrorCodes.AUTH_EXPIRED, "Login expired"));
+    }
+
+    @ExceptionHandler(NotRoleException.class)
+    public ResponseEntity<Result<?>> handleNotRole(NotRoleException ex) {
+        return ResponseEntity.status(403).body(Result.fail(403, "Forbidden"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
+    public ResponseEntity<Result<?>> handleValidation(MethodArgumentNotValidException ex) {
         String detail = ex.getBindingResult().getFieldErrors().stream()
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .findFirst()
                 .orElse("Validation failed");
-        return ResponseEntity.badRequest().body(Map.of("message", detail));
+        return ResponseEntity.badRequest().body(Result.fail(400, detail));
+    }
+
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<Result<?>> handleNotFound(Exception ex) {
+        return ResponseEntity.status(404).body(Result.fail(404, "请求的接口或资源不存在"));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneral(Exception ex) {
+    public ResponseEntity<Result<?>> handleGeneral(Exception ex) {
         if (isClientDisconnect(ex)) {
             log.debug("Client disconnected while response was being written: {}", ex.getMessage());
             return ResponseEntity.noContent().build();
         }
         log.error("Unhandled exception", ex);
-        return ResponseEntity.internalServerError().body(Map.of("message", "Internal server error"));
+        return ResponseEntity.internalServerError().body(Result.fail(500, "Internal server error"));
     }
 
     private boolean isClientDisconnect(Throwable ex) {

@@ -11,6 +11,9 @@ public interface ObjectStorageService {
 
     StoredObject putPng(String objectKey, Path localFile, String contentType);
 
+    /** Upload exactly sizeBytes bytes. The caller owns and closes the input stream. */
+    StoredObject put(String objectKey, InputStream content, long sizeBytes, String contentType);
+
     InputStream get(String bucket, String objectKey);
 
     List<StoredObject> list(String bucket, String prefix, int limit);

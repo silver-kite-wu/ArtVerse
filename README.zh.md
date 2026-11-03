@@ -57,7 +57,7 @@ ArtVerse 是一个全栈 AI 漫画创作平台，目标是把"故事设定、章
 - 密码登录分级防爆破：5 分钟窗口内错 3 次追加图形验证码，错 6 次锁定 10 分钟
 - IP 维度限流（登录、注册分策略）
 - Sa-Token 会话：HttpOnly Cookie（SameSite=Strict）+ Redis 存储，支持 Refresh Token
-- 统一 Result 响应规范（code / message / data）
+- JSON API 成功与错误响应统一使用 `code / message / data` 信封；HTTP 状态码继续表达请求结果。SSE、文件/图片响应及 `204 No Content` 保持对应传输格式
 
 ### 作品广场
 
@@ -130,7 +130,7 @@ POSTGRES_PASSWORD=postgres
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 
-# 敏感数据加密密钥与风控 HMAC 密钥（生产必填，随机长字符串）
+# 敏感数据加密密钥与风控 HMAC 密钥（生产必填，至少 32 个字符且必须不同）
 ARTVERSE_SECRET_ENCRYPTION_KEY=
 ARTVERSE_AUTH_RISK_HMAC_KEY=
 
@@ -147,6 +147,8 @@ ARTVERSE_MAIL_FROM=you@qq.com
 - 未配置 `ARTVERSE_MAIL_HOST` 时邮件功能自动禁用，其余功能不受影响
 - AI 能力（LLM / 图像 / 工作流）的 API Key 与 Base URL 由每个用户在设置页自行保存，加密入库，仓库不内置任何运营方凭据
 - `.env` 已被 `.gitignore` 忽略，不会被提交
+- 当前 Compose 文件使用本地开发凭据并发布数据库、Redis 与 MinIO 端口，仅适用于可信的开发环境；生产环境应使用独立的强凭据，并通过部署网络或防火墙限制依赖服务访问
+- `prod` 或 `production` Spring Profile 会校验密钥长度与差异、HTTPS Cookie、CSRF 强制模式及 Flyway 校验和自动修复关闭；未满足时应用拒绝启动
 
 ### 3. 启动后端
 
@@ -182,6 +184,7 @@ npm run dev
 | `ARTVERSE_MAIL_ENABLED` | 是否启用邮件验证码功能 | `true` |
 | `ARTVERSE_AUTH_COOKIE_SECURE` | HTTPS 环境下置为 `true` | `false` |
 | `ARTVERSE_AUTH_CHALLENGE_MODE` | 图形验证码模式（`enforce` / 宽松模式） | `enforce` |
+| `ARTVERSE_CORS_ORIGINS` | CSRF/CORS 允许的来源，逗号分隔（如 `http://<服务器IP>`） | `http://localhost:5173,http://127.0.0.1:5173` |
 
 ## 常用开发命令
 
@@ -207,8 +210,10 @@ npm run preview   # 预览生产构建
 
 - 前端 `npm run build` 产物由 Nginx 托管（SPA 路由 `try_files ... /index.html`），并反代 `/api` 与 SSE 接口（`proxy_buffering off`）
 - 后端打包为 JAR，由 systemd 托管（`Restart=always`），`.env` 与 JAR 同目录
-- 生产环境 docker-compose 端口建议绑定 `127.0.0.1`，仅暴露 Nginx 80/443
-- HTTPS 环境记得设置 `ARTVERSE_AUTH_COOKIE_SECURE=true`
+- 不要直接以仓库中的本地开发 Compose 配置部署生产服务；生产环境需使用独立凭据，并由部署网络或防火墙限制 PostgreSQL、Redis 和 MinIO 的访问
+- 生产环境设置 `SPRING_PROFILES_ACTIVE=production`，并配置独立且至少 32 字符的加密密钥与 HMAC 密钥
+- HTTPS 环境记得设置 `ARTVERSE_AUTH_COOKIE_SECURE=true`；Actuator 除 `/actuator/health` 外要求管理员登录，健康详情不对外显示
+- Flyway 校验和不一致会中止启动，应检查并修复迁移历史；不要自动修复已部署数据库的校验和
 - 完整协作规范见 [ArtVerse/AGENTS.md](./ArtVerse/AGENTS.md)
 
 ## License

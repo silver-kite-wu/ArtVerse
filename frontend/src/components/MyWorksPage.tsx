@@ -8,6 +8,7 @@ import {
   getChapter, listMyWorks, mangaImageUrl, publishStory, refImageUrl, updateChapterOrder,
   type Chapter, type MangaImage, type MyWork, type MyWorkChapter,
 } from '../api';
+import { useToast } from '../ui/toast/useToast';
 
 type Format = 'novel' | 'manga';
 type PageView = 'list' | 'detail' | 'reader';
@@ -48,6 +49,7 @@ const chapterTitle = (chapter: MyWorkChapter, format: Format) =>
 const formatDate = (date: string | null) => date ? new Date(date).toLocaleDateString('zh-CN') : '未记录';
 
 export default function MyWorksPage() {
+  const toast = useToast();
   const [format, setFormat] = useState<Format>('novel');
   const [view, setView] = useState<PageView>('list');
   const [works, setWorks] = useState<MyWork[]>([]);
@@ -66,7 +68,6 @@ export default function MyWorksPage() {
   const pageScrollRef = useRef<HTMLDivElement>(null);
 
   const loadWorks = useCallback(async () => {
-    setLoadError('');
     try {
       setWorks(await listMyWorks());
     } catch (error) {
@@ -77,7 +78,18 @@ export default function MyWorksPage() {
     }
   }, []);
 
-  useEffect(() => { void loadWorks(); }, [loadWorks]);
+  useEffect(() => {
+    let active = true;
+    listMyWorks()
+      .then((items) => { if (active) setWorks(items); })
+      .catch((error: unknown) => {
+        if (!active) return;
+        console.error(error);
+        setLoadError('作品加载失败，请检查网络后重试');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const switchFormat = (next: Format) => {
     setFormat(next);
@@ -151,8 +163,9 @@ export default function MyWorksPage() {
       setWorks(updated);
       const work = updated.find((item) => item.id === selectedWork.id);
       if (work) openDetail(work);
+      toast.success('发布设置已保存');
     } catch (error) {
-      alert(`保存失败：${error instanceof Error ? error.message : '未知错误'}`);
+      toast.error(`保存失败：${error instanceof Error ? error.message : '未知错误'}`);
     } finally {
       setSaving(false);
     }
@@ -182,7 +195,7 @@ export default function MyWorksPage() {
     if (next) void openReader(next.id);
   };
 
-  if (loading) return <div className="page-atmosphere flex flex-1 flex-col bg-bg-base">
+  if (loading) return <div className="flex flex-1 flex-col bg-bg-base">
     <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 md:px-8 md:py-7">
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {Array.from({ length: 4 }).map((_, index) => (
@@ -201,22 +214,22 @@ export default function MyWorksPage() {
   </div>;
 
   if (loadError) {
-    return <div className="page-atmosphere flex flex-1 items-center justify-center bg-bg-base px-4"><div className="text-center">
+    return <div className="flex flex-1 items-center justify-center bg-bg-base px-4"><div className="text-center">
       <RefreshCw size={38} className="mx-auto animate-float text-text-muted" strokeWidth={1.35} />
       <p className="mt-3 text-sm font-medium text-text-primary">{loadError}</p>
-      <button type="button" onClick={() => void loadWorks()} className="fanqie-cta-secondary mt-4 !gap-1.5"><RefreshCw size={14} />重新加载</button>
+      <button type="button" onClick={() => { setLoadError(''); void loadWorks(); }} className="fanqie-cta-secondary mt-4 !gap-1.5"><RefreshCw size={14} />重新加载</button>
     </div></div>;
   }
 
   if (view === 'list') {
     const draftCount = works.length - stats.publishedWorks;
-    return <div className="page-atmosphere flex min-h-0 flex-1 flex-col bg-bg-base">
+    return <div className="flex min-h-0 flex-1 flex-col bg-bg-base">
       <div className="relative z-10 shrink-0 border-b border-border glass-panel">
         <div className="mx-auto w-full max-w-7xl px-4 py-5 md:px-8 md:py-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="mb-3 inline-flex rounded-lg border border-border bg-bg-surface/60 p-1 backdrop-blur-sm" aria-label="作品形态">
-                {(['novel', 'manga'] as Format[]).map((item) => <button key={item} type="button" onClick={() => switchFormat(item)} className={`flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all ${format === item ? 'bg-accent-muted text-accent ring-1 ring-accent/20' : 'text-text-secondary hover:text-text-primary hover:bg-accent-soft'}`}>
+              <div className="mb-3 inline-flex rounded-xl border border-border bg-bg-surface/60 p-1 shadow-sm backdrop-blur-sm" aria-label="作品形态">
+                {(['novel', 'manga'] as Format[]).map((item) => <button key={item} type="button" onClick={() => switchFormat(item)} className={`flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all duration-200 ${format === item ? 'bg-gradient-to-b from-accent-soft to-accent-muted text-accent shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-accent-soft'}`}>
                   {item === 'novel' ? <BookOpenText size={16} /> : <ImageIcon size={16} />}{formatCopy[item].label}
                 </button>)}
               </div>
@@ -251,14 +264,14 @@ export default function MyWorksPage() {
               { label: '已发布作品', value: stats.publishedWorks, icon: <Globe size={15} className="text-success" /> },
               { label: formatCopy[format].contentMetric, value: stats.contentCount.toLocaleString('zh-CN'), icon: format === 'novel' ? <FileText size={15} className="text-accent-secondary" /> : <ImageIcon size={15} className="text-accent-secondary" /> },
               { label: formatCopy[format].publishedMetric, value: stats.publishedChapters, icon: <CheckCircle2 size={15} className="text-accent-tertiary" /> },
-            ].map((stat, index) => <div key={stat.label} className={`flex items-center gap-3 py-3 ${index % 2 ? 'border-l border-border' : ''} ${index > 1 ? 'border-t border-border sm:border-t-0' : ''} sm:border-l sm:px-5 sm:first:border-l-0 sm:first:pl-0`}><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-bg-surface/60 backdrop-blur-sm transition-colors hover:border-accent/30">{stat.icon}</span><div><div className="text-xl font-semibold text-text-primary">{stat.value}</div><div className="text-[0.6875rem] text-text-muted">{stat.label}</div></div></div>)}
+            ].map((stat, index) => <div key={stat.label} className={`flex items-center gap-3 py-3 ${index % 2 ? 'border-l border-border' : ''} ${index > 1 ? 'border-t border-border sm:border-t-0' : ''} sm:border-l sm:px-5 sm:first:border-l-0 sm:first:pl-0`}><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-bg-surface/60 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-accent/30 hover:shadow-md">{stat.icon}</span><div><div className="text-xl font-semibold text-text-primary">{stat.value}</div><div className="text-[0.6875rem] text-text-muted">{stat.label}</div></div></div>)}
           </div>
         </div>
       </div>
       <div ref={pageScrollRef} className="flex-1 overflow-y-auto">
         <main className="mx-auto w-full max-w-7xl px-4 py-5 md:px-8 md:py-7">
-          <div className="mb-5 flex items-center justify-between gap-3"><div className="flex gap-1 rounded-lg border border-border bg-bg-surface/60 p-1 backdrop-blur-sm">
-            {([['all', '全部作品', works.length], ['published', '已发布', stats.publishedWorks], ['draft', '草稿箱', draftCount]] as const).map(([key, label, count]) => <button key={key} type="button" onClick={() => setStatusFilter(key)} className={`h-8 rounded-lg px-3 text-sm font-medium transition-all ${statusFilter === key ? 'bg-accent-muted text-accent shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}>{label} <span className="text-[0.6875rem] text-text-muted">{count}</span></button>)}
+          <div className="mb-5 flex items-center justify-between gap-3"><div className="flex gap-1 rounded-xl border border-border bg-bg-surface/60 p-1 shadow-sm backdrop-blur-sm">
+            {([['all', '全部作品', works.length], ['published', '已发布', stats.publishedWorks], ['draft', '草稿箱', draftCount]] as const).map(([key, label, count]) => <button key={key} type="button" onClick={() => setStatusFilter(key)} className={`h-8 rounded-lg px-3 text-sm font-medium transition-all duration-200 ${statusFilter === key ? 'bg-gradient-to-b from-accent-soft to-accent-muted text-accent shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-accent-soft'}`}>{label} <span className="text-[0.6875rem] text-text-muted">{count}</span></button>)}
           </div><span className="hidden text-xs text-text-muted sm:inline">待发布作品 {draftCount} 部</span></div>
           {filteredWorks.length === 0 ? <div className="flex min-h-64 items-center justify-center border-y border-border text-center text-text-muted"><div><ImageIcon size={42} className="mx-auto animate-float" strokeWidth={1.25} /><p className="mt-3 text-sm">{searchQuery ? '没有匹配的作品' : '这里还没有作品'}</p></div></div>
             : <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{filteredWorks.map((work, workIdx) => {
@@ -282,7 +295,7 @@ export default function MyWorksPage() {
     const published = isWorkPublished(selectedWork, format);
     const cover = selectedWork.cover_image ? refImageUrl(selectedWork.cover_image) : null;
     const publishedCount = editChapters.filter((chapter) => chapter.is_published).length;
-    return <div className="page-atmosphere flex min-h-0 flex-1 flex-col bg-bg-base">
+    return <div className="flex min-h-0 flex-1 flex-col bg-bg-base">
       <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-border glass-panel px-4 md:px-8"><button type="button" onClick={() => void backToList()} className="flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-accent"><ChevronLeft size={18} />返回{formatCopy[format].label}</button><button type="button" onClick={() => void handleSave()} disabled={saving} className="fanqie-cta-primary disabled:opacity-40">{saving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}保存发布设置</button></header>
       <div ref={pageScrollRef} className="flex-1 overflow-y-auto"><main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8">
         <section className="animate-fade-in-up grid gap-5 border-b border-border pb-6 sm:grid-cols-[112px_1fr]">
@@ -306,7 +319,7 @@ export default function MyWorksPage() {
     const chapters = selectedWork.chapters.slice().sort((a, b) => a.display_order - b.display_order || a.chapter_number - b.chapter_number);
     const currentIndex = chapters.findIndex((chapter) => chapter.id === readerChapterId);
     const currentMeta = chapters[currentIndex];
-    return <div className="page-atmosphere flex min-h-0 flex-1 flex-col bg-bg-base">
+    return <div className="flex min-h-0 flex-1 flex-col bg-bg-base">
       <header className="relative z-10 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border glass-panel px-3 md:px-6"><button type="button" onClick={() => setView('detail')} className="flex min-w-0 items-center gap-2 text-sm text-text-secondary transition-colors hover:text-accent"><ChevronLeft size={18} /><span className="hidden sm:inline">返回管理</span><span className="hidden text-text-muted sm:inline">/</span><span className="truncate font-semibold text-text-primary">{selectedWork.title}</span></button><select value={readerChapterId ?? ''} onChange={(event) => void openReader(Number(event.target.value))} aria-label="切换章节" className="h-9 max-w-48 rounded-lg border border-border bg-bg-surface px-2 text-xs text-text-secondary transition-colors focus:border-accent focus:outline-none">{chapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapterTitle(chapter, format)}</option>)}</select></header>
       <div className="flex-1 overflow-y-auto bg-bg-surface/60">{readerLoading ? <div className="flex h-full items-center justify-center"><Loader2 size={28} className="animate-spin text-accent" /></div>
         : format === 'novel' ? <article className="fanqie-reader-page mx-auto min-h-full max-w-3xl px-6 py-10 sm:px-12 md:py-14"><div className="fanqie-reader-header mb-8"><div className="text-xs font-semibold text-accent">小说预览</div><h1 className="font-display mt-2 text-2xl font-bold text-text-primary">{currentMeta ? chapterTitle(currentMeta, format) : ''}</h1></div>{readerChapter?.novel_content?.trim() ? <div className="fanqie-reader-copy whitespace-pre-wrap break-words text-base leading-8">{readerChapter.novel_content}</div> : <EmptyReader message={formatCopy.novel.emptyContent} />}</article>

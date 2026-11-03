@@ -3,8 +3,12 @@ package com.artverse.application;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.*;
 import com.artverse.persistence.MangaAgentConversationRepository;
+import com.artverse.persistence.MangaAgentRunRepository;
+import com.artverse.persistence.ChapterRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -16,8 +20,28 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AiConversationService {
     public static final String DEFAULT_TITLE = "新会话";
+    public static final int AUTO_TITLE_MAX_CODE_POINTS = 24;
     private final MangaAgentConversationRepository repository;
     private final ChapterAccessService chapterAccessService;
+    private final MangaAgentRunRepository runRepository;
+    private final ChapterRepository chapterRepository;
+    private final ApplicationEventPublisher events;
+
+    @Transactional
+    public MangaAgentConversation automationConversation(User user,AiConversationType type,Long chapterId,UUID runId,String title) {
+        var existing=repository.findAutomationConversation(user.getId(),runId);
+        if(existing.isPresent())return existing.get();
+        MangaAgentConversation c=new MangaAgentConversation();
+        c.setUser(user);c.setConversationUuid(runId);c.setConversationType(type);
+        c.setStatus(MangaAgentConversationStatus.ARCHIVED);c.setArchivedAt(OffsetDateTime.now());
+        c.setLegacyImportKey("automation:"+runId);
+        if(type!=AiConversationType.IMAGE_GEN) {
+            Chapter chapter=chapterAccessService.requireVisible(chapterId,user.getId());
+            c.setChapter(chapter);c.setStory(chapter.getStory());
+        }
+        applyInitialTitle(c,title);
+        return repository.save(c);
+    }
 
     @Transactional(readOnly = true)
     public List<MangaAgentConversation> list(User user, AiConversationType type, Long chapterId, boolean includeArchived) {
@@ -36,7 +60,24 @@ public class AiConversationService {
     public MangaAgentConversation create(User user, AiConversationType type, Long chapterId, String requestedTitle) {
         if (type == AiConversationType.STORY_CHAT) {
             if (chapterId == null) throw new BusinessException(400, "chapterId is required for story chat");
-            return storyConversation(user, chapterId);
+            Chapter chapter = chapterAccessService.requireVisible(chapterId, user.getId());
+            // Serialize create requests even when there is no conversation row to lock yet.
+            chapterRepository.findByIdAndUserIdForUpdate(chapterId, user.getId())
+                    .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+            var empty = repository.findEmptyStoryConversations(user.getId(), chapterId, PageRequest.of(0, 1));
+            if (!empty.isEmpty()) {
+                MangaAgentConversation draft = empty.getFirst();
+                draft.setLastActivityAt(OffsetDateTime.now());
+                return repository.save(draft);
+            }
+            MangaAgentConversation conversation = new MangaAgentConversation();
+            conversation.setUser(user);
+            conversation.setStory(chapter.getStory());
+            conversation.setChapter(chapter);
+            conversation.setConversationType(AiConversationType.STORY_CHAT);
+            conversation.setStatus(MangaAgentConversationStatus.ACTIVE);
+            applyInitialTitle(conversation, requestedTitle);
+            return repository.save(conversation);
         }
         MangaAgentConversation c = new MangaAgentConversation();
         c.setUser(user);
@@ -49,7 +90,7 @@ public class AiConversationService {
     @Transactional
     public MangaAgentConversation storyConversation(User user, Long chapterId) {
         Chapter chapter = chapterAccessService.requireVisible(chapterId, user.getId());
-        return repository.findFirstByUserIdAndChapterIdAndConversationTypeAndStatus(
+        return repository.findFirstByUserIdAndChapterIdAndConversationTypeAndStatusOrderByLastActivityAtDescIdDesc(
                         user.getId(), chapterId, AiConversationType.STORY_CHAT, MangaAgentConversationStatus.ACTIVE)
                 .orElseGet(() -> {
                     MangaAgentConversation c = new MangaAgentConversation();
@@ -77,12 +118,29 @@ public class AiConversationService {
 
     @Transactional
     public MangaAgentConversation rename(User user, UUID id, String title) {
-        MangaAgentConversation c = require(user, id);
+        MangaAgentConversation owned = require(user, id);
+        MangaAgentConversation c = repository.findByIdForTitleUpdate(owned.getId()).orElseThrow();
         c.setTitle(normalizeManualTitle(title));
         c.setTitleSource(AiConversationTitleSource.USER);
         c.setTitleState(AiConversationTitleState.FINALIZED);
         c.setTitleGenerationStartedAt(null);
         return repository.save(c);
+    }
+
+    @Transactional
+    public void delete(User user, UUID id) {
+        MangaAgentConversation c = require(user, id);
+        if (c.getConversationType() != AiConversationType.STORY_CHAT) {
+            throw new BusinessException(400, "Only story chat conversations can be deleted here");
+        }
+        chapterAccessService.requireVisible(c.getChapter().getId(), user.getId());
+        if (runRepository.existsByConversationIdAndStatusIn(c.getId(),
+                List.of(MangaAgentRunStatus.RUNNING, MangaAgentRunStatus.WAITING_USER))) {
+            throw new BusinessException(409, "请先停止生成或处理待确认的草稿，再删除会话");
+        }
+        // Foreign keys cascade to this conversation's messages, proposals and completed runs.
+        repository.delete(c);
+        repository.flush();
     }
 
     @Transactional
@@ -98,19 +156,22 @@ public class AiConversationService {
 
     @Transactional
     public void autoTitle(MangaAgentConversation c, String input) {
-        if (c.getTitleSource() != AiConversationTitleSource.DEFAULT || !isMeaningful(input)) return;
-        c.setTitleState(AiConversationTitleState.GENERATING);
-        c.setTitleGenerationStartedAt(OffsetDateTime.now());
-        repository.save(c);
-        // Deterministic fallback is deliberately local: primary interaction never fails or blocks on naming.
-        repository.finalizeGeneratedTitle(c.getId(), fallbackTitle(input), AiConversationTitleSource.FALLBACK,
-                AiConversationTitleState.FINALIZED);
+        if (input == null || input.isBlank()) return;
+        // Read current metadata under a lock: callers can hold detached/stale conversation objects.
+        MangaAgentConversation current = repository.findDefaultTitleForUpdate(c.getId()).orElse(null);
+        if (current == null || current.getTitleSource() != AiConversationTitleSource.DEFAULT) return;
+        String fallback = fallbackTitle(input);
+        current.setTitle(fallback);
+        current.setTitleSource(AiConversationTitleSource.FALLBACK);
+        current.setTitleState(AiConversationTitleState.GENERATING);
+        current.setTitleGenerationStartedAt(OffsetDateTime.now());
+        events.publishEvent(new ConversationTitleRequested(current.getId(), current.getUser().getId(),
+                limitCodePoints(input, 2000), fallback));
     }
 
     @Transactional
     public void touch(MangaAgentConversation c) {
-        c.setLastActivityAt(OffsetDateTime.now());
-        repository.save(c);
+        repository.touchActivity(c.getId(), OffsetDateTime.now());
     }
 
     private void applyInitialTitle(MangaAgentConversation c, String requestedTitle) {
@@ -121,16 +182,14 @@ public class AiConversationService {
         }
     }
 
-    private static boolean isMeaningful(String input) {
-        String value = input == null ? "" : input.strip();
-        return value.length() > 2 && !value.matches("(?iu)^(你好|嗨|hello|hi|谢谢|感谢|ok|好的|嗯|在吗|[\\p{So}\\p{Punct}\\s]+)$");
+    public static String fallbackTitle(String input) {
+        String clean = input == null ? "" : input.replaceAll("[\\p{Cntrl}\\p{Z}\\s]+", " ").strip();
+        if (clean.isBlank()) return DEFAULT_TITLE;
+        return limitCodePoints(clean, AUTO_TITLE_MAX_CODE_POINTS);
     }
 
-    public static String fallbackTitle(String input) {
-        String clean = input == null ? "" : input.replaceAll("[\\p{Cntrl}\\r\\n]+", " ")
-                .replaceAll("[`*_#>|]", "").replaceAll("\\s+", " ").strip();
-        if (clean.isBlank()) return DEFAULT_TITLE;
-        return clean.codePoints().limit(24).collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).toString();
+    public static String limitCodePoints(String value, int limit) {
+        return value.substring(0, value.offsetByCodePoints(0, Math.min(limit, value.codePointCount(0, value.length()))));
     }
 
     private static String normalizeManualTitle(String title) {

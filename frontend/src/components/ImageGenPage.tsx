@@ -1,4 +1,7 @@
-﻿import type { ChangeEvent } from 'react';
+import ImageRequestStatusPanel from './ImageRequestStatusPanel';
+import { refreshImageRequestRecord, IMAGE_STATUS_LABELS } from '../api';
+import { openAutomationComposer } from '../api/automations';
+import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy,
@@ -20,12 +23,13 @@ import {
 import {
   API_KEY_CHANGE_EVENT,
   deleteImageGenRecord,
+  errorMessage,
   generateImage,
   getPrimaryProviderModel,
   getProviderModelOptions,
   imageGenUrl,
   listImageGenHistory,
-  type ImageGenRecord,
+  listAiConversations,
   createAiConversation,
   renameAiConversation,
   archiveAiConversation,
@@ -38,166 +42,18 @@ import {
   referenceImageCacheKey,
 } from '../imageCache';
 import ModelSwitcher from './ModelSwitcher';
-
-interface Message {
-  id: string;
-  type: 'user' | 'ai';
-  prompt?: string;
-  refThumbnails?: string[];
-  refImageKeys?: string[];
-  record?: ImageGenRecord;
-}
-
-interface GenTheme {
-  id: string;
-  conversationId?: string;
-  name: string;
-  createdAt: string;
-  messages: Message[];
-}
+import {
+  ASPECT_RATIOS, LS_CANVAS_OPEN_KEY, LS_CANVAS_WIDTH_KEY,
+  RESOLUTIONS, type GenConfig, type GenTheme, type Message,
+  fmtRes, generateId, historyMessages, loadActiveThemeId, loadGenConfig,
+  loadThemes, mergeHistoryIntoThemes, removeMessageRound, saveActiveThemeId,
+  saveGenConfig, saveThemes,
+  imageThemeManualTitle, imageThemePromptTitle, mergeImageConversationTitles, recoverImageThemeConversation,
+} from './imageGenModel';
+import { useToast } from '../ui/toast/useToast';
+import { copyText } from '../utils/browserSecurity';
 
 type RefFile = { file: File; preview: string };
-
-interface GenConfig {
-  resolution: string;
-  aspectRatio: string;
-}
-
-function removeMessageRound(messages: Message[], msgId: string): Message[] {
-  const index = messages.findIndex((message) => message.id === msgId);
-  if (index < 0) return messages;
-
-  const idsToRemove = new Set<string>([msgId]);
-  const current = messages[index];
-  const next = messages[index + 1];
-  const previous = messages[index - 1];
-
-  if (current?.type === 'user' && next?.type === 'ai') {
-    idsToRemove.add(next.id);
-  }
-
-  if (current?.type === 'ai' && previous?.type === 'user') {
-    idsToRemove.add(previous.id);
-  }
-
-  return messages.filter((message) => !idsToRemove.has(message.id));
-}
-
-const LS_THEMES_KEY = 'artverse.genThemes';
-const LS_ACTIVE_THEME_KEY = 'artverse.activeGenTheme';
-const LS_GEN_CONFIG_KEY = 'artverse.genConfig';
-const LS_CANVAS_OPEN_KEY = 'artverse.genCanvasOpen';
-const LS_CANVAS_WIDTH_KEY = 'artverse.genCanvasWidth';
-
-const RESOLUTIONS = [
-  { label: '1024×1024', value: '1024x1024', ratio: '1:1' },
-  { label: '1152×864', value: '1152x864', ratio: '4:3' },
-  { label: '864×1152', value: '864x1152', ratio: '3:4' },
-  { label: '1280×720', value: '1280x720', ratio: '16:9' },
-  { label: '720×1280', value: '720x1280', ratio: '9:16' },
-  { label: '1344×768', value: '1344x768', ratio: '16:9' },
-  { label: '768×1344', value: '768x1344', ratio: '9:16' },
-];
-
-const ASPECT_RATIOS = [
-  { label: '1:1', value: '1:1', sub: '正方形' },
-  { label: '4:3', value: '4:3', sub: '横屏' },
-  { label: '3:4', value: '3:4', sub: '竖屏' },
-  { label: '16:9', value: '16:9', sub: '宽屏' },
-  { label: '9:16', value: '9:16', sub: '长屏' },
-];
-
-const DEFAULT_CONFIG: GenConfig = { resolution: '1024x1024', aspectRatio: '1:1' };
-
-function generateId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
-}
-
-function loadThemes(): GenTheme[] {
-  try {
-    const raw = localStorage.getItem(LS_THEMES_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as GenTheme[];
-  } catch {
-    return [];
-  }
-}
-
-function saveThemes(themes: GenTheme[]) {
-  const persistedThemes = themes.map((theme) => ({
-    ...theme,
-    messages: theme.messages.map((message) => {
-      const persistedMessage = { ...message };
-      delete persistedMessage.refThumbnails;
-      return persistedMessage;
-    }),
-  }));
-  localStorage.setItem(LS_THEMES_KEY, JSON.stringify(persistedThemes));
-}
-
-function loadActiveThemeId(): string | null {
-  return localStorage.getItem(LS_ACTIVE_THEME_KEY);
-}
-
-function saveActiveThemeId(id: string) {
-  localStorage.setItem(LS_ACTIVE_THEME_KEY, id);
-}
-
-function loadGenConfig(): GenConfig {
-  try {
-    const raw = localStorage.getItem(LS_GEN_CONFIG_KEY);
-    if (!raw) return DEFAULT_CONFIG;
-    return JSON.parse(raw) as GenConfig;
-  } catch {
-    return DEFAULT_CONFIG;
-  }
-}
-
-function saveGenConfig(config: GenConfig) {
-  localStorage.setItem(LS_GEN_CONFIG_KEY, JSON.stringify(config));
-}
-
-function historyMessages(records: ImageGenRecord[]): Message[] {
-  return [...records]
-    .reverse()
-    .flatMap((record) => [
-      { id: 'u-' + record.id, type: 'user' as const, prompt: record.prompt },
-      { id: 'a-' + record.id, type: 'ai' as const, record },
-    ]);
-}
-
-function mergeHistoryIntoThemes(themes: GenTheme[], records: ImageGenRecord[]): GenTheme[] {
-  if (themes.length === 0) return themes;
-
-  const recordsById = new Map(records.map((record) => [record.id, record]));
-  const knownRecordIds = new Set<number>();
-  const updatedThemes = themes.map((theme) => ({
-    ...theme,
-    messages: theme.messages.map((message) => {
-      if (!message.record) return message;
-      knownRecordIds.add(message.record.id);
-      const current = recordsById.get(message.record.id);
-      return current ? { ...message, record: current } : message;
-    }),
-  }));
-  const missingRecords = records.filter((record) => !knownRecordIds.has(record.id));
-  if (missingRecords.length === 0) return updatedThemes;
-
-  // The server does not persist client-side themes. Recover into the original
-  // history theme, which preserves the existing grouping for local messages.
-  const recoveredMessages = historyMessages(missingRecords);
-  return updatedThemes.map((theme, index) => (
-    index === 0 ? { ...theme, messages: [...recoveredMessages, ...theme.messages] } : theme
-  ));
-}
-
-function fmtRes(v: string | null | undefined): string {
-  if (!v) return '';
-  return v.split('x').join('×');
-}
 
 function PersistentImage({
   cacheKey,
@@ -322,8 +178,8 @@ function ConfigPopover({
   };
 
   return (
-    <div className="absolute left-0 bottom-full mb-2 z-50 w-72 origin-bottom-left animate-fade-in">
-      <div className="overflow-hidden rounded-2xl border border-border bg-bg-surface shadow-black/50">
+    <div role="dialog" aria-label="图片配置" className="studio-config-popover absolute left-0 bottom-full mb-2 z-50 w-72 origin-bottom-left animate-fade-in">
+      <div className="overflow-hidden rounded-2xl border border-border bg-bg-surface shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
@@ -347,8 +203,8 @@ function ConfigPopover({
                   className={
                     'flex items-center justify-between rounded-xl border px-3 py-2 text-xs transition-all duration-150 ' +
                     (config.resolution === res.value
-                      ? 'border-accent/40 bg-accent/10 text-accent'
-                      : 'border-border text-text-secondary hover:border-border hover:text-text-primary bg-bg-base')
+                      ? 'border-accent bg-gradient-to-b from-accent-soft to-accent-muted text-accent shadow-sm'
+                      : 'border-border text-text-secondary hover:border-accent/40 hover:text-text-primary bg-bg-base')
                   }
                 >
                   <span>{res.label}</span>
@@ -369,8 +225,8 @@ function ConfigPopover({
                   className={
                     'flex flex-col items-center gap-1 rounded-xl border px-3 py-2 text-xs transition-all duration-150 min-w-[64px] ' +
                     (config.aspectRatio === ar.value
-                      ? 'border-accent/40 bg-accent/10 text-accent'
-                      : 'border-border text-text-secondary hover:border-border hover:text-text-primary bg-bg-base')
+                      ? 'border-accent bg-gradient-to-b from-accent-soft to-accent-muted text-accent shadow-sm'
+                      : 'border-border text-text-secondary hover:border-accent/40 hover:text-text-primary bg-bg-base')
                   }
                 >
                   <svg viewBox="0 0 20 20" className="w-[18px] h-[18px] fill-none stroke-current stroke-[1.5] opacity-70">
@@ -455,8 +311,8 @@ function Composer({
   return (
     <div className={compact ? 'w-full' : 'w-full max-w-5xl mx-auto'}>
       {/* Split the card: text section has overflow-hidden, footer does not */}
-      <div className="rounded-2xl border border-border shadow-coral/5">
-        <div className="overflow-hidden rounded-t-2xl bg-bg-surface/85">
+      <div className="rounded-2xl border border-border bg-bg-surface shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <div className="overflow-hidden rounded-t-2xl bg-bg-surface">
           <div className="relative p-4 sm:p-5">
             {refFiles.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
@@ -498,8 +354,8 @@ function Composer({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-border px-3 py-3 sm:px-4 bg-bg-surface/85 rounded-b-2xl">
-          <label className={'flex cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-text-secondary transition-colors hover:bg-bg-raised ' + (refFiles.length >= 3 ? 'pointer-events-none opacity-40' : '')}>
+        <div className="relative flex flex-wrap items-center gap-2 border-t border-border px-3 py-3 sm:px-4 bg-bg-surface rounded-b-2xl">
+          <label className={'flex cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-text-secondary transition-all duration-200 hover:border-accent/40 hover:text-accent hover:bg-bg-raised ' + (refFiles.length >= 3 ? 'pointer-events-none opacity-40' : '')}>
             <ImagePlus size={16} />
             <span className="text-sm">参考图</span>
             <input type="file" accept="image/*" multiple onChange={onAddRef} className="hidden" />
@@ -510,7 +366,7 @@ function Composer({
             <button
               type="button"
               onClick={() => setConfigOpen(!configOpen)}
-              className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-text-secondary transition-colors hover:bg-bg-raised hover:text-text-primary"
+              className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-text-secondary transition-all duration-200 hover:border-accent/40 hover:bg-bg-raised hover:text-accent"
               title="图片配置"
             >
               <Settings2 size={15} />
@@ -532,11 +388,12 @@ function Composer({
             disabled={generating}
           />
 
+          <button type="button" disabled={!prompt.trim() || generating} onClick={() => openAutomationComposer({ executorKey: 'IMAGE_GEN', instruction: prompt, size: config.resolution, model: selectedModel, referenceFiles: refFiles.map(item => item.file), origin: 'IMAGE_GEN' })} className="ml-auto rounded-xl border border-border px-3 py-2 text-sm text-text-secondary hover:text-accent disabled:opacity-40">预约执行</button>
           <button
             type="button"
             onClick={onSend}
             disabled={!canSend}
-            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-text-primary transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-30"
+            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl btn-accent active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={generating ? '正在生成' : '发送生成请求'}
           >
             {generating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
@@ -591,13 +448,13 @@ function ThemeSidebar({
   };
 
   return (
-    <aside className={'flex shrink-0 flex-col border-r border-border bg-bg-surface transition-all duration-300 ' + (sidebarOpen ? 'w-56' : 'w-0 overflow-hidden')}>
+    <aside inert={!sidebarOpen} aria-label="生图主题" className={'studio-theme-sidebar flex shrink-0 flex-col border-r border-border glass-panel transition-all duration-300 ' + (sidebarOpen ? 'is-open w-56' : 'w-0 overflow-hidden')}>
       <div className="flex h-14 items-center justify-between border-b border-border px-3">
         <span className="flex items-center gap-1.5 text-sm font-bold tracking-wide text-accent">
           <Palette size={14} />
           主题列表
         </span>
-        <button onClick={onToggleSidebar} className="text-text-muted hover:text-text-primary transition-colors" aria-label="收起侧边栏">
+        <button onClick={onToggleSidebar} className="rounded-lg p-1 text-text-muted hover:bg-accent-soft hover:text-accent transition-colors" aria-label="收起侧边栏">
           <ChevronLeft size={16} />
         </button>
       </div>
@@ -605,7 +462,7 @@ function ThemeSidebar({
       <div className="px-2 py-3">
         <button
           onClick={onCreateTheme}
-          className="flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2.5 text-sm font-medium text-text-secondary hover:border-accent/40 hover:text-accent transition-colors"
+          className="flex w-full items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2.5 text-sm font-medium text-text-secondary transition-all duration-200 hover:border-accent/50 hover:bg-accent-soft hover:text-accent"
         >
           <Plus size={15} />
           创作新主题
@@ -621,9 +478,9 @@ function ThemeSidebar({
             <button
               onClick={() => onSelectTheme(theme.id)}
               className={
-                'w-full rounded-lg px-3 py-2.5 text-left text-sm transition-all duration-200 flex items-center gap-1 ' +
+                'w-full rounded-xl px-3 py-2.5 text-left text-sm transition-all duration-200 flex items-center gap-1 ' +
                 (theme.id === activeThemeId
-                  ? 'bg-accent/10 text-accent border border-accent/20'
+                  ? 'bg-accent-muted text-accent border border-accent/30 shadow-sm'
                   : 'text-text-secondary hover:bg-bg-raised hover:text-text-primary border border-transparent')
               }
             >
@@ -678,16 +535,22 @@ function ThemeSidebar({
 }
 
 export default function ImageGenPage() {
-  const [themes, setThemes] = useState<GenTheme[]>([]);
-  const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const toast = useToast();
+  const [initialThemes] = useState(loadThemes);
+  const [themes, setThemes] = useState<GenTheme[]>(initialThemes);
+  const [activeThemeId, setActiveThemeId] = useState<string | null>(() => {
+    const saved = loadActiveThemeId();
+    return initialThemes.find(theme => theme.id === saved)?.id ?? initialThemes[0]?.id ?? null;
+  });
+  const [loaded, setLoaded] = useState(initialThemes.length > 0);
   const [loading, setLoading] = useState(true);
+  const [titleRefreshVersion, setTitleRefreshVersion] = useState(0);
   const [prompt, setPrompt] = useState('');
   const [refFiles, setRefFiles] = useState<RefFile[]>([]);
   const [generatingThemes, setGeneratingThemes] = useState<Record<string, boolean>>({});
-  const [config, setConfig] = useState<GenConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<GenConfig>(loadGenConfig);
   const [selectedImageModel, setSelectedImageModel] = useState(() => getPrimaryProviderModel('image'));
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 1280px)').matches);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [canvasOpen, setCanvasOpen] = useState(() => {
     try {
@@ -712,6 +575,9 @@ export default function ImageGenPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasPanelRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const sendingRef = useRef(false);
+  const themesRef = useRef(themes);
+  useEffect(() => { themesRef.current = themes; }, [themes]);
   const dragRef = useRef<{
     isDragging: boolean;
     lastX: number;
@@ -748,7 +614,7 @@ export default function ImageGenPage() {
         document.body.appendChild(ta);
         ta.focus();
         ta.select();
-        try { document.execCommand('copy'); } catch {}
+        try { document.execCommand('copy'); } catch { /* 忽略旧 API 复制失败 */ }
         document.body.removeChild(ta);
         setCopiedId(String(recordId));
         setTimeout(() => setCopiedId(null), 1500);
@@ -775,7 +641,7 @@ export default function ImageGenPage() {
   // Initialize from the local cache, then reconcile persisted history. A request
   // can finish while this page is unmounted, so cache contents alone are stale.
   useEffect(() => {
-    let stored = loadThemes();
+    let stored = initialThemes;
     let cancelled = false;
     if (stored.length === 0) {
       // First visit: seed default theme from backend history
@@ -792,23 +658,14 @@ export default function ImageGenPage() {
         } catch {
           // Empty history is fine.
         }
-        stored = [defaultTheme];
+        if (cancelled) return;
+        stored = [recoverImageThemeConversation(defaultTheme)];
         saveThemes(stored);
         setThemes(stored);
         setActiveThemeId(defaultTheme.id);
-        setConfig(loadGenConfig());
         setLoaded(true);
         setLoading(false);
       })();
-    } else {
-      const savedThemeId = loadActiveThemeId();
-      const activeId = savedThemeId && stored.some((t) => t.id === savedThemeId)
-        ? savedThemeId
-        : stored[0].id;
-      setThemes(stored);
-      setActiveThemeId(activeId);
-      setConfig(loadGenConfig());
-      setLoaded(true);
     }
     if (stored.length > 0) void (async () => {
       try {
@@ -824,7 +681,7 @@ export default function ImageGenPage() {
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [initialThemes]);
 
   // When themes change, persist to localStorage
   useEffect(() => {
@@ -857,20 +714,49 @@ export default function ImageGenPage() {
   const isActiveThemeGenerating = activeThemeId ? !!generatingThemes[activeThemeId] : false;
 
   const hasRunningRecords = useMemo(
-    () => themes.some((theme) => theme.messages.some((message) => message.record?.status === 'RUNNING')),
+    () => themes.some((theme) => theme.messages.some((message) => message.record && !['SUCCEEDED', 'FAILED', 'STALE', 'NEEDS_REVIEW', 'PARTIAL_FAILED'].includes(message.record.status))),
     [themes],
   );
+
+  const titleConversationKey = themes.flatMap(theme => theme.conversationId ? [theme.conversationId] : []).sort().join('|');
+  const pendingTitleKey = themes.filter(theme => theme.conversationId && !imageThemeManualTitle(theme)
+    && (theme.titleState === 'GENERATING' || (theme.titleSource == null || theme.titleSource === 'DEFAULT')
+      && theme.messages.some(message => message.type === 'user')))
+    .map(theme => theme.conversationId).sort().join('|');
+
+  useEffect(() => {
+    if (!loaded || !titleConversationKey) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const pendingIds = new Set(pendingTitleKey.split('|').filter(Boolean));
+    const refresh = async () => {
+      let pending = pendingIds.size > 0;
+      try {
+        const summaries = await listAiConversations('IMAGE_GEN');
+        if (cancelled) return;
+        setThemes(current => mergeImageConversationTitles(current, summaries));
+        pending = summaries.some(summary => pendingIds.has(summary.conversationId) && summary.titleState !== 'FINALIZED');
+      } catch {
+        // Keep cached/prompt titles when metadata refresh is temporarily unavailable.
+      }
+      if (!cancelled && pending && ++attempts < 90) timer = setTimeout(() => void refresh(), 2000);
+    };
+    void refresh();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [loaded, titleConversationKey, pendingTitleKey, titleRefreshVersion]);
 
   useEffect(() => {
     if (!hasRunningRecords) return;
     const refreshHistory = () => {
-      void listImageGenHistory(0, 50)
-        .then((response) => setThemes((current) => mergeHistoryIntoThemes(current, response.content)))
-        .catch(() => {});
+      const pending = themes.flatMap(theme => theme.messages.flatMap(message => message.record?.request_id ? [message.record] : []));
+      void Promise.all(pending.map(record => refreshImageRequestRecord(record).catch(() => record)))
+        .then(records => setThemes(current => mergeHistoryIntoThemes(current, records)));
+      void listImageGenHistory(0, 50).then(response => setThemes(current => mergeHistoryIntoThemes(current, response.content))).catch(() => {});
     };
     const intervalId = window.setInterval(refreshHistory, 3000);
     return () => window.clearInterval(intervalId);
-  }, [hasRunningRecords]);
+  }, [hasRunningRecords, themes]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -890,15 +776,14 @@ export default function ImageGenPage() {
     [isGenerating, prompt, refFiles.length],
   );
 
-  const handleCreateTheme = async () => {
+  const handleCreateTheme = () => {
     const now = new Date().toISOString();
     const count = themes.length + 1;
-    let conversationId: string | undefined;
-    try { conversationId = (await createAiConversation('IMAGE_GEN', `新主题 ${count}`)).conversationId; } catch {}
     const newTheme: GenTheme = {
       id: generateId(),
-      conversationId,
       name: `新主题 ${count}`,
+      titleSource: 'DEFAULT',
+      titleState: 'WAITING',
       createdAt: now,
       messages: [],
     };
@@ -933,10 +818,13 @@ export default function ImageGenPage() {
 
   const handleRenameTheme = (id: string, name: string) => {
     const conversationId = themes.find((theme) => theme.id === id)?.conversationId;
-    if (conversationId) void renameAiConversation(conversationId, name).catch(() => {});
     setThemes((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, name } : t)),
+      prev.map((t) => (t.id === id ? { ...t, name, titleSource: 'USER', titleState: 'FINALIZED', manualTitlePending: true } : t)),
     );
+    if (conversationId) void renameAiConversation(conversationId, name).then(() => {
+      setThemes(current => current.map(theme => theme.id === id && theme.name === name
+        ? { ...theme, manualTitlePending: false } : theme));
+    }).catch(error => toast.error(errorMessage(error) || '名称暂未同步，已保存在本地，下次发送时重试。'));
   };
 
   const handleSelectTheme = (id: string) => {
@@ -953,14 +841,14 @@ export default function ImageGenPage() {
       for (let i = 0; i < toAdd; i++) {
         const f = filesToAdd[i];
         if (f.size > 10 * 1024 * 1024) {
-          alert(`${f.name} 超过 10MB，请压缩后再上传`);
+          toast.warning(`${f.name} 超过 10MB，请压缩后再上传`);
           continue;
         }
         newRefs.push({ file: f, preview: URL.createObjectURL(f) });
       }
       return [...prev, ...newRefs].slice(0, 3);
     });
-  }, []);
+  }, [toast]);
 
   const handleAddRef = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -982,106 +870,131 @@ export default function ImageGenPage() {
 
   const handleSend = async () => {
     if (!prompt.trim() && refFiles.length === 0) return;
-    if (!activeThemeId) return;
-
-    // Abort any previous generation for this theme
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    // Capture the target theme ID at the moment of sending,
-    // so that switching themes mid-generation doesn't misroute the result.
-    const targetThemeId = activeThemeId;
-    const filesToSend = refFiles;
-    const userMessageId = 'u-temp-' + generateId();
-    const refImageKeys = filesToSend.map((_, index) => referenceImageCacheKey(userMessageId, index));
-    const cacheResults = await Promise.all(
-      filesToSend.map((ref, index) => cacheImage(refImageKeys[index], ref.file)),
-    );
-
-    const userMsg: Message = {
-      id: userMessageId,
-      type: 'user',
-      prompt: prompt.trim() || '仅使用参考图生成',
-      refImageKeys,
-      refThumbnails: cacheResults.every(Boolean) ? undefined : filesToSend.map((ref) => ref.preview),
-    };
-    setThemes((prev) =>
-      prev.map((t) =>
-        t.id === targetThemeId ? { ...t, messages: [...t.messages, userMsg] } : t,
-      ),
-    );
-
-    const promptText = prompt.trim() || '仅使用参考图生成';
-    const currentConfig = config;
-    setPrompt('');
-    setRefFiles([]);
-    if (cacheResults.every(Boolean)) {
-      filesToSend.forEach((ref) => URL.revokeObjectURL(ref.preview));
-    }
-    // Mark only this theme as generating
-    setGeneratingThemes((prev) => ({ ...prev, [targetThemeId]: true }));
-
+    if (!activeThemeId || sendingRef.current) return;
+    sendingRef.current = true;
     try {
-      const refBase64: string[] = [];
-      for (const rf of filesToSend) {
-        const b64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
-          reader.readAsDataURL(rf.file);
-        });
-        refBase64.push(b64);
-      }
 
-      const record = await generateImage(
-        promptText,
-        refBase64.length > 0 ? refBase64 : undefined,
-        currentConfig.resolution,
-        selectedImageModel,
-        controller.signal,
-        activeTheme?.conversationId,
+      // Abort any previous generation for this theme
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      // Capture the target theme ID at the moment of sending,
+      // so that switching themes mid-generation doesn't misroute the result.
+      const targetThemeId = activeThemeId;
+      const filesToSend = refFiles;
+      const userMessageId = 'u-temp-' + generateId();
+      const refImageKeys = filesToSend.map((_, index) => referenceImageCacheKey(userMessageId, index));
+      const cacheResults = await Promise.all(
+        filesToSend.map((ref, index) => cacheImage(refImageKeys[index], ref.file)),
       );
-      // Clear abort ref if this request completed
-      if (abortRef.current === controller) abortRef.current = null;
+
+      const userMsg: Message = {
+        id: userMessageId,
+        type: 'user',
+        prompt: prompt.trim() || '仅使用参考图生成',
+        refImageKeys,
+        refThumbnails: cacheResults.every(Boolean) ? undefined : filesToSend.map((ref) => ref.preview),
+      };
       setThemes((prev) =>
         prev.map((t) =>
-          t.id === targetThemeId
-            ? {
-                ...t,
-                messages: t.messages.flatMap((message) => {
-                  if (message.id !== userMsg.id) return [message];
-                  return [
-                    { ...message, id: 'u-' + record.id },
-                    { id: 'a-' + record.id, type: 'ai' as const, record },
-                  ];
-                }),
-              }
-            : t,
+          t.id === targetThemeId ? { ...imageThemePromptTitle(t, userMsg.prompt || ''), messages: [...t.messages, userMsg] } : t,
         ),
       );
-    } catch (e: any) {
-      // If aborted, don't show error — user is editing
-      if (e instanceof DOMException && e.name === 'AbortError') return;
-      setThemes((prev) =>
-        prev.map((t) =>
-          t.id === targetThemeId
-            ? {
-                ...t,
-                messages: [
-                  ...t.messages,
-                  { id: 'err-' + Date.now(), type: 'ai' as const, prompt: '生成失败：' + (e.message || '未知错误') },
-                ],
-              }
-            : t,
-        ),
-      );
-    } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      setGeneratingThemes((prev) => ({ ...prev, [targetThemeId]: false }));
-    }
+
+      const promptText = prompt.trim() || '仅使用参考图生成';
+      const currentConfig = config;
+      setPrompt('');
+      setRefFiles([]);
+      if (cacheResults.every(Boolean)) {
+        filesToSend.forEach((ref) => URL.revokeObjectURL(ref.preview));
+      }
+      // Mark only this theme as generating
+      setGeneratingThemes((prev) => ({ ...prev, [targetThemeId]: true }));
+
+      try {
+        const target = themesRef.current.find(theme => theme.id === targetThemeId);
+        if (!target) return;
+        // Every local theme gets its own persisted conversation before image submission.
+        let conversationId = target.conversationId;
+        if (!conversationId) {
+          const created = await createAiConversation('IMAGE_GEN', imageThemeManualTitle(target));
+          conversationId = created.conversationId;
+          if (!themesRef.current.some(theme => theme.id === targetThemeId)) {
+            void archiveAiConversation(conversationId).catch(() => {});
+            return;
+          }
+          setThemes(current => current.map(theme => theme.id === targetThemeId ? { ...theme, conversationId } : theme));
+        }
+        const latest = themesRef.current.find(theme => theme.id === targetThemeId);
+        const manualTitle = latest && imageThemeManualTitle(latest);
+        if (manualTitle) {
+          await renameAiConversation(conversationId, manualTitle);
+          setThemes(current => current.map(theme => theme.id === targetThemeId && theme.name === manualTitle
+            ? { ...theme, titleSource: 'USER', titleState: 'FINALIZED', manualTitlePending: false } : theme));
+        }
+        const refBase64: string[] = [];
+        for (const rf of filesToSend) {
+          const b64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            reader.readAsDataURL(rf.file);
+          });
+          refBase64.push(b64);
+        }
+
+        const record = await generateImage(
+          promptText,
+          refBase64.length > 0 ? refBase64 : undefined,
+          currentConfig.resolution,
+          selectedImageModel,
+          controller.signal,
+          conversationId,
+        );
+        // Clear abort ref if this request completed
+        if (abortRef.current === controller) abortRef.current = null;
+        setTitleRefreshVersion(version => version + 1);
+        setThemes((prev) =>
+          prev.map((t) =>
+            t.id === targetThemeId
+              ? {
+                  ...t,
+                  conversationId: record.conversation_id || conversationId,
+                  messages: t.messages.flatMap((message) => {
+                    if (message.id !== userMsg.id) return [message];
+                    return [
+                      { ...message, id: 'u-' + record.id },
+                      { id: 'a-' + record.id, type: 'ai' as const, record },
+                    ];
+                  }),
+                }
+              : t,
+          ),
+        );
+      } catch (e) {
+        // If aborted, don't show error — user is editing
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        setThemes((prev) =>
+          prev.map((t) =>
+            t.id === targetThemeId
+              ? {
+                  ...t,
+                  messages: [
+                    ...t.messages,
+                    { id: 'err-' + Date.now(), type: 'ai' as const, prompt: '生成失败：' + (errorMessage(e) || '未知错误') },
+                  ],
+                }
+              : t,
+          ),
+        );
+      } finally {
+        if (abortRef.current === controller) abortRef.current = null;
+        setGeneratingThemes((prev) => ({ ...prev, [targetThemeId]: false }));
+      }
+    } finally { sendingRef.current = false; }
   };
 
   const handleDelete = async (id: number, msgId: string, imagePath: string | null) => {
@@ -1104,8 +1017,8 @@ export default function ImageGenPage() {
             : t,
         ),
       );
-    } catch (e: any) {
-      alert('删除失败：' + (e.message || '未知错误'));
+    } catch (e) {
+      toast.error('删除失败：' + (errorMessage(e) || '未知错误'));
     }
   };
 
@@ -1125,10 +1038,11 @@ export default function ImageGenPage() {
   };
 
   const handleCopyMessage = (text: string, msgId: string) => {
-    navigator.clipboard.writeText(text).then(() => {
+    void copyText(text).then((ok) => {
+      if (!ok) return;
       setCopiedId(msgId);
       setTimeout(() => setCopiedId(null), 1500);
-    }).catch(() => {});
+    });
   };
 
   const handleEditMessage = (msg: Message) => {
@@ -1270,8 +1184,9 @@ export default function ImageGenPage() {
   }
 
   return (
-    <div ref={containerRef} className="flex-1 min-h-0 bg-bg-base text-text-primary flex">
+    <div ref={containerRef} className="studio-imagegen relative flex min-h-0 min-w-0 flex-1 bg-bg-base text-text-primary">
       {/* Theme Sidebar */}
+      {sidebarOpen && <button type="button" className="studio-theme-backdrop" aria-label="关闭主题列表" onClick={() => setSidebarOpen(false)} />}
       <ThemeSidebar
         themes={themes}
         activeThemeId={activeThemeId}
@@ -1284,7 +1199,7 @@ export default function ImageGenPage() {
       />
 
       {/* Main Content */}
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {!sidebarOpen && (
           <div className="flex h-12 items-center border-b border-border px-3 bg-bg-surface/80">
             <button
@@ -1298,12 +1213,12 @@ export default function ImageGenPage() {
         )}
 
         {!activeTheme ? (
-          <div className="flex-1 flex items-center justify-center px-4">
+          <div className="flex-1 flex items-center justify-center overflow-y-auto px-4 py-6">
             <div className="text-center">
               <p className="text-text-secondary mb-4">请选择一个主题</p>
               <button
                 onClick={handleCreateTheme}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-medium text-white hover:bg-accent-soft transition-colors"
+                className="inline-flex items-center gap-2 rounded-xl btn-accent px-5 py-3 text-sm font-medium"
               >
                 <Plus size={16} />
                 创作新主题
@@ -1311,12 +1226,14 @@ export default function ImageGenPage() {
             </div>
           </div>
         ) : !hasMessages ? (
-          <div className="flex-1 flex items-center justify-center px-4">
+          <div className="studio-image-welcome flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-6">
             <div className="w-full max-w-5xl">
-              <div className="mb-8 text-center">
-                <h2 className="text-4xl font-semibold tracking-tight text-text-primary sm:text-5xl">即刻创作图片</h2>
-                <p className="mt-2 text-sm text-text-secondary">
-                  当前主题：{activeTheme.name}
+              <div className="studio-image-intro mb-8 text-center">
+                <div className="studio-action-icon is-sage"><Palette size={26} strokeWidth={1.5} /></div>
+                <span className="studio-eyebrow">A CANVAS FOR YOUR IMAGINATION</span>
+                <h2 className="text-3xl tracking-tight text-text-primary sm:text-4xl">把想象，变成看得见的画面</h2>
+                <p className="mt-3 text-sm text-text-secondary">
+                  描述脑海中的灵感，让 AI 为你落笔。<span className="text-text-muted"> · {activeTheme.name}</span>
                 </p>
               </div>
               <Composer
@@ -1334,6 +1251,9 @@ export default function ImageGenPage() {
                 selectedModel={selectedImageModel}
                 onSelectModel={setSelectedImageModel}
               />
+              <div className="studio-image-suggestions" aria-label="创作灵感">
+                {['水彩绘本里的森林小屋', '雨夜霓虹下的未来城市', '温暖治愈的猫咪咖啡馆'].map((idea) => <button type="button" key={idea} onClick={() => setPrompt(idea)}><span aria-hidden="true">✧ </span>{idea}</button>)}
+              </div>
             </div>
           </div>
         ) : (
@@ -1370,6 +1290,7 @@ export default function ImageGenPage() {
             </div>
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10">
+              <ImageRequestStatusPanel scope={`standalone.${activeTheme?.conversationId || 'default'}`} />
               <div className="mx-auto w-full max-w-6xl space-y-8">
                 {messages.map((msg) => {
                   if (msg.type === 'user') {
@@ -1377,7 +1298,7 @@ export default function ImageGenPage() {
                     return (
                       <div key={msg.id} className="group flex justify-end">
                         <div className="max-w-[78%]">
-                          <div className="inline-flex items-center gap-2 rounded-2xl border border-border bg-bg-raised px-4 py-3 text-sm text-text-primary shadow-sm">
+                          <div className="inline-flex items-center gap-2 rounded-2xl border border-border bg-bg-raised px-4 py-3 text-sm text-text-primary shadow-md">
                             {referenceCount > 0 && (
                               <div className="flex gap-1">
                                 {Array.from({ length: referenceCount }, (_, index) => (
@@ -1434,12 +1355,13 @@ export default function ImageGenPage() {
                             <span className="font-medium text-text-primary">{record.model || 'gpt-image-2'}</span>
                             <span>{record.size ? fmtRes(record.size) : '生成图片'}</span>
                           </div>
-                          <span>{record.status === 'RUNNING' ? '姝ｅ湪鐢熸垚' : new Date(record.created_at).toLocaleString()}</span>
+                          <span>{record.status === 'RUNNING' ? '生成中' : IMAGE_STATUS_LABELS[record.status] || new Date(record.created_at).toLocaleString()}</span>
                         </div>
 
-                        {record.status === 'RUNNING' ? (
+                        {record.request_id && <ImageRequestStatusPanel requestId={record.request_id} />}
+                        {!['SUCCEEDED', 'FAILED', 'STALE', 'NEEDS_REVIEW', 'PARTIAL_FAILED'].includes(record.status) ? (
                           <div className="flex justify-start">
-                            <div className="inline-flex items-center gap-2 rounded-2xl border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary shadow-sm">
+                            <div className="inline-flex items-center gap-2 rounded-2xl border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary shadow-md">
                               <Loader2 size={16} className="animate-spin text-accent" />
                               姝ｅ湪鐢熸垚鍥剧墖...
                             </div>
@@ -1450,7 +1372,7 @@ export default function ImageGenPage() {
                           </div>
                         ) : (
                         <div className="flex justify-start">
-                          <div className="inline-flex max-w-full items-center justify-center overflow-hidden rounded-2xl border border-border bg-bg-surface shadow-sm">
+                          <div className="inline-flex max-w-full items-center justify-center overflow-hidden rounded-2xl border border-border bg-bg-surface shadow-md transition-shadow duration-200 hover:shadow-lg">
                             <PersistentImage
                               cacheKey={imageCacheKey}
                               sourceUrl={imageUrl}
@@ -1506,7 +1428,7 @@ export default function ImageGenPage() {
 
                 {isActiveThemeGenerating && (
                   <div className="flex justify-start">
-                    <div className="inline-flex items-center gap-2 rounded-2xl border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary shadow-sm">
+                    <div className="inline-flex items-center gap-2 rounded-2xl border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary shadow-md">
                       <Loader2 size={16} className="animate-spin text-accent" />
                       正在生成图片...
                     </div>

@@ -7,6 +7,7 @@ import com.artverse.application.CurrentUserService;
 import com.artverse.domain.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -21,20 +22,12 @@ public class ImageGenController {
     private final ApiKeyService apiKeyService;
     private final CurrentUserService currentUserService;
 
+    private final ImageGenerationRequestController requests;
+
     @PostMapping("/generate")
-    public Map<String, Object> generate(@RequestBody Map<String, Object> body) {
-        String prompt = body.get("prompt") != null ? body.get("prompt").toString() : "";
-        String size = body.get("size") != null ? body.get("size").toString() : "";
-        @SuppressWarnings("unchecked")
-        List<String> referenceImages = (List<String>) body.get("reference_images");
-        User user = currentUser();
-        UserProviderConfig imageConfig = apiKeyService.requireByokProviderConfig(
-                user,
-                requestConfig(body),
-                configId(body),
-                "Please configure an image provider API key in Settings before using image generation."
-        );
-        return imageGenService.submit(prompt, referenceImages, imageConfig, size, uuidValue(body.get("conversation_id")));
+    public ResponseEntity<Map<String,Object>> generate(@RequestBody Map<String,Object> body,
+            @RequestHeader(value="Idempotency-Key",required=false) String key) {
+        return requests.submit(currentUser().getId(),null,null,"STANDALONE",body,key);
     }
 
     @GetMapping("/history")
@@ -45,8 +38,9 @@ public class ImageGenController {
     }
 
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable long id) {
+    public ResponseEntity<Void> delete(@PathVariable long id) {
         imageGenService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 
     private User currentUser() {

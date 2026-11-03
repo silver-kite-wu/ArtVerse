@@ -4,6 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.application.publication.PublicationFormat;
 import com.artverse.application.publication.PublicationStrategyRegistry;
 import com.artverse.common.BusinessException;
+import com.artverse.application.knowledge.KnowledgeFactService;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.Story;
 import com.artverse.domain.User;
@@ -27,6 +28,7 @@ public class StoryService {
     private final ChapterRepository chapterRepository;
     private final UserRepository userRepository;
     private final PublicationStrategyRegistry publicationStrategies;
+    private final KnowledgeFactService knowledgeFacts;
 
     @Transactional(readOnly = true)
     public List<Story> listAll() {
@@ -73,6 +75,7 @@ public class StoryService {
     @Transactional
     public void delete(Long id) {
         Story story = getRequired(id);
+        knowledgeFacts.deleteForStory(id,story.getUser().getId());
         storyRepository.delete(story);
     }
 

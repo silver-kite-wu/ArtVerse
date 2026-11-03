@@ -2,6 +2,7 @@ package com.artverse.agent.gateway.tools;
 
 import com.artverse.agent.AgentTaskType;
 import io.agentscope.core.tool.Toolkit;
+import io.agentscope.core.tool.mcp.McpClientWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +19,7 @@ class MangaStoryboardToolsStrategy implements AgentToolConfigurationStrategy {
     }
 
     @Override
-    public void configure(Toolkit toolkit) {
-        toolGroups.configureStoryboard(toolkit);
+    public void configure(Toolkit toolkit, McpClientWrapper businessTools) {
+        toolGroups.configureStoryboard(toolkit, businessTools);
     }
 }

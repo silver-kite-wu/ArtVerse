@@ -79,6 +79,16 @@ public class MangaHitlTools extends ToolBase {
         });
     }
 
+    /** External tools pause before callAsync; bridge that event to the product's durable waiting state. */
+    public void captureExternalInput(Map<String,Object> input, io.agentscope.core.agent.RuntimeContext runtimeContext) {
+        MangaAgentRuntimeContext ctx=support.resolveContext(runtimeContext);
+        AgentUserInputRequest request=buildUserInputRequest(
+                (String)input.get("question"),input.get("options"),
+                Boolean.TRUE.equals(input.get("allow_free_text")),(String)input.get("reason"));
+        support.requestUserInput(ctx,request);
+        agentToolAuditService.around(getName(),ctx.userId(),ctx.chapterId(),runtimeContext,()->Map.of());
+    }
+
     private AgentUserInputRequest buildUserInputRequest(String question, Object rawOptions,
                                                         Boolean allowFreeText, String reason) {
         List<AgentUserInputRequest.Option> options = support.normalizeOptions(rawOptions);

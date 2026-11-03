@@ -39,6 +39,7 @@ public class CharacterProfileService {
     private final ArtVerseProperties properties;
     private final KnowledgeService knowledgeService;
     private final KnowledgeCandidateService knowledgeCandidateService;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Transactional(readOnly = true)
     public List<CharacterProfile> listByStory(Long storyId) {
@@ -88,6 +89,9 @@ public class CharacterProfileService {
         if (!profile.getStory().getId().equals(storyId)) {
             throw new BusinessException(400, "Character does not belong to this story");
         }
+        Integer references=jdbcTemplate.queryForObject("SELECT count(*) FROM knowledge_fact_entity_links l JOIN knowledge_entities e ON e.id=l.entity_id WHERE e.character_profile_id=?",Integer.class,id);
+        if(references!=null&&references>0) throw new BusinessException(409,"人物已有知识实体或历史引用，请先归档人物知识并处理引用，不能直接删除");
+        jdbcTemplate.update("DELETE FROM knowledge_entities WHERE character_profile_id=?",id);
         // Delete all ref images from MinIO
         String prefix = refImagePrefix(storyId, id);
         objectStorageService.list(properties.getMinio().getBucket(), prefix, 100).stream()
@@ -154,6 +158,7 @@ public class CharacterProfileService {
             }
         }
 
+        jdbcTemplate.update("INSERT INTO character_reference_images(story_id,character_profile_id,object_key) VALUES (?,?,?) ON CONFLICT(object_key) DO NOTHING",storyId,characterId,objectKey);
         return Map.of("filename", filename, "object_key", objectKey);
     }
 
@@ -166,6 +171,7 @@ public class CharacterProfileService {
         mediaStorageService.validateImagePath(filename);
         String safeFilename = Path.of(filename).getFileName().toString();
         String objectKey = refImagePrefix(storyId, characterId) + safeFilename;
+        jdbcTemplate.update("DELETE FROM character_reference_images WHERE object_key=? AND character_profile_id=?",objectKey,characterId);
         objectStorageService.deleteBestEffort(properties.getMinio().getBucket(), objectKey);
     }
 

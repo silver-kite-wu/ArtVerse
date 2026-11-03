@@ -14,6 +14,8 @@ public interface CharacterProfileRepository extends JpaRepository<CharacterProfi
 
     List<CharacterProfile> findByStoryIdOrderByIdAsc(Long storyId);
 
+    Optional<CharacterProfile> findByIdAndStoryId(Long id, Long storyId);
+
     void deleteByStoryIdAndId(Long storyId, Long id);
 
     @Query("SELECT c FROM CharacterProfile c WHERE c.id = :id AND c.story.user.id = :userId")

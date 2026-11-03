@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   Plus,
   BookOpenText,
@@ -18,6 +18,7 @@ import {
 import {
   listStories,
   createStory,
+  errorMessage,
   updateStory,
   deleteStory,
   exportStory,
@@ -44,12 +45,15 @@ import {
 import ImageEditor from './ImageEditor';
 import AssetGroupManagerModal from './AssetGroupManagerModal';
 import OverlayPortal from '../ui/OverlayPortal';
+import StudioArtwork from './StudioArtwork';
+import { useToast } from '../ui/toast/useToast';
 
 interface Props {
   onSelectStory: (story: Story) => void;
 }
 
 export default function HomePage({ onSelectStory }: Props) {
+  const toast = useToast();
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -123,8 +127,8 @@ export default function HomePage({ onSelectStory }: Props) {
         setCharFormDesc('');
         setCharRefImages([]);
       }
-    } catch (err: any) {
-      alert('加载角色卡失败: ' + (err.message || ''));
+    } catch (err) {
+      toast.error('加载角色卡失败: ' + (errorMessage(err) || '未知错误'));
     }
   };
 
@@ -148,8 +152,9 @@ export default function HomePage({ onSelectStory }: Props) {
       setCharFormDesc(created.description || '');
       setCharRefImages([]);
       setStoryCharFlags(prev => ({ ...prev, [charModalStoryId!]: true }));
-    } catch (err: any) {
-      alert('添加角色卡失败: ' + (err.message || ''));
+      toast.success('角色卡已添加');
+    } catch (err) {
+      toast.error('添加角色卡失败: ' + (errorMessage(err) || '未知错误'));
     }
   };
 
@@ -172,8 +177,9 @@ export default function HomePage({ onSelectStory }: Props) {
       setRefModalImages(r.images);
       setRefModalMax(r.max);
       setStoryRefFlags((prev) => ({ ...prev, [refModalStoryId]: r.images.length > 0 }));
-    } catch (err: any) {
-      alert('上传垫图失败: ' + (err.message || ''));
+      toast.success('垫图已上传');
+    } catch (err) {
+      toast.error('上传垫图失败: ' + (errorMessage(err) || '未知错误'));
     } finally {
       setRefModalUploading(false);
     }
@@ -185,15 +191,12 @@ export default function HomePage({ onSelectStory }: Props) {
       const r = await deleteStoryRefImage(refModalStoryId, filename);
       setRefModalImages(r.images);
       setStoryRefFlags((prev) => ({ ...prev, [refModalStoryId]: r.images.length > 0 }));
-    } catch (err: any) {
-      alert('删除垫图失败: ' + (err.message || ''));
+      toast.success('垫图已删除');
+    } catch (err) {
+      toast.error('删除垫图失败: ' + (errorMessage(err) || '未知错误'));
     }
   };
 
-
-  useEffect(() => {
-    loadStories();
-  }, []);
 
   const loadStories = async () => {
     try {
@@ -224,6 +227,10 @@ export default function HomePage({ onSelectStory }: Props) {
     }
   };
 
+  useEffect(() => {
+    loadStories();
+  }, []);
+
   // Editor handler: called when explicit edit trigger is used (non-modal cover input)
   const handleEditorFileTrigger = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -251,9 +258,10 @@ export default function HomePage({ onSelectStory }: Props) {
           setStories((prev) =>
             prev.map((s) => (s.id === editorStoryId ? { ...s, cover_image: coverPath } : s))
           );
+          toast.success('封面已更新');
         })
-        .catch((err: any) => {
-          alert(`上传封面失败: ${err.message}`);
+        .catch((err) => {
+          toast.error(`上传封面失败: ${errorMessage(err) || '未知错误'}`);
         })
         .finally(() => {
           setUploadingCover(null);
@@ -283,7 +291,7 @@ export default function HomePage({ onSelectStory }: Props) {
         setStories((prev) =>
           prev.map((st) => (st.id === s.id ? { ...st, cover_image: coverPath } : st))
         );
-      } catch (err: any) {
+      } catch (err) {
         console.error('Cover upload failed:', err);
       }
     }
@@ -292,20 +300,23 @@ export default function HomePage({ onSelectStory }: Props) {
     setNewDesc('');
     setNewCoverPreview(null);
     setNewCoverBase64(null);
+    toast.success('故事已创建');
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('确定要删除这本小说吗？所有章节、对话、漫画都将被永久删除！')) return;
     await deleteStory(id);
     setStories((prev) => prev.filter((s) => s.id !== id));
+    toast.success('故事已删除');
   };
 
   const handleExport = async (s: Story) => {
     setExportingStoryId(s.id);
     try {
       await exportStory(s);
-    } catch (err: any) {
-      alert(`导出失败: ${err.message}`);
+      toast.success('作品已导出');
+    } catch (err) {
+      toast.error(`导出失败: ${errorMessage(err) || '未知错误'}`);
     } finally {
       setExportingStoryId(null);
     }
@@ -322,9 +333,10 @@ export default function HomePage({ onSelectStory }: Props) {
         setImportProgress({ message: progress.message, percent: progress.percent });
       });
       await loadStories();
+      toast.success('作品导入成功');
       onSelectStory(imported);
-    } catch (err: any) {
-      alert(`导入失败: ${err.message}`);
+    } catch (err) {
+      toast.error(`导入失败: ${errorMessage(err) || '未知错误'}`);
     } finally {
       setImportingStory(false);
       setImportProgress(null);
@@ -366,7 +378,7 @@ export default function HomePage({ onSelectStory }: Props) {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-bg-base text-text-primary">
+    <div className="studio-workspace h-full overflow-y-auto bg-bg-base text-text-primary">
       <input
         ref={editorFileInputRef}
         type="file"
@@ -410,11 +422,11 @@ export default function HomePage({ onSelectStory }: Props) {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-border bg-bg-raised/95 backdrop-blur-xl">
+      <header className="studio-workspace-header sticky top-0 z-10 border-b border-border bg-bg-surface/95 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent">
-              <Sparkles size={18} className="text-white" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft">
+              <BookOpenText size={18} className="text-accent" />
             </div>
             <div>
               <h1 className="text-sm font-semibold text-text-primary sm:text-base">故事工作区</h1>
@@ -424,8 +436,8 @@ export default function HomePage({ onSelectStory }: Props) {
           <button
             onClick={() => importFileRef.current?.click()}
             disabled={importingStory}
-            className="ml-auto mr-2 flex h-9 items-center gap-2 rounded-lg border border-border bg-bg-raised px-3
-                       text-text-secondary text-xs font-medium transition-colors hover:bg-bg-surface disabled:opacity-40 sm:px-4 sm:text-sm"
+            className="ml-auto mr-2 flex h-9 items-center gap-2 rounded-lg border border-border bg-bg-surface px-3
+                       text-text-secondary text-xs font-medium transition-all duration-200 hover:border-accent/40 hover:text-text-primary hover:shadow-sm disabled:opacity-40 sm:px-4 sm:text-sm"
             title="导入整本作品"
           >
             {importingStory ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
@@ -433,8 +445,7 @@ export default function HomePage({ onSelectStory }: Props) {
           </button>
           <button
             onClick={() => setShowNew(true)}
-            className="flex h-9 items-center gap-2 rounded-lg bg-accent px-3 text-xs font-medium
-                       text-white transition-colors hover:bg-accent-hover sm:px-4 sm:text-sm"
+            className="studio-button studio-button-primary"
           >
             <Plus size={16} />
             <span className="hidden sm:inline">新建小说</span><span className="sm:hidden">新建</span>
@@ -443,25 +454,40 @@ export default function HomePage({ onSelectStory }: Props) {
       </header>
 
       {/* Content */}
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      <main className="studio-page mx-auto max-w-[1440px] px-5 py-7 sm:px-8 lg:px-10">
+        <section className="studio-hero studio-workspace-hero" aria-label="创作灵感">
+          <div className="studio-hero-copy">
+            <span className="studio-eyebrow"><span /> YOUR CREATIVE STUDIO</span>
+            <h2>让脑海中的世界，<br /><span>跃然纸上。</span></h2>
+            <p>一个想法，一段故事，一个全新的世界。<br />和 AI 一起，从第一行文字走向无限可能。</p>
+            <button type="button" className="studio-hero-cta" onClick={() => setShowNew(true)}><Plus size={17} /> 开始新的故事</button>
+          </div>
+          <StudioArtwork />
+          <span className="studio-hero-footnote">A LITTLE SPARK. A WHOLE NEW WORLD.</span>
+        </section>
+        <div className="studio-quick-actions">
+          <button type="button" onClick={() => setShowNew(true)}><span className="studio-action-icon"><Pencil size={20} /></span><span><strong>写下新故事</strong><small>从灵感开始，构建你的世界</small></span><ChevronRight size={16} /></button>
+          <a href="#/imagegen"><span className="studio-action-icon is-sage"><Sparkles size={20} /></span><span><strong>让灵感成画</strong><small>用 AI 将想象变成独特画面</small></span><ChevronRight size={16} /></a>
+          <button type="button" disabled={importingStory} onClick={() => importFileRef.current?.click()}><span className="studio-action-icon is-gold"><Upload size={20} /></span><span><strong>继续已有创作</strong><small>导入作品包，续写精彩篇章</small></span><ChevronRight size={16} /></button>
+        </div>
         {/* New story modal */}
         {showNew && (
           <OverlayPortal>
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-bg-base/30 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowNew(false)}>
-            <div className="bg-bg-surface border border-border rounded-xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div role="dialog" aria-modal="true" aria-labelledby="new-story-title" className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-xl border border-border bg-bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()} onKeyDown={(event) => { if (event.key === 'Escape') setShowNew(false); }}>
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
+                <h3 id="new-story-title" className="text-sm font-semibold flex items-center gap-2">
                   <Plus size={16} className="text-accent" />
                   创建新小说
                 </h3>
-                <button onClick={() => setShowNew(false)} className="p-1 text-text-secondary hover:text-text-secondary transition-colors">
+                <button onClick={() => setShowNew(false)} aria-label="关闭新建故事" className="p-1 text-text-secondary hover:text-text-primary transition-colors">
                   <X size={16} />
                 </button>
               </div>
 
               {/* Body */}
-              <div className="p-5 space-y-4">
+              <div className="min-h-0 overflow-y-auto p-5 space-y-4">
                 <div>
                   <label className="block text-xs text-text-secondary mb-1.5">小说名称</label>
                   <input
@@ -490,13 +516,17 @@ export default function HomePage({ onSelectStory }: Props) {
                   <label className="block text-xs text-text-secondary mb-1.5">小说封面（可选）</label>
                   <div
                     onClick={() => { setEditorMode('new'); editorFileInputRef.current?.click(); }}
-                    className="relative w-full aspect-[3/4] bg-bg-raised border border-dashed border-border hover:border-accent rounded-lg cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-colors group"
+                    role="button"
+                    tabIndex={0}
+                    aria-label="上传小说封面"
+                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setEditorMode('new'); editorFileInputRef.current?.click(); } }}
+                    className="relative h-40 w-full bg-bg-raised border border-dashed border-border hover:border-accent rounded-lg cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-colors group"
                   >
                     {newCoverPreview ? (
                       <img
                         src={newCoverPreview}
                         alt="封面预览"
-                        className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+                        className="w-full h-full object-contain group-hover:opacity-80 transition-opacity"
                       />
                     ) : (
                       <div className="flex flex-col items-center gap-1.5 text-text-secondary group-hover:text-text-secondary transition-colors">
@@ -531,7 +561,7 @@ export default function HomePage({ onSelectStory }: Props) {
                 </button>
                 <button
                   onClick={handleCreate}
-                  className="px-5 py-2 bg-accent hover:bg-accent-soft text-text-primary text-sm font-medium rounded-lg transition-colors"
+                  className="studio-button studio-button-primary"
                 >
                   创建
                 </button>
@@ -543,15 +573,15 @@ export default function HomePage({ onSelectStory }: Props) {
 
         {/* Empty state */}
         {stories.length === 0 && !showNew && (
-          <div className="mx-auto flex max-w-2xl flex-col items-center justify-center py-20 text-center text-text-secondary sm:py-28">
-            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-bg-raised shadow-sm">
-              <BookOpenText size={24} className="text-accent" />
+          <div className="studio-empty mx-auto flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-bg-surface px-5 py-12 text-center text-text-secondary">
+            <div className="studio-empty-icon mb-5">
+              <BookOpenText size={28} className="text-accent" />
             </div>
-            <p className="mb-2 font-display text-2xl font-semibold text-text-primary">创建你的第一部故事</p>
+            <p className="mb-2 text-xl font-semibold text-text-primary">好故事，从这里开始</p>
             <p className="mb-7 max-w-md text-sm leading-6">从故事名称开始，随后完善人物、章节和视觉设定。</p>
             <button
               onClick={() => setShowNew(true)}
-              className="flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+              className="studio-button studio-button-primary"
             >
               <Plus size={16} /> 新建故事
             </button>
@@ -571,18 +601,19 @@ export default function HomePage({ onSelectStory }: Props) {
             {stories.map((s) => (
               <div
                 key={s.id}
-                className="group panel-frame flex min-w-0 overflow-hidden transition-all duration-200 hover:-translate-y-0.5 sm:block"
+                className="group panel-frame flex min-w-0 overflow-hidden transition-all duration-200 hover:-translate-y-1 sm:block"
               >
                 {/* Cover */}
                 <div
                   className="relative aspect-[3/4] w-[120px] shrink-0 cursor-pointer overflow-hidden bg-bg-surface sm:w-auto"
                   onClick={() => handleCoverClick(s.id)}
+                  title="点击更换封面"
                 >
                   {s.cover_image ? (
                     <img
                       src={mangaThumbUrl(s.cover_image, 720)!}
                       alt={s.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
                       decoding="async"
                     />
@@ -592,7 +623,7 @@ export default function HomePage({ onSelectStory }: Props) {
                       <span className="text-xs">点击上传封面</span>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-transparent group-hover:bg-bg-base/20 transition-colors" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-bg-base/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
 
                 {/* Info */}
@@ -632,43 +663,49 @@ export default function HomePage({ onSelectStory }: Props) {
                     </div>
                   ) : (
                     <>
-                      <h3 className="font-semibold text-sm mb-1 line-clamp-1 text-text-primary">{s.title}</h3>
-                      {s.description && (
-                        <p className="text-xs text-text-secondary mb-3 line-clamp-2">{s.description}</p>
-                      )}
-                      {!s.description && <div className="mb-3" />}
-                      <div className="flex flex-wrap items-end justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onSelectStory(s)}
+                        className="block w-full text-left"
+                      >
+                        <h3 className="font-semibold text-sm mb-1 line-clamp-1 text-text-primary group-hover:text-accent transition-colors">{s.title}</h3>
+                        {s.description && (
+                          <p className="text-xs text-text-secondary mb-3 line-clamp-2">{s.description}</p>
+                        )}
+                        {!s.description && <div className="mb-3" />}
+                      </button>
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-xs text-text-muted">
                           {new Date(s.created_at).toLocaleDateString('zh-CN')}
                         </span>
-                        <div className="flex flex-wrap items-center justify-end gap-0.5">
+                        <div className="flex items-center gap-1">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               openCharModal(s.id);
                             }}
-                            className={`p-1.5 transition-colors rounded-lg  ${
+                            className={`p-1.5 transition-colors rounded-md  ${
                               storyCharFlags[s.id]
-                                ? 'text-success hover:text-success/80'
-                                : 'text-text-muted hover:text-text-secondary'
+                                ? 'text-success hover:text-success/80 bg-success/10'
+                                : 'text-text-muted hover:text-text-secondary hover:bg-bg-raised'
                             }`}
                             title={storyCharFlags[s.id] ? '角色卡（已设定）' : '设置角色卡'}
                           >
-                            <Users size={13} />
+                            <Users size={14} />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               openAssetGroupModal(s.id);
                             }}
-                            className={`p-1.5 transition-colors rounded-lg  ${
+                            className={`p-1.5 transition-colors rounded-md  ${
                               storyRefFlags[s.id]
-                                ? 'text-accent-secondary hover:text-accent-secondary/80'
-                                : 'text-text-muted hover:text-text-secondary'
+                                ? 'text-accent-secondary hover:text-accent-secondary/80 bg-accent-secondary/10'
+                                : 'text-text-muted hover:text-text-secondary hover:bg-bg-raised'
                             }`}
                             title={storyRefFlags[s.id] ? '设定组（已设定）' : '设置设定组'}
                           >
-                            <Layers size={13} />
+                            <Layers size={14} />
                           </button>
                           <button
                             onClick={(e) => {
@@ -676,41 +713,40 @@ export default function HomePage({ onSelectStory }: Props) {
                               handleExport(s);
                             }}
                             disabled={exportingStoryId === s.id}
-                            className="p-1.5 text-text-muted hover:text-accent-tertiary transition-colors rounded-lg  disabled:opacity-40"
+                            className="p-1.5 text-text-muted hover:text-accent-tertiary hover:bg-bg-raised transition-colors rounded-md  disabled:opacity-40"
                             title="导出整本作品"
                           >
-                            {exportingStoryId === s.id ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                            {exportingStoryId === s.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               startEdit(s);
                             }}
-                            className="p-1.5 text-text-muted hover:text-text-secondary transition-colors rounded"
+                            className="p-1.5 text-text-muted hover:text-text-secondary hover:bg-bg-raised transition-colors rounded-md"
                             title="编辑"
                           >
-                            <Pencil size={13} />
+                            <Pencil size={14} />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDelete(s.id);
                             }}
-                            className="p-1.5 text-text-muted hover:text-accent transition-colors rounded"
+                            className="p-1.5 text-text-muted hover:text-accent hover:bg-bg-raised transition-colors rounded-md"
                             title="删除"
                           >
-                            <Trash2 size={13} />
-                          </button>
-                          <button
-                            onClick={() => onSelectStory(s)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-accent-muted/30 hover:bg-accent
-                                       text-accent hover:text-white text-xs font-medium rounded-lg transition-colors"
-                          >
-                            进入
-                            <ChevronRight size={13} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
+                      <button
+                        onClick={() => onSelectStory(s)}
+                        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent-muted/40 px-3 py-2 text-xs font-semibold text-accent transition-all duration-200 hover:bg-accent hover:text-white"
+                      >
+                        进入创作
+                        <ChevronRight size={14} />
+                      </button>
                     </>
                   )}
                 </div>
@@ -828,7 +864,7 @@ export default function HomePage({ onSelectStory }: Props) {
                                 setCharRefUploading(true);
                                 addCharRefImage(charModalStoryId!, editingCharId!, b64)
                                   .then(img => setCharRefImages(prev => [...prev, img]))
-                                  .catch(err => alert('上传失败: ' + err.message))
+                                  .catch(err => toast.error('上传失败: ' + (errorMessage(err) || '未知错误')))
                                   .finally(() => setCharRefUploading(false));
                               };
                               reader.readAsDataURL(file);
@@ -854,9 +890,9 @@ export default function HomePage({ onSelectStory }: Props) {
                                     onClick={() => {
                                       deleteCharRefImage(charModalStoryId!, editingCharId!, img.filename)
                                         .then(() => setCharRefImages(prev => prev.filter(x => x.filename !== img.filename)))
-                                        .catch(err => alert('删除失败: ' + err.message));
+                                        .catch(err => toast.error('删除失败: ' + (errorMessage(err) || '未知错误')));
                                     }}
-                                    className="absolute top-1 right-1 p-1 rounded-lg bg-accent hover:bg-accent-hover text-white transition-colors"
+                                    className="absolute top-1 right-1 p-1 rounded-lg btn-accent"
                                   title="删除"
                                   >
                                     <Trash2 size={10} />
@@ -878,8 +914,9 @@ export default function HomePage({ onSelectStory }: Props) {
                                 setCharacters(prev => prev.filter(x => x.id !== editingCharId));
                                 setEditingCharId(null);
                                 setStoryCharFlags(prev => ({ ...prev, [charModalStoryId!]: characters.length <= 1 ? false : true }));
-                              } catch (err: any) {
-                                alert('删除失败: ' + err.message);
+                                toast.success('角色已删除');
+                              } catch (err) {
+                                toast.error('删除失败: ' + (errorMessage(err) || '未知错误'));
                               }
                             }}
                             className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-muted/30 border border-accent/20 text-accent hover:bg-accent hover:text-white transition-colors"
@@ -889,13 +926,14 @@ export default function HomePage({ onSelectStory }: Props) {
                           </button>
                           <button
                             onClick={async () => {
-                              if (!charFormName.trim()) { alert('请输入角色名称'); return; }
+                              if (!charFormName.trim()) { toast.warning('请输入角色名称'); return; }
                               setCharFormSaving(true);
                               try {
                                 const updated = await updateCharacterProfile(charModalStoryId!, editingCharId!, charFormName, charFormDesc);
                                 setCharacters(prev => prev.map(ch => ch.id === editingCharId ? updated : ch));
-                              } catch (err: any) {
-                                alert('保存失败: ' + err.message);
+                                toast.success('角色卡已保存');
+                              } catch (err) {
+                                toast.error('保存失败: ' + (errorMessage(err) || '未知错误'));
                               } finally {
                                 setCharFormSaving(false);
                               }
@@ -983,7 +1021,7 @@ export default function HomePage({ onSelectStory }: Props) {
                       </div>
                       <button
                         onClick={() => handleRefDelete(img.filename)}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-lg bg-accent hover:bg-accent-hover text-white transition-colors"
+                        className="absolute top-1.5 right-1.5 p-1 rounded-lg btn-accent"
                         title="删除"
                       >
                         <Trash2 size={12} />

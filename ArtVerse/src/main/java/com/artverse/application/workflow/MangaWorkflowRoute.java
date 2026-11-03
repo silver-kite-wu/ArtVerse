@@ -8,9 +8,10 @@ import static com.artverse.application.workflow.MangaWorkflowCapability.CREATIVE
 import static com.artverse.application.workflow.MangaWorkflowCapability.STORYBOARD_READ;
 import static com.artverse.application.workflow.MangaWorkflowCapability.STORYBOARD_REVIEW;
 import static com.artverse.application.workflow.MangaWorkflowCapability.STORYBOARD_WRITE;
+import static com.artverse.application.workflow.MangaWorkflowCapability.SCHEDULED_IMAGE_GENERATION;
 
 public enum MangaWorkflowRoute {
-    CONVERSATION(MangaWorkflowCapability.CONVERSATION, STORYBOARD_READ),
+    CONVERSATION(MangaWorkflowCapability.CONVERSATION, STORYBOARD_READ, SCHEDULED_IMAGE_GENERATION),
     CREATIVE(CREATIVE_GUIDANCE, STORYBOARD_READ),
     STORYBOARD(STORYBOARD_READ, STORYBOARD_WRITE),
     REVIEW(STORYBOARD_READ, STORYBOARD_REVIEW),

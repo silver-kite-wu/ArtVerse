@@ -9,14 +9,19 @@ import com.artverse.agent.ArtVerseSkillRepository;
 import com.artverse.agent.BusinessSkillSelection;
 import com.artverse.agent.MangaAgentPromptProvider;
 import com.artverse.agent.PostgresAgentWorkspaceStore;
+import com.artverse.agent.mcp.McpAgentExecutionTokenService;
 import com.artverse.application.ArtVerseSkillRegistry;
 import com.artverse.application.MangaAgentRunService;
 import com.artverse.common.BusinessException;
 import com.artverse.agent.gateway.tools.AgentToolConfigurationRegistry;
 import com.artverse.config.ArtVerseProperties;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.tool.mcp.McpClientBuilder;
+import io.agentscope.core.tool.mcp.McpClientWrapper;
+import io.agentscope.core.tool.Toolkit;
+import io.agentscope.core.permission.PermissionBehavior;
+import io.agentscope.core.permission.PermissionContextState;
+import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -24,7 +29,6 @@ import io.agentscope.harness.agent.filesystem.remote.RemoteFilesystem;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -45,22 +49,8 @@ public class AgentScopeAgentFactory {
     private final ArtVerseSkillRepository skillRepository;
     private final MangaAgentRunService runService;
     private final PostgresAgentWorkspaceStore workspaceStore;
+    private final McpAgentExecutionTokenService mcpTokenService;
     private final AgentScopeSystemPromptMiddleware systemPromptMiddleware = new AgentScopeSystemPromptMiddleware();
-    private Cache<String, HarnessAgent> agents;
-
-    @PostConstruct
-    void initializeCache() {
-        agents = Caffeine.newBuilder()
-                .maximumSize(Math.max(1, properties.getAgent().getAgentCacheMaxSize()))
-                .expireAfterAccess(Duration.ofMinutes(
-                        Math.max(1, properties.getAgent().getAgentCacheExpireAfterMinutes())))
-                .removalListener((String key, HarnessAgent agent, com.github.benmanes.caffeine.cache.RemovalCause cause) -> {
-                    if (agent != null) {
-                        agent.close();
-                    }
-                })
-                .build();
-    }
 
     public HarnessAgent getOrCreate(AgentRunRequest request) {
         if (request.modelSpec() == null) {
@@ -70,22 +60,37 @@ public class AgentScopeAgentFactory {
         Path requestWorkspace = agentWorkspaceService.workspaceFor(request);
         BusinessSkillSelection selection = skillRegistry.resolveSelection(request);
         String promptVersion = promptProvider.promptVersionFor(request.taskType());
-        if (request.requestId() != null && request.chapterId() != null) {
+        if (request.requestId() != null && request.chapterId() != null
+                && request.taskType() != null && request.taskType().isMangaExecutionTask()) {
             runService.recordSkillSelection(Long.valueOf(request.userId()), request.chapterId(), request.requestId(),
                     selection, promptVersion);
             runService.recordStepSkillSelection(Long.valueOf(request.userId()), request.chapterId(),
                     request.requestId(), String.valueOf(request.variables().getOrDefault("step_id", "")), selection);
         }
-        String agentKey = buildAgentCacheKey(request, requestWorkspace, promptVersion, selection.cacheKey());
-        return agents.get(agentKey, key -> buildAgent(request, requestWorkspace, selection));
+        ArtVerseProperties.Agent.Mcp mcp = properties.getAgent().getMcp();
+        if (!mcp.isEnabled()) {
+            throw new IllegalStateException("ArtVerse business tools require the MCP integration to be enabled");
+        }
+        McpClientWrapper businessTools = McpClientBuilder.create("artverse")
+                .streamableHttpTransport(mcp.getBaseUrl())
+                .header("Authorization", "Bearer " + mcpTokenService.issue(request))
+                .timeout(Duration.ofSeconds(Math.max(5, properties.getAgent().getToolIdleTimeoutSeconds())))
+                .buildSync();
+        try {
+            return buildAgent(request, requestWorkspace, selection, businessTools);
+        } catch (RuntimeException error) {
+            businessTools.close();
+            throw error;
+        }
     }
 
     private HarnessAgent buildAgent(AgentRunRequest request, Path requestWorkspace,
-                                    BusinessSkillSelection selection) {
+                                    BusinessSkillSelection selection,
+                                    McpClientWrapper businessTools) {
         Model effectiveModel = resolveModel(request.llmApiKey(), request.modelSpec());
         HarnessAgent.Builder builder = HarnessAgent.builder()
-                // AgentScope 2.0 keeps per-session state in RuntimeContext. The agent
-                // itself is intentionally shared and must not encode tenant identity.
+                // State lives in the AgentStateStore; build a per-run agent so its MCP
+                // client carries only this run's short-lived execution credential.
                 .name("artverse-" + request.taskType().sessionSuffix())
                 .sysPrompt(promptProvider.promptFor(request.taskType()))
                 .model(effectiveModel)
@@ -112,9 +117,18 @@ public class AgentScopeAgentFactory {
         for (var declaration : request.taskType().subagentDeclarations()) {
             builder.subagent(declaration);
         }
-        HarnessAgent agent = builder.build();
-        toolConfigurationRegistry.configure(agent.getToolkit(), request.taskType());
-        return agent;
+        // AgentScope captures initial active groups during build; later registration
+        // would leave fresh run state with no business tools visible to the model.
+        Toolkit toolkit = new Toolkit();
+        toolConfigurationRegistry.configure(toolkit, request.taskType(), businessTools);
+        // These curated tools enforce authenticated scope and artifact confirmation in
+        // ArtVerse services. A second framework permission prompt has no product UI.
+        var permissions = PermissionContextState.builder();
+        for (var schema : toolkit.getToolSchemas()) {
+            permissions.addAllowRule(schema.getName(), new PermissionRule(
+                    schema.getName(), null, PermissionBehavior.ALLOW, "artverse-business-tools"));
+        }
+        return builder.toolkit(toolkit).permissionContext(permissions.build()).build();
     }
 
     private Model resolveModel(String llmApiKey, AgentModelSpec modelSpec) {
@@ -153,6 +167,7 @@ public class AgentScopeAgentFactory {
             case MANGA_CONVERSATION, MANGA_CREATIVE -> agent.getConversationMaxModelCalls();
             case STORY_CHAT_READ -> agent.getConversationMaxModelCalls();
             case STORY_CHAT_WRITE -> agent.getDirectorMaxModelCalls();
+            case READER_CHARACTER_CHAT -> agent.getConversationMaxModelCalls();
             case MANGA_STORYBOARD -> agent.getStoryboardMaxModelCalls();
             case MANGA_REVIEW -> 3;
             case MANGA_DIRECTOR -> agent.getDirectorMaxModelCalls();

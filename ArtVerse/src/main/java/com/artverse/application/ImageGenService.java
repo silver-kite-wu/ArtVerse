@@ -109,9 +109,10 @@ public class ImageGenService {
             if (generated == null) throw new BusinessException(502, "Image generation returned no result");
 
             String objectKey = "image_gen/" + record.getUser().getId() + "/"
-                    + mediaStorageService.generateUniqueFilename("gen", ".png");
-            objectStorageService.putPng(objectKey, generated.localFile(), "image/png");
-            try { Files.deleteIfExists(generated.localFile()); } catch (Exception ignored) {}
+                    + mediaStorageService.generateUniqueFilename("gen", generated.extension());
+            try (var content = generated.openStream()) {
+                objectStorageService.put(objectKey, content, generated.sizeBytes(), generated.contentType());
+            }
 
             record.setImagePath(objectKey);
             record.setStatus(ImageGenStatus.SUCCEEDED);
@@ -160,12 +161,14 @@ public class ImageGenService {
     private Map<String, Object> recordToMap(ImageGenRecord record) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", record.getId());
-        result.put("conversation_id", record.getConversation().getConversationUuid().toString());
+        result.put("conversation_id", record.getConversation()==null?null:record.getConversation().getConversationUuid().toString());
+        result.put("request_id",record.getRootRequestId());
         result.put("prompt", record.getPrompt());
         result.put("image_url", record.getImagePath());
         result.put("model", record.getModel());
         result.put("size", record.getSize());
         result.put("status", record.getStatus().name());
+        if(record.getRequestId()!=null&&"UNRESOLVED".equals(record.getAttemptDecision())&&"NEEDS_REVIEW".equals(record.getOutcome()))result.put("status","NEEDS_REVIEW");
         result.put("failure_reason", record.getFailureReason());
         result.put("created_at", record.getCreatedAt().toString());
         result.put("completed_at", record.getCompletedAt() == null ? null : record.getCompletedAt().toString());

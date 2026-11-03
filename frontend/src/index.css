@@ -55,13 +55,14 @@
   --radius-lg: 18px;
   --radius-xl: 18px;
   --radius-2xl: 24px;
-  --shadow-xs: 0 0 #0000;
-  --shadow-sm: 0 0 #0000;
-  --shadow-md: 0 0 #0000;
-  --shadow-lg: 0 0 #0000;
-  --shadow-xl: 0 0 #0000;
-  --shadow-2xl: 0 0 #0000;
-  --shadow-glow: 0 0 20px rgba(241, 72, 30, 0.15);
+  /* Warm-tinted soft shadow ramp — layered for depth without harsh edges */
+  --shadow-xs: 0 1px 2px rgba(20, 16, 12, 0.18);
+  --shadow-sm: 0 2px 6px rgba(20, 16, 12, 0.20), 0 1px 2px rgba(20, 16, 12, 0.12);
+  --shadow-md: 0 6px 16px rgba(20, 16, 12, 0.22), 0 2px 4px rgba(20, 16, 12, 0.10);
+  --shadow-lg: 0 12px 28px rgba(20, 16, 12, 0.28), 0 4px 8px rgba(20, 16, 12, 0.12);
+  --shadow-xl: 0 20px 44px rgba(20, 16, 12, 0.34), 0 8px 16px rgba(20, 16, 12, 0.14);
+  --shadow-2xl: 0 32px 64px rgba(20, 16, 12, 0.42), 0 12px 24px rgba(20, 16, 12, 0.18);
+  --shadow-glow: 0 0 24px rgba(241, 72, 30, 0.22), 0 0 48px rgba(241, 72, 30, 0.08);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -93,20 +94,15 @@
   --glass-border: rgba(255, 255, 255, 0.05);
   --glass-shine: rgba(255, 255, 255, 0.02);
 
-  /* !important to override runtime-injected solo-lite-theme-variables */
-  --radius: 14px !important;
-  --radius-xs: 10px !important;
-  --radius-sm: 12px !important;
-  --radius-md: 16px !important;
-  --radius-lg: 18px !important;
-  --radius-xl: 18px !important;
-  --radius-2xl: 24px !important;
-  --shadow-xs: 0 0 #0000 !important;
-  --shadow-sm: 0 0 #0000 !important;
-  --shadow-md: 0 0 #0000 !important;
-  --shadow-lg: 0 0 #0000 !important;
-  --shadow-xl: 0 0 #0000 !important;
-  --shadow-2xl: 0 0 #0000 !important;
+  /* Radii override the solo-lite default; shadows now follow the warm ramp above */
+  --radius: 12px;
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius-md: 9px;
+  --radius-lg: 11px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --shadow-glow: 0 0 24px rgba(241, 72, 30, 0.22), 0 0 48px rgba(241, 72, 30, 0.08);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -138,6 +134,12 @@
   --glass-bg: #d2cbc3;
   --glass-border: #c5bdb4;
   --glass-shine: rgba(0, 0, 0, 0.015);
+  --shadow-xs: 0 1px 2px rgba(60, 50, 40, 0.08);
+  --shadow-sm: 0 2px 6px rgba(60, 50, 40, 0.10), 0 1px 2px rgba(60, 50, 40, 0.06);
+  --shadow-md: 0 6px 16px rgba(60, 50, 40, 0.12), 0 2px 4px rgba(60, 50, 40, 0.06);
+  --shadow-lg: 0 12px 28px rgba(60, 50, 40, 0.16), 0 4px 8px rgba(60, 50, 40, 0.08);
+  --shadow-xl: 0 20px 44px rgba(60, 50, 40, 0.20), 0 8px 16px rgba(60, 50, 40, 0.10);
+  --shadow-2xl: 0 32px 64px rgba(60, 50, 40, 0.26), 0 12px 24px rgba(60, 50, 40, 0.12);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -163,8 +165,8 @@ button, [role='button'] { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Ambient Layer — Subtle warm radial glow (Vibe Camp mood)
-   Replaces the heavy ink-texture with a quiet, warm ambient wash.
+   Ambient Layer — Warm radial wash with soft vignette
+   Multi-stop radial gradients create depth without heavy textures.
    ═══════════════════════════════════════════════════════════════════════════ */
 body::after {
   content: '';
@@ -173,8 +175,9 @@ body::after {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 40% at 50% -8%, var(--color-accent-soft), transparent 60%),
-    radial-gradient(ellipse 50% 35% at 92% 108%, var(--color-accent-soft), transparent 65%);
+    radial-gradient(ellipse 70% 35% at 50% -5%, var(--color-accent-soft), transparent 60%),
+    radial-gradient(ellipse 45% 30% at 95% 110%, var(--color-accent-soft), transparent 65%),
+    radial-gradient(ellipse 40% 25% at 5% 90%, rgba(179, 166, 255, 0.04), transparent 60%);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -239,22 +242,20 @@ body::after {
 @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fade-in-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-@keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 4px var(--color-accent); } 50% { box-shadow: 0 0 16px var(--color-accent); } }
-@keyframes cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-@keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes view-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes pulse-once { 0% { box-shadow: 0 0 0 0 var(--color-accent-muted); } 100% { box-shadow: 0 0 0 12px transparent; } }
 @keyframes float-y { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @keyframes gen-beam-rotate { to { --gen-angle: 360deg; } }
+@keyframes toast-in { from { opacity: 0; transform: translate3d(12px, -6px, 0) scale(0.98); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes toast-out { from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } to { opacity: 0; transform: translate3d(10px, -4px, 0) scale(0.98); } }
 @property --gen-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
 
 .animate-fade-in { animation: fade-in 0.3s ease-out; }
 .animate-fade-in-up { animation: fade-in-up 0.4s ease-out; }
 .animate-scale-in { animation: scale-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.animate-spin-slow { animation: spin-slow 3s linear infinite; }
 .animate-view-enter { animation: view-enter 0.15s ease-out; }
-.animate-pulse-once { animation: pulse-once 0.6s ease-out 1; }
 .animate-float { animation: float-y 3s ease-in-out infinite; }
+.animate-toast-in { animation: toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-toast-out { animation: toast-out 0.18s ease-in forwards; }
 
 /* Generating beam — AI generation status border */
 .gen-beam {
@@ -273,75 +274,85 @@ body::after {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-float,
-  .animate-spin-slow,
   .shimmer-bg { animation: none; }
   .animate-view-enter,
   .animate-fade-in,
   .animate-fade-in-up,
   .animate-scale-in,
+  .animate-toast-in,
+  .animate-toast-out,
   .markdown-body img { animation-duration: 0.01s; }
-  .animate-pulse-once { animation: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Utility Classes — Vibe Camp Flat Aesthetic
-   Hierarchy by color blocking + border, not by floating shadows.
+   Utility Classes — Vibe Camp Warm Aesthetic
+   Hierarchy by color blocking + border + soft warm shadows.
    ═══════════════════════════════════════════════════════════════════════════ */
 .glass-panel {
+  position: relative;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(10px) saturate(115%);
   -webkit-backdrop-filter: blur(10px) saturate(115%);
+  box-shadow: var(--shadow-xs);
 }
-.glass-surface {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(8px) saturate(115%);
-  -webkit-backdrop-filter: blur(8px) saturate(115%);
+.glass-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, var(--glass-shine), transparent 30%);
+  pointer-events: none;
 }
 .glass {
+  position: relative;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(10px) saturate(115%);
   -webkit-backdrop-filter: blur(10px) saturate(115%);
+}
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, var(--glass-shine), transparent 30%);
+  pointer-events: none;
 }
 .bento-card {
   position: relative;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
-  transition: border-color 0.16s ease, transform 0.16s ease;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.bento-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, var(--glass-shine), transparent 40%);
+  pointer-events: none;
+  opacity: 0.6;
 }
 .bento-card:hover {
   border-color: var(--color-accent);
-  transform: translateY(-1px);
-}
-.surface-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-surface);
-}
-.elevated-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-raised);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--color-accent-muted);
 }
 .panel-frame {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
-  transition: border-color 0.16s ease, transform 0.16s ease;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 .panel-frame:hover {
   border-color: var(--color-accent);
-  transform: translateY(-1px);
-}
-.accent-divider {
-  height: 2px;
-  background: linear-gradient(90deg, transparent 0%, var(--color-accent) 20%, var(--color-accent) 80%, transparent 100%);
-  opacity: 0.5;
-  border-radius: 1px;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--color-accent-muted);
 }
 
 @layer components {
@@ -358,13 +369,17 @@ body::after {
   padding-right: 0.75rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
-  transition: border-color 0.16s ease;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 .input-field::placeholder { color: var(--color-text-muted); }
+}
+
+/* Focus states kept outside @layer so they win over Tailwind utilities */
 .input-field:focus {
   border-color: var(--color-accent);
   outline: none;
-}
+  box-shadow: 0 0 0 3px var(--color-accent-muted);
+  background: var(--color-bg-raised);
 }
 .input-field:focus-visible { outline: none; }
 
@@ -392,6 +407,7 @@ body::after {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-2xl);
   background: var(--color-bg-surface);
+  box-shadow: var(--shadow-md);
 }
 
 .fanqie-book-cover {
@@ -442,17 +458,62 @@ body::after {
     border-color 0.16s ease,
     background-color 0.16s ease,
     color 0.16s ease,
-    transform 0.16s ease;
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .fanqie-cta-primary {
-  background: var(--color-accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent-hover) 12%, var(--color-accent)), var(--color-accent));
   color: var(--color-text-primary);
+  box-shadow: var(--shadow-glow);
 }
 
 .fanqie-cta-primary:hover {
   transform: translateY(-1px);
-  filter: brightness(0.96);
+  filter: brightness(1.08);
+  box-shadow: 0 0 28px rgba(241, 72, 30, 0.35);
+}
+
+.fanqie-cta-primary:active {
+  transform: translateY(0);
+  filter: brightness(0.95);
+}
+
+/* Gradient accent button — visual only (no sizing). Pair with your own px/py/text-* classes. */
+.btn-accent {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent-hover) 15%, var(--color-accent)), var(--color-accent));
+  color: #fff;
+  box-shadow: var(--shadow-glow);
+  transition: all 0.2s ease;
+}
+.btn-accent:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 0 20px rgba(241, 72, 30, 0.32);
+}
+.btn-accent:active {
+  filter: brightness(0.95);
+}
+.btn-accent:disabled {
+  filter: none;
+  box-shadow: var(--shadow-glow);
+  opacity: 0.4;
+}
+
+.btn-danger {
+  background: linear-gradient(180deg, color-mix(in srgb, #ff8a7a 15%, var(--color-danger)), var(--color-danger));
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+.btn-danger:hover {
+  filter: brightness(1.1);
+}
+.btn-danger:active {
+  filter: brightness(0.95);
+}
+.btn-danger:disabled {
+  filter: none;
+  opacity: 0.4;
 }
 
 .fanqie-cta-secondary {
@@ -464,6 +525,7 @@ body::after {
 .fanqie-cta-secondary:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .fanqie-side-note {
@@ -505,18 +567,85 @@ body::after {
 }
 
 .fanqie-reader-header {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-surface);
-  padding: 28px 24px;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  padding: 46px 42px 28px;
   text-align: center;
 }
 
-.fanqie-reader-page {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-2xl);
+.reader-shell {
+  --reader-page-bg: color-mix(in srgb, var(--color-bg-base) 92%, white);
+}
+
+.reader-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.reader-scroll {
+  background: var(--reader-page-bg);
+  scrollbar-gutter: stable;
+}
+
+.reader-paper {
+  overflow: hidden;
+  width: 85%;
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-radius: 20px;
   background: var(--color-bg-surface);
-  padding: 32px 28px;
+  box-shadow: var(--shadow-md);
+  max-width: 1400px;
+}
+
+.reader-paper-header {
+  text-align: center;
+}
+
+.reader-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  text-align: left;
+}
+
+.reader-inline-controls {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.reader-inline-controls button {
+  min-width: 40px;
+  height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
+}
+
+.reader-inline-controls button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.reader-inline-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.reader-inline-controls .reader-inline-reset {
+  color: var(--color-text-secondary);
+}
+
+.fanqie-reader-page {
+  background: transparent;
+  padding: 42px 58px 34px;
 }
 
 .fanqie-reader-copy {
@@ -527,7 +656,7 @@ body::after {
 }
 
 .reader-paragraph {
-  margin: 0 0 1.5em;
+  margin: 0 0 1.45em;
   text-indent: 2em;
   line-height: inherit;
 }
@@ -593,17 +722,32 @@ body::after {
   .fanqie-reader-header {
     border-radius: var(--radius-xl);
   }
+
+  .reader-paper {
+    width: 100%;
+    border-radius: 14px;
+  }
+
+  .fanqie-reader-header {
+    padding: 32px 20px 22px;
+  }
+
+  .fanqie-reader-page {
+    padding: 28px 20px 22px;
+  }
+
+  .reader-meta-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .reader-inline-controls {
+    align-self: flex-end;
+  }
 }
 
-/* Page atmosphere — subtle warm glow at top (dark mode only) */
-.page-atmosphere::before {
-  content: '';
-  position: fixed; top: 0; left: 0; right: 0;
-  height: 320px;
-  background: radial-gradient(ellipse 50% 80% at 50% 0%, var(--color-accent-soft), transparent 70%);
-  pointer-events: none; z-index: 0;
-}
-[data-mode="light"] .page-atmosphere::before { opacity: 0.55; }
+/* Page atmosphere is provided globally by body::after above. */
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Markdown body — rendered AI / assistant content

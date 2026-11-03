@@ -4,6 +4,7 @@ package com.artverse.agent.gateway;
 import com.artverse.agent.AgentTaskType;
 import com.artverse.agent.MangaAgentRuntimeContext;
 import com.artverse.agent.AgentRunRequest;
+import com.artverse.agent.NovelDraftBaseContext;
 import com.artverse.application.ApiKeyService;
 import com.artverse.application.UserProviderConfig;
 
@@ -30,6 +31,9 @@ public class AgentScopeRuntimeContextFactory {
                     new AgentScopeSystemPromptContext(systemContent));
         }
         if (request.taskType() != null && request.taskType().isMangaExecutionTask()) {
+            if (request.variables().get("chapter_version") != null) {
+                builder.put(NovelDraftBaseContext.class, new NovelDraftBaseContext(longValue(request.variables().get("chapter_version"))));
+            }
             builder.put(MangaAgentRuntimeContext.class, new MangaAgentRuntimeContext(
                     parseUserIdForTool(request.userId()),
                     request.storyId(),
@@ -60,7 +64,7 @@ public class AgentScopeRuntimeContextFactory {
         return new UserProviderConfig(ApiKeyService.SLOT_WORKFLOW, "", "", "", "", "");
     }
 
-    static Long parseUserIdForTool(String userId) {
+    public static Long parseUserIdForTool(String userId) {
         try {
             return Long.valueOf(userId);
         } catch (Exception e) {
@@ -79,12 +83,18 @@ public class AgentScopeRuntimeContextFactory {
     }
 
     public static String createSessionId(AgentRunRequest request) {
+        return createSessionId(request.userId(), request.storyId(), request.chapterId(),
+                request.conversationId(), request.taskType());
+    }
+
+    public static String createSessionId(String userId, Long storyId, Long chapterId,
+                                         java.util.UUID conversationId, AgentTaskType taskType) {
         return String.join("-",
-                "u", safeSegment(request.userId()),
-                "story", safeSegment(request.storyId()),
-                "chapter", safeSegment(request.chapterId()),
-                "conv", safeSegment(request.conversationId()),
-                safeSegment(request.taskType() == null ? "unknown" : request.taskType().sessionSuffix())
+                "u", safeSegment(userId),
+                "story", safeSegment(storyId),
+                "chapter", safeSegment(chapterId),
+                "conv", safeSegment(conversationId),
+                safeSegment(taskType == null ? "unknown" : taskType.sessionSuffix())
         );
     }
 

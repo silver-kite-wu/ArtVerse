@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: artverse-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: manga_novel
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    container_name: artverse-minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?required}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: artverse-redis
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?required}
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD:?required}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: public.ecr.aws/docker/library/rabbitmq:4.1.8-management@sha256:789893c0b4907f0ff3bc6e630120174ab6879825907f4c3ab79439e2488409cc
+    container_name: artverse-rabbitmq
+    stop_grace_period: 17m
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?required}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?required}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-artverse}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres_data:
+  minio_data:
+  redis_data:
+  rabbitmq_data:

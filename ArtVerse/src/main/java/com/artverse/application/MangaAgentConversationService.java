@@ -9,8 +9,6 @@ import com.artverse.domain.MangaAgentMessage;
 import com.artverse.domain.MessageRole;
 import com.artverse.domain.User;
 import com.artverse.domain.AiConversationType;
-import com.artverse.domain.AiConversationTitleSource;
-import com.artverse.domain.AiConversationTitleState;
 import com.artverse.persistence.MangaAgentConversationRepository;
 import com.artverse.persistence.MangaAgentMessageRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +36,7 @@ public class MangaAgentConversationService {
     private final MangaAgentMessageRepository mangaAgentMessageRepository;
     private final ChapterAccessService chapterAccessService;
     private final MangaAgentConversationWriteService conversationWriteService;
+    private final AiConversationService aiConversationService;
 
     // 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 conversation management 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
 
@@ -196,18 +195,12 @@ public class MangaAgentConversationService {
 
     @Transactional
     public void autoTitle(MangaAgentConversation conversation, String input) {
-        if (conversation.getTitleSource() != AiConversationTitleSource.DEFAULT || input == null || input.strip().length() <= 2) return;
-        conversation.setTitle(AiConversationService.fallbackTitle(input));
-        conversation.setTitleSource(AiConversationTitleSource.FALLBACK);
-        conversation.setTitleState(AiConversationTitleState.FINALIZED);
-        conversation.setTitleGenerationStartedAt(null);
-        conversationRepository.save(conversation);
+        aiConversationService.autoTitle(conversation, input);
     }
 
     @Transactional
     public void touch(MangaAgentConversation conversation) {
-        conversation.setLastActivityAt(OffsetDateTime.now());
-        conversationRepository.save(conversation);
+        aiConversationService.touch(conversation);
     }
 
     public Map<String, Object> fallbackAfterToolSuccess(MangaAgentConversation conversation, UUID requestId,

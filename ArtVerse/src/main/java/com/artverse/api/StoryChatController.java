@@ -5,6 +5,8 @@ import com.artverse.application.ApiKeyService;
 import com.artverse.application.CurrentUserService;
 import com.artverse.application.MangaAgentEventReplayService;
 import com.artverse.application.StoryChatAgentService;
+import com.artverse.application.NovelDraftReviewService;
+import com.artverse.application.NovelContentArtifactService;
 import com.artverse.application.UserProviderConfig;
 import com.artverse.common.aspect.RateLimit;
 import com.artverse.domain.ChatMessage;
@@ -25,11 +27,31 @@ public class StoryChatController {
     private final ApiKeyService apiKeyService;
     private final CurrentUserService currentUserService;
     private final MangaAgentEventReplayService eventReplayService;
+    private final NovelDraftReviewService novelDraftReviewService;
+
+    public record DraftDecisionRequest(String decision, String content, Long baseVersion, String expectedContentHash) { }
+
+    @PostMapping("/conversations/{conversationId}/runs/{requestId}/artifacts/{artifactId}/decision")
+    @RateLimit(windowSeconds = 60, maxRequests = 20, key = "story-chat-write")
+    public NovelContentArtifactService.CommitView decideDraft(@PathVariable Long chapterId,
+            @PathVariable UUID conversationId, @PathVariable UUID requestId, @PathVariable UUID artifactId,
+            @RequestBody DraftDecisionRequest body) {
+        User user = currentUserService.requireCurrentUser();
+        return novelDraftReviewService.decide(user.getId(), chapterId, conversationId, requestId, artifactId,
+                body.decision(), body.content(), body.baseVersion(), body.expectedContentHash());
+    }
 
     @GetMapping("/messages")
     public List<ChatMessage> messages(@PathVariable Long chapterId) {
         User user = currentUserService.requireCurrentUser();
         return storyChatAgentService.listMessages(chapterId, user);
+    }
+
+    @GetMapping("/conversations/{conversationId}/messages")
+    public List<ChatMessage> conversationMessages(@PathVariable Long chapterId,
+                                                  @PathVariable UUID conversationId) {
+        User user = currentUserService.requireCurrentUser();
+        return storyChatAgentService.listMessages(chapterId, conversationId, user);
     }
 
     @PostMapping("/conversations/{conversationId}/ag-ui/run")

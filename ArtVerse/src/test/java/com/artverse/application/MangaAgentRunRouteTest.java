@@ -36,7 +36,7 @@ class MangaAgentRunRouteTest {
 
         when(fixture.eventRepository.findByRunIdOrderByIdAsc(99L)).thenReturn(List.of());
 
-        MangaAgentRunService.RunSnapshot snapshot = fixture.service.snapshot(run);
+        MangaAgentRunSnapshots.RunSnapshot snapshot = fixture.service.snapshot(run);
 
         assertThat(snapshot.route()).isEqualTo(MangaWorkflowRoute.DIRECTOR);
         assertThat(snapshot.routeSource()).isEqualTo(MangaRouteSource.RESUME_RECLASSIFIED);
@@ -50,7 +50,7 @@ class MangaAgentRunRouteTest {
 
         when(fixture.eventRepository.findByRunIdOrderByIdAsc(99L)).thenReturn(List.of());
 
-        MangaAgentRunService.RunSnapshot snapshot = fixture.service.snapshot(run);
+        MangaAgentRunSnapshots.RunSnapshot snapshot = fixture.service.snapshot(run);
 
         assertThat(snapshot.route()).isEqualTo(MangaWorkflowRoute.DIRECTOR);
     }

@@ -23,11 +23,15 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <minio.version>8.5.12</minio.version>
         <thumbnailator.version>0.4.20</thumbnailator.version>
-        <agentscope.version>2.0.0</agentscope.version>
+        <agentscope.version>2.0.4</agentscope.version>
         <resilience4j.version>2.2.0</resilience4j.version>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

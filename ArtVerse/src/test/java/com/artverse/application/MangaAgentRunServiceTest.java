@@ -83,7 +83,7 @@ class MangaAgentRunServiceTest {
 
         when(fixture.eventRepository.findByRunIdOrderByIdAsc(99L)).thenReturn(List.of(event));
 
-        MangaAgentRunService.RunSnapshot snapshot = fixture.service.snapshot(run);
+        MangaAgentRunSnapshots.RunSnapshot snapshot = fixture.service.snapshot(run);
 
         assertThat(snapshot.status()).isEqualTo(MangaAgentRunStatus.WAITING_USER);
         assertThat(snapshot.userInputRequest().question()).isEqualTo("覆盖已有分镜吗？");
@@ -128,7 +128,7 @@ class MangaAgentRunServiceTest {
         when(fixture.eventRepository.findTop200ByRunIdAndIdGreaterThanOrderByIdAsc(99L, 10L))
                 .thenReturn(List.of(event));
 
-        MangaAgentRunService.RunEventReplayPage page =
+        MangaAgentRunSnapshots.RunEventReplayPage page =
                 fixture.service.replayEvents(1L, 7L, requestId, 10L);
 
         assertThat(page.status()).isEqualTo(MangaAgentRunStatus.RUNNING);
@@ -289,7 +289,7 @@ class MangaAgentRunServiceTest {
         Fixture fixture = fixture();
         UUID requestId = UUID.randomUUID();
         MangaAgentRun run = run(fixture.user, fixture.chapter, requestId, "generate storyboard");
-        run.setContextSnapshotJson(fixture.objectMapper.writeValueAsString(new MangaAgentRunService.RunContextSnapshot(
+        run.setContextSnapshotJson(fixture.objectMapper.writeValueAsString(new MangaAgentRunSnapshots.RunContextSnapshot(
                 3L, 7L, "Story", "Chapter 1", 4, 1, "ctx-hash", null,
                 List.of("chapter_source_excerpt"), List.of("knowledge_recall_missing"))));
         KnowledgeService.RecallPreview preview = new KnowledgeService.RecallPreview(
@@ -306,8 +306,8 @@ class MangaAgentRunServiceTest {
 
         fixture.service.recordKnowledgeSnapshot(1L, 7L, requestId, preview);
 
-        MangaAgentRunService.RunContextSnapshot updated = fixture.objectMapper.readValue(
-                run.getContextSnapshotJson(), MangaAgentRunService.RunContextSnapshot.class);
+        MangaAgentRunSnapshots.RunContextSnapshot updated = fixture.objectMapper.readValue(
+                run.getContextSnapshotJson(), MangaAgentRunSnapshots.RunContextSnapshot.class);
         assertThat(run.getKnowledgeSnapshotId()).isEqualTo(25L);
         assertThat(updated.knowledgeRecallHash()).isEqualTo("knowledge-hash");
         assertThat(updated.warnings()).doesNotContain("knowledge_recall_missing");

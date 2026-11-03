@@ -44,6 +44,25 @@ public class MangaAgentService {
     private final ExecutorService executor;
     private final MangaRoutingMetrics routingMetrics;
 
+    public void runBackground(MangaAgentConversation conversation,String message,UUID requestId,UserProviderConfig config) {
+        var sink=mangaAgentRunEventPublisher.newPersistentSink();
+        var ref=new AtomicReference<MangaAgentRun>();
+        var permit=agentConcurrencyGate.acquireOrReject(conversation.getUser().getId(),requestId);
+        try { runStreamTask(()->executeStreamConversation(conversation,message,requestId,null,MangaRouteSource.AUTO,config,sink,ref),conversation,requestId,sink,ref); }
+        finally { agentConcurrencyGate.release(permit); }
+    }
+
+    public void resumeBackground(MangaAgentConversation conversation,UUID requestId,String answer,UserProviderConfig config) {
+        var sink=mangaAgentRunEventPublisher.newPersistentSink();
+        var ref=new AtomicReference<MangaAgentRun>();
+        var permit=agentConcurrencyGate.acquireOrReject(conversation.getUser().getId(),requestId);
+        try { runStreamTask(()-> {
+            var snapshot=requireWaitingSnapshot(conversation,requestId);
+            if(handleMutationDecision(conversation,snapshot,answer,sink,ref)||handleContextMissingDecision(conversation,snapshot,answer,sink,ref))return;
+            executeStreamConversation(conversation,resumeMessage(snapshot,answer),requestId,routeForResume(snapshot,answer),routeSourceForResume(snapshot,answer),config,sink,ref);
+        },conversation,requestId,sink,ref); } finally { agentConcurrencyGate.release(permit); }
+    }
+
     @Transactional(readOnly = true)
     public List<MangaAgentMessage> listMessages(Long chapterId, User user) {
         MangaAgentConversation conversation = conversationService.activeOrCreate(chapterId, user);
@@ -242,7 +261,7 @@ public class MangaAgentService {
         AtomicReference<MangaAgentRun> runRef = new AtomicReference<>();
 
         submitStreamTask(conversation.getUser().getId(), requestId, () -> runStreamTask(() -> {
-            MangaAgentRunService.RunSnapshot snapshot = requireWaitingSnapshot(conversation, requestId);
+            MangaAgentRunSnapshots.RunSnapshot snapshot = requireWaitingSnapshot(conversation, requestId);
             if (handleMutationDecision(conversation, snapshot, answer, sink, runRef)) {
                 return;
             }
@@ -309,7 +328,7 @@ public class MangaAgentService {
 
     private RunResult resumeInternal(MangaAgentConversation conversation, UUID requestId, String answer,
                                      UserProviderConfig llmConfig) {
-        MangaAgentRunService.RunSnapshot snapshot = mangaAgentRunService.snapshot(
+        MangaAgentRunSnapshots.RunSnapshot snapshot = mangaAgentRunService.snapshot(
                 mangaAgentRunService.findRun(conversation, requestId)
                         .orElseThrow(() -> new BusinessException(404, "Agent run not found"))
         );
@@ -357,21 +376,21 @@ public class MangaAgentService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<MangaAgentRunService.RunSnapshot> latestOpenRun(Long chapterId, User user) {
+    public Optional<MangaAgentRunSnapshots.RunSnapshot> latestOpenRun(Long chapterId, User user) {
         interruptStalledRunningRuns();
         MangaAgentConversation conversation = conversationService.activeOrCreate(chapterId, user);
         return mangaAgentRunService.findLatestOpenRun(conversation)
                 .map(mangaAgentRunService::snapshot);
     }
 
-    public Optional<MangaAgentRunService.RunSnapshot> latestOpenRun(Long chapterId, UUID conversationId, User user) {
+    public Optional<MangaAgentRunSnapshots.RunSnapshot> latestOpenRun(Long chapterId, UUID conversationId, User user) {
         interruptStalledRunningRuns();
         MangaAgentConversation conversation = conversationService.requireConversation(chapterId, user, conversationId);
         return mangaAgentRunService.findLatestOpenRun(conversation)
                 .map(mangaAgentRunService::snapshot);
     }
 
-    public MangaAgentRunService.RunSnapshot getRun(Long chapterId, UUID requestId, User user) {
+    public MangaAgentRunSnapshots.RunSnapshot getRun(Long chapterId, UUID requestId, User user) {
         if (requestId == null) {
             throw new BusinessException(400, "requestId is required");
         }
@@ -383,7 +402,7 @@ public class MangaAgentService {
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
     }
 
-    public MangaAgentRunService.RunSnapshot getRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
+    public MangaAgentRunSnapshots.RunSnapshot getRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
         if (requestId == null) {
             throw new BusinessException(400, "requestId is required");
         }
@@ -394,7 +413,7 @@ public class MangaAgentService {
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
     }
 
-    public MangaAgentRunService.RunSnapshot cancelRun(Long chapterId, UUID requestId, User user) {
+    public MangaAgentRunSnapshots.RunSnapshot cancelRun(Long chapterId, UUID requestId, User user) {
         if (requestId == null) {
             throw new BusinessException(400, "requestId is required");
         }
@@ -408,7 +427,7 @@ public class MangaAgentService {
         return mangaAgentRunService.snapshot(run);
     }
 
-    public MangaAgentRunService.RunSnapshot cancelRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
+    public MangaAgentRunSnapshots.RunSnapshot cancelRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
         if (requestId == null) {
             throw new BusinessException(400, "requestId is required");
         }
@@ -421,8 +440,8 @@ public class MangaAgentService {
         return mangaAgentRunService.snapshot(run);
     }
 
-    private MangaAgentRunService.RunSnapshot requireWaitingSnapshot(MangaAgentConversation conversation, UUID requestId) {
-        MangaAgentRunService.RunSnapshot snapshot = mangaAgentRunService.snapshot(
+    private MangaAgentRunSnapshots.RunSnapshot requireWaitingSnapshot(MangaAgentConversation conversation, UUID requestId) {
+        MangaAgentRunSnapshots.RunSnapshot snapshot = mangaAgentRunService.snapshot(
                 mangaAgentRunService.findRun(conversation, requestId)
                         .orElseThrow(() -> new BusinessException(404, "Agent run not found"))
         );
@@ -432,7 +451,7 @@ public class MangaAgentService {
         return snapshot;
     }
 
-    private String resumeMessage(MangaAgentRunService.RunSnapshot snapshot, String answer) {
+    private String resumeMessage(MangaAgentRunSnapshots.RunSnapshot snapshot, String answer) {
         AgentUserInputRequest waiting = snapshot.userInputRequest();
         if (waiting == null) {
             throw new BusinessException(409, "No waiting user input request on the run");
@@ -440,7 +459,7 @@ public class MangaAgentService {
         return conversationService.resumeMessage(snapshot.inputMessage(), waiting, answer);
     }
 
-    private MangaWorkflowRoute routeForResume(MangaAgentRunService.RunSnapshot snapshot, String answer) {
+    private MangaWorkflowRoute routeForResume(MangaAgentRunSnapshots.RunSnapshot snapshot, String answer) {
         AgentUserInputRequest waiting = snapshot.userInputRequest();
         if (waiting != null && "ROUTING".equalsIgnoreCase(waiting.purpose())) {
             // If user chose "advice" (只给建议), force safe read-only route instead of re-routing
@@ -456,7 +475,7 @@ public class MangaAgentService {
         return snapshot.route();
     }
 
-    private MangaRouteSource routeSourceForResume(MangaAgentRunService.RunSnapshot snapshot, String answer) {
+    private MangaRouteSource routeSourceForResume(MangaAgentRunSnapshots.RunSnapshot snapshot, String answer) {
         AgentUserInputRequest waiting = snapshot.userInputRequest();
         if (waiting != null && "ROUTING".equalsIgnoreCase(waiting.purpose())
                 && !isAdviceSelection(waiting, answer)) {
@@ -484,7 +503,7 @@ public class MangaAgentService {
     }
 
     private boolean handleMutationDecision(MangaAgentConversation conversation,
-                                           MangaAgentRunService.RunSnapshot snapshot,
+                                           MangaAgentRunSnapshots.RunSnapshot snapshot,
                                            String answer,
                                            MangaAgentRunEventPublisher.RunEventSink sink,
                                            AtomicReference<MangaAgentRun> runRef) {
@@ -509,7 +528,7 @@ public class MangaAgentService {
     }
 
     private boolean handleContextMissingDecision(MangaAgentConversation conversation,
-                                                 MangaAgentRunService.RunSnapshot snapshot,
+                                                 MangaAgentRunSnapshots.RunSnapshot snapshot,
                                                  String answer,
                                                  MangaAgentRunEventPublisher.RunEventSink sink,
                                                  AtomicReference<MangaAgentRun> runRef) {

@@ -46,10 +46,6 @@ public class AuthCookieService {
         return configured == null || configured.isBlank() ? "artverse-refresh" : configured.trim();
     }
 
-    public boolean isRefreshBodyFallbackEnabled() {
-        return properties.getAuth().getCookie().isRefreshBodyFallbackEnabled();
-    }
-
     private ResponseCookie buildCookie(String value, long maxAgeSeconds) {
         return ResponseCookie.from(refreshCookieName(), value)
                 .httpOnly(true)

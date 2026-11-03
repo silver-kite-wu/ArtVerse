@@ -14,6 +14,14 @@ import java.time.OffsetDateTime;
 @Setter
 public class MangaImage {
 
+    @Version
+    @Column(nullable = false)
+    @JsonIgnore
+    private Long version;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("image_version")
+    public String imageVersion() { return version == null ? null : version.toString(); }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

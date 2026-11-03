@@ -8,6 +8,7 @@ import com.artverse.application.AgentUserInputRequiredException;
 import com.artverse.application.ApiKeyService;
 import com.artverse.application.MangaAgentConversationService;
 import com.artverse.application.MangaAgentRunService;
+import com.artverse.application.MangaAgentRunSnapshots;
 import com.artverse.application.MangaAgentRunEventPublisher;
 import com.artverse.application.UserProviderConfig;
 import com.artverse.domain.Chapter;
@@ -201,7 +202,7 @@ class MangaWorkflowOrchestratorTest {
                 .isSameAs(expected);
 
         verify(registry, never()).handlerFor(any());
-        verify(runs).recordContextSnapshot(any(MangaAgentRun.class), any(MangaAgentRunService.RunContextSnapshot.class));
+        verify(runs).recordContextSnapshot(any(MangaAgentRun.class), any(MangaAgentRunSnapshots.RunContextSnapshot.class));
     }
 
     @Test

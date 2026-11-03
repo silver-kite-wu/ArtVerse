@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowLeft, Check, CheckCircle2, ChevronRight, Database, Eye, EyeOff, Pencil, Plus, PowerOff, RefreshCw, Save, Wifi } from 'lucide-react';
 import { activateEmbeddingConfig, deactivateEmbeddingConfig, discoverEmbeddingModels, getEmbeddingConfigs, saveEmbeddingConfig, testEmbeddingConfig, type EmbeddingConfigInfo } from '../api';
+import { useToast } from '../ui/toast/useToast';
 
 type Draft = { configId?: number; displayName: string; baseUrl: string; apiKey: string; model: string; customHeaders: string };
 type View = { mode: 'list' } | { mode: 'edit'; configId?: number };
@@ -12,6 +13,7 @@ function draftFromConfig(config: EmbeddingConfigInfo): Draft {
 }
 
 export default function EmbeddingSettingsPanel() {
+  const toast = useToast();
   const [configs, setConfigs] = useState<EmbeddingConfigInfo[]>([]);
   const [view, setView] = useState<View>({ mode: 'list' });
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -22,88 +24,91 @@ export default function EmbeddingSettingsPanel() {
   const [switchingId, setSwitchingId] = useState<number | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [showKey, setShowKey] = useState(false);
-  const [message, setMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const editingConfig = useMemo(() => view.mode === 'edit' && view.configId ? configs.find((config) => config.id === view.configId) || null : null, [configs, view]);
   const activeConfig = useMemo(() => configs.find((config) => config.active) || null, [configs]);
-  const load = async () => {
-    setLoading(true);
-    try { setConfigs(await getEmbeddingConfigs()); }
-    catch (error) { setMessage(error instanceof Error ? error.message : '读取向量模型配置失败'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let active = true;
+    getEmbeddingConfigs()
+      .then((items) => { if (active) { setConfigs(items); setLoadError(''); } })
+      .catch((error: unknown) => {
+        if (active) setLoadError(error instanceof Error ? error.message : '读取向量模型配置失败');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
-  const startNew = () => { setDraft(emptyDraft()); setView({ mode: 'edit' }); setMessage(''); setShowKey(false); setAvailableModels([]); };
-  const startEdit = (config: EmbeddingConfigInfo) => { setDraft(draftFromConfig(config)); setView({ mode: 'edit', configId: config.id }); setMessage(''); setShowKey(false); setAvailableModels([config.model]); };
-  const backToList = () => { setView({ mode: 'list' }); setMessage(''); setShowKey(false); };
+  const startNew = () => { setDraft(emptyDraft()); setView({ mode: 'edit' }); setShowKey(false); setAvailableModels([]); };
+  const startEdit = (config: EmbeddingConfigInfo) => { setDraft(draftFromConfig(config)); setView({ mode: 'edit', configId: config.id }); setShowKey(false); setAvailableModels([config.model]); };
+  const backToList = () => { setView({ mode: 'list' }); setShowKey(false); };
   const validDraft = () => {
-    if (!draft.displayName.trim() || !draft.baseUrl.trim() || !draft.model.trim()) { setMessage('请填写配置名称、Base URL 和 Embedding 模型。'); return; }
-    if (!draft.configId && !draft.apiKey.trim()) { setMessage('新配置必须填写 API Key。'); return; }
+    if (!draft.displayName.trim() || !draft.baseUrl.trim() || !draft.model.trim()) { toast.warning('请填写配置名称、Base URL 和 Embedding 模型。'); return; }
+    if (!draft.configId && !draft.apiKey.trim()) { toast.warning('新配置必须填写 API Key。'); return; }
     return true;
   };
   const replaceConfig = (config: EmbeddingConfigInfo) => setConfigs((current) => [config, ...current.filter((item) => item.id !== config.id)]);
   const save = async () => {
     if (!validDraft()) return;
-    setSaving(true); setMessage('');
+    setSaving(true);
     try {
       const config = await saveEmbeddingConfig(draft);
       replaceConfig(config);
       setDraft(draftFromConfig(config));
       setView({ mode: 'edit', configId: config.id });
-      setMessage(config.status === 'VERIFIED' ? '配置已保存，连接验证状态保持不变。' : '配置已保存，请测试连接以获取实际向量维度。');
-    } catch (error) { setMessage(error instanceof Error ? error.message : '保存配置失败'); }
+      toast.success(config.status === 'VERIFIED' ? '配置已保存，连接验证状态保持不变' : '配置已保存，请测试连接以获取实际向量维度');
+    } catch (error) { toast.error(error instanceof Error ? error.message : '保存配置失败'); }
     finally { setSaving(false); }
   };
   const test = async () => {
-    if (!draft.configId) { setMessage('请先保存配置，再测试连接。'); return; }
+    if (!draft.configId) { toast.warning('请先保存配置，再测试连接。'); return; }
     const dirty = !editingConfig || draft.apiKey.trim() !== '' || draft.displayName.trim() !== editingConfig.displayName || draft.baseUrl.trim() !== editingConfig.baseUrl || draft.model.trim() !== editingConfig.model || draft.customHeaders.trim() !== editingConfig.customHeaders.trim();
-    if (dirty) { setMessage('当前内容尚未保存，请先保存再测试。'); return; }
-    setTesting(true); setMessage('');
+    if (dirty) { toast.warning('当前内容尚未保存，请先保存再测试。'); return; }
+    setTesting(true);
     try {
       const result = await testEmbeddingConfig(draft.configId);
       replaceConfig(result.config);
-      setMessage(`连接验证成功，实际向量维度为 ${result.dimension}。`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : '连接测试失败'); }
+      toast.success(`连接验证成功，实际向量维度为 ${result.dimension}`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : '连接测试失败'); }
     finally { setTesting(false); }
   };
   const fetchModels = async () => {
-    if (!draft.baseUrl.trim()) { setMessage('请先填写 Base URL。'); return; }
-    if (!draft.configId && !draft.apiKey.trim()) { setMessage('请先填写 API Key。'); return; }
-    setLoadingModels(true); setMessage('');
+    if (!draft.baseUrl.trim()) { toast.warning('请先填写 Base URL。'); return; }
+    if (!draft.configId && !draft.apiKey.trim()) { toast.warning('请先填写 API Key。'); return; }
+    setLoadingModels(true);
     try {
       const models = await discoverEmbeddingModels(draft);
       setAvailableModels(models);
-      if (models.length === 0) setMessage('供应商的 /models 接口未声明向量模型，请手动填写模型名称。');
-      else setMessage(`已获取 ${models.length} 个向量模型，请从下方列表中选择一个。`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : '获取向量模型失败'); }
+      if (models.length === 0) toast.info('供应商的 /models 接口未声明向量模型，请手动填写模型名称。');
+      else toast.success(`已获取 ${models.length} 个向量模型，请从下方列表中选择一个`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : '获取向量模型失败'); }
     finally { setLoadingModels(false); }
   };
   const activate = async (config: EmbeddingConfigInfo) => {
-    setSwitchingId(config.id); setMessage('');
+    setSwitchingId(config.id);
     try {
       const activated = await activateEmbeddingConfig(config.id);
       setConfigs((current) => [activated, ...current.filter((item) => item.id !== activated.id).map((item) => ({ ...item, active: false }))]);
-      setMessage(`已将 ${activated.model} 设为默认向量模型。`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : '启用向量模型失败'); }
+      toast.success(`已将 ${activated.model} 设为默认向量模型`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : '启用向量模型失败'); }
     finally { setSwitchingId(null); }
   };
   const deactivate = async (config: EmbeddingConfigInfo) => {
-    setSwitchingId(config.id); setMessage('');
+    setSwitchingId(config.id);
     try {
       const deactivated = await deactivateEmbeddingConfig(config.id);
       replaceConfig(deactivated);
-      setMessage(`已停用默认向量模型 ${deactivated.model}。`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : '停用向量模型失败'); }
+      toast.success(`已停用默认向量模型 ${deactivated.model}`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : '停用向量模型失败'); }
     finally { setSwitchingId(null); }
   };
 
-  if (view.mode === 'edit') return <EmbeddingEditor draft={draft} editingConfig={editingConfig} saving={saving} testing={testing} loadingModels={loadingModels} availableModels={availableModels} showKey={showKey} message={message} onBack={backToList} onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))} onShowKey={() => setShowKey((value) => !value)} onSave={() => void save()} onTest={() => void test()} onFetchModels={() => void fetchModels()} />;
+  if (view.mode === 'edit') return <EmbeddingEditor draft={draft} editingConfig={editingConfig} saving={saving} testing={testing} loadingModels={loadingModels} availableModels={availableModels} showKey={showKey} onBack={backToList} onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))} onShowKey={() => setShowKey((value) => !value)} onSave={() => void save()} onTest={() => void test()} onFetchModels={() => void fetchModels()} />;
 
   return <section>
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold text-text-primary">向量模型</h2><p className="mt-1 text-sm text-text-secondary">为知识库配置 OpenAI 兼容的 <code>/embeddings</code> 服务。</p></div><button type="button" onClick={startNew} className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover"><Plus size={16} />新建配置</button></div>
     {!loading && configs.length > 0 ? <div className={`mb-4 flex items-center gap-3 border px-4 py-3 ${activeConfig ? 'border-accent/30 bg-accent-muted/15' : 'border-border bg-bg-surface'}`}><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${activeConfig ? 'bg-accent text-white' : 'bg-bg-raised text-text-muted'}`}><Database size={17} /></div><div className="min-w-0"><div className="text-xs text-text-secondary">当前默认向量模型</div>{activeConfig ? <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2"><strong className="text-sm text-text-primary">{activeConfig.model}</strong><span className="text-xs text-text-muted">{activeConfig.displayName} · {activeConfig.actualDimension}D</span></div> : <div className="mt-0.5 text-sm font-medium text-text-primary">尚未设置，请从已验证配置中选择</div>}</div></div> : null}
-    {message ? <div role="status" className="mb-4 border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary">{message}</div> : null}
+    {loadError ? <div role="alert" className="mb-4 border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">{loadError}</div> : null}
     {loading ? <div className="border border-border bg-bg-surface px-4 py-8 text-center text-sm text-text-secondary">正在读取已保存的向量模型配置...</div> : null}
     {!loading && configs.length === 0 ? <div className="border border-dashed border-border bg-bg-surface/60 px-6 py-16 text-center"><div className="text-sm font-medium text-text-primary">还没有向量模型配置</div><p className="mt-2 text-sm text-text-secondary">配置并验证后，才能为作品知识库创建检索索引。</p><button type="button" onClick={startNew} className="mt-5 inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm text-text-secondary hover:border-accent/40 hover:text-accent"><Plus size={16} />新建配置</button></div> : null}
     {!loading && configs.length > 0 ? <div className="space-y-3">{configs.map((config) => <EmbeddingRow key={config.id} config={config} switching={switchingId === config.id} onEdit={() => startEdit(config)} onActivate={() => void activate(config)} onDeactivate={() => void deactivate(config)} />)}</div> : null}
@@ -124,7 +129,7 @@ function EmbeddingRow({ config, switching, onEdit, onActivate, onDeactivate }: {
   </article>;
 }
 
-function EmbeddingEditor({ draft, editingConfig, saving, testing, loadingModels, availableModels, showKey, message, onBack, onChange, onShowKey, onSave, onTest, onFetchModels }: { draft: Draft; editingConfig: EmbeddingConfigInfo | null; saving: boolean; testing: boolean; loadingModels: boolean; availableModels: string[]; showKey: boolean; message: string; onBack: () => void; onChange: (patch: Partial<Draft>) => void; onShowKey: () => void; onSave: () => void; onTest: () => void; onFetchModels: () => void }) {
+function EmbeddingEditor({ draft, editingConfig, saving, testing, loadingModels, availableModels, showKey, onBack, onChange, onShowKey, onSave, onTest, onFetchModels }: { draft: Draft; editingConfig: EmbeddingConfigInfo | null; saving: boolean; testing: boolean; loadingModels: boolean; availableModels: string[]; showKey: boolean; onBack: () => void; onChange: (patch: Partial<Draft>) => void; onShowKey: () => void; onSave: () => void; onTest: () => void; onFetchModels: () => void }) {
   const busy = saving || testing || loadingModels;
   return <section className="pb-20"><div className="mb-6 flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary"><ArrowLeft size={16} />返回配置列表</button><div className="flex items-center gap-2"><button type="button" disabled={busy || !draft.configId} onClick={onTest} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm font-medium text-text-secondary hover:border-accent-tertiary/40 hover:text-accent-tertiary disabled:opacity-50">{testing ? <RefreshCw size={16} className="animate-spin" /> : <Wifi size={16} />}{testing ? '测试中...' : '测试连接'}</button><button type="button" disabled={busy} onClick={onSave} className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50">{saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}{saving ? '保存中...' : '保存配置'}</button></div></div>
     <div className="border-b border-border pb-5"><h2 className="text-base font-semibold text-text-primary">{editingConfig ? `编辑 ${editingConfig.displayName || editingConfig.model}` : '新建向量模型配置'}</h2><p className="mt-1 text-sm text-text-secondary">保存和连接测试互不混淆。已被知识库使用的配置发生连接参数变更时，会自动保存为新版本。</p></div>
@@ -141,7 +146,6 @@ function EmbeddingEditor({ draft, editingConfig, saving, testing, loadingModels,
         {availableModels.length > 0 ? <fieldset className="mt-3 border border-border bg-bg-surface/45 p-3"><legend className="px-1 text-xs font-medium text-text-secondary">已获取 {availableModels.length} 个向量模型</legend><div className="grid gap-2 sm:grid-cols-2">{availableModels.map((model) => <label key={model} className={`flex min-h-10 cursor-pointer items-center gap-2 border px-3 py-2 text-sm transition-colors ${draft.model === model ? 'border-accent/50 bg-accent-soft text-accent' : 'border-border bg-bg-surface text-text-secondary hover:border-accent-tertiary/40'}`}><input type="radio" name="embedding-model" value={model} checked={draft.model === model} onChange={() => onChange({ model })} className="accent-[var(--color-accent)]" /><span className="min-w-0 break-all">{model}</span></label>)}</div></fieldset> : null}
       </Field>
       <details className="border border-border bg-bg-surface/45"><summary className="cursor-pointer px-4 py-3 text-sm font-medium text-text-primary">高级选项</summary><div className="border-t border-border px-4 py-4"><Field label="自定义请求头（JSON）" hint="仅在服务商要求额外认证或路由请求头时填写。"><textarea value={draft.customHeaders} onChange={(event) => onChange({ customHeaders: event.target.value })} rows={5} className="input-field resize-y font-mono text-xs" /></Field></div></details>
-      {message ? <div role="alert" className="border border-border bg-bg-surface px-4 py-3 text-sm text-text-secondary">{message}</div> : null}
     </div>
   </section>;
 }

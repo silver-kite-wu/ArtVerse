@@ -55,7 +55,7 @@ ArtVerse is a full-stack creation platform for manga-oriented storytelling. It c
 - Graded brute-force protection for password login: 3 failures in a 5-minute window triggers captcha, 6 failures locks password login for 10 minutes
 - IP-level rate limiting with separate policies for login and registration
 - Sa-Token sessions: HttpOnly cookies (SameSite=Strict) backed by Redis, with refresh-token support
-- Unified Result response envelope (code / message / data)
+- JSON API success and error responses use a shared `code / message / data` envelope; HTTP status codes continue to express request outcomes. SSE, file/image responses, and `204 No Content` keep their transport-specific formats
 
 ### Works Square
 
@@ -128,7 +128,7 @@ POSTGRES_PASSWORD=postgres
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 
-# Encryption key for sensitive fields and risk-control HMAC key (required in production)
+# Encryption and auth-risk HMAC keys (required in production; distinct random values of at least 32 characters)
 ARTVERSE_SECRET_ENCRYPTION_KEY=
 ARTVERSE_AUTH_RISK_HMAC_KEY=
 
@@ -145,6 +145,8 @@ Notes:
 - Without `ARTVERSE_MAIL_HOST`, the mail feature is disabled automatically; everything else keeps working
 - API keys and base URLs for AI capabilities (LLM / image / workflow) are saved per user on the settings page and stored encrypted; the repository ships no operator credentials
 - `.env` is ignored by `.gitignore` and will not be committed
+- The current Compose file uses local development credentials and publishes PostgreSQL, Redis, and MinIO ports. Use it only in a trusted development environment; production deployments need separate strong credentials and network or firewall restrictions for dependency services.
+- The `prod` or `production` Spring profile validates key length and separation, HTTPS cookies, enforced CSRF, and disabled Flyway checksum auto-repair; the application refuses to start if these requirements are not met.
 
 ### 3. Run the backend
 
@@ -180,6 +182,7 @@ The frontend dev server runs at `http://localhost:5173`, with CORS pre-configure
 | `ARTVERSE_MAIL_ENABLED` | Enable email verification codes | `true` |
 | `ARTVERSE_AUTH_COOKIE_SECURE` | Set to `true` behind HTTPS | `false` |
 | `ARTVERSE_AUTH_CHALLENGE_MODE` | Captcha mode (`enforce` / relaxed) | `enforce` |
+| `ARTVERSE_CORS_ORIGINS` | Comma-separated origins allowed by CSRF/CORS (for example `http://<server-ip>`) | `http://localhost:5173,http://127.0.0.1:5173` |
 
 ## Development Commands
 
@@ -205,8 +208,10 @@ npm run preview   # preview production build
 
 - Frontend build output is served by Nginx (SPA fallback `try_files ... /index.html`) and reverse-proxies `/api` and SSE endpoints (`proxy_buffering off`)
 - The backend is packaged as a JAR managed by systemd (`Restart=always`), with `.env` placed next to the JAR
-- In production, bind docker-compose ports to `127.0.0.1` and expose only Nginx 80/443
-- Set `ARTVERSE_AUTH_COOKIE_SECURE=true` behind HTTPS
+- Do not deploy the repository's local-development Compose configuration as-is; production needs separate credentials and network or firewall restrictions for PostgreSQL, Redis, and MinIO.
+- Set `SPRING_PROFILES_ACTIVE=production` and configure distinct encryption and HMAC keys with at least 32 characters.
+- Set `ARTVERSE_AUTH_COOKIE_SECURE=true` behind HTTPS. Actuator requires an administrator login except for `/actuator/health`, and health details are hidden.
+- Flyway checksum mismatches stop startup and require migration-history review; deployed database checksums are not repaired automatically.
 - See [ArtVerse/AGENTS.md](./ArtVerse/AGENTS.md) for the full working conventions
 
 ## License

@@ -8,7 +8,7 @@ import com.artverse.application.ApiKeyService;
 import com.artverse.application.MangaAgentConversationService;
 import com.artverse.application.MangaAgentRunEventPublisher;
 import com.artverse.application.MangaAgentRunService;
-import com.artverse.application.MangaAgentRunService.RunContextSnapshot;
+import com.artverse.application.MangaAgentRunSnapshots.RunContextSnapshot;
 import com.artverse.application.UserProviderConfig;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.MangaAgentConversation;

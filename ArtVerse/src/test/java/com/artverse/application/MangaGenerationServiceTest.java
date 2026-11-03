@@ -298,14 +298,7 @@ class MangaGenerationServiceTest {
         public Mono<GeneratedImage> generate(ImageGenerationRequest request, UserProviderConfig config) {
             this.request.set(request);
             latch.countDown();
-            try {
-                Path dir = Files.createTempDirectory("artverse-generated-");
-                Path file = dir.resolve("panel.png");
-                Files.write(file, new byte[] {1, 2, 3});
-                return Mono.just(new GeneratedImage(file, "image/png", Files.size(file)));
-            } catch (Exception e) {
-                return Mono.error(e);
-            }
+            return Mono.just(new GeneratedImage(new byte[] {1, 2, 3}, "image/png"));
         }
 
         boolean awaitRequest() throws InterruptedException {
@@ -314,6 +307,16 @@ class MangaGenerationServiceTest {
     }
 
     private static class CapturingObjectStorage implements ObjectStorageService {
+        @Override
+        public StoredObject put(String objectKey, InputStream content, long sizeBytes, String contentType) {
+            try {
+                assertThat(content.readAllBytes()).hasSize((int) sizeBytes);
+                return new StoredObject("artverse-test", objectKey, contentType, sizeBytes);
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+
         @Override
         public StoredObject putPng(String objectKey, Path localFile, String contentType) {
             try {

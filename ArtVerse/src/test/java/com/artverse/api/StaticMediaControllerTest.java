@@ -25,6 +25,11 @@ class StaticMediaControllerTest {
         properties.getMinio().setBucket("artverse-test");
         ObjectStorageService storage = new ObjectStorageService() {
             @Override
+            public com.artverse.storage.StoredObject put(String objectKey, java.io.InputStream content, long sizeBytes, String contentType) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public com.artverse.storage.StoredObject putPng(String objectKey, Path localFile, String contentType) {
                 throw new UnsupportedOperationException();
             }

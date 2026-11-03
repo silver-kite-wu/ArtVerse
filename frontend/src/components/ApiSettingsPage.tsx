@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type ReactNode } from 'react';
+﻿import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowLeft, Bot, ChevronRight, CircleCheck, Database, ExternalLink, Eye, EyeOff,
   Image as ImageIcon, KeyRound, LoaderCircle, Pencil, Play, Plus, PowerOff, RefreshCw, Save, Trash2, Workflow,
@@ -20,6 +20,7 @@ import {
   type ProviderPresetConfig,
 } from '../api';
 import EmbeddingSettingsPanel from './EmbeddingSettingsPanel';
+import { useToast } from '../ui/toast/useToast';
 
 type ProviderPreset = {
   id: string;
@@ -130,6 +131,7 @@ function CapabilityTabs({ active, onChange, settings }: { active: CapabilityTab;
 }
 
 export default function ApiSettingsPage() {
+  const toast = useToast();
   const [settings, setSettings] = useState<ApiKeySettings>(() => getApiKeySettings());
   const [activeTab, setActiveTab] = useState<CapabilityTab>('llm');
   const [editor, setEditor] = useState<Editor>({ mode: 'list' });
@@ -139,36 +141,50 @@ export default function ApiSettingsPage() {
   const [loadingKey, setLoadingKey] = useState(false);
   const [switchingEntryId, setSwitchingEntryId] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const capability = activeTab === 'embedding' ? null : activeTab;
   const entries = useMemo(() => capability ? entriesFor(settings, capability) : [], [settings, capability]);
   const editingEntry = useMemo(() => capability && editor.mode === 'edit' ? settings.providers[capability].entries[editor.entryId] : null, [settings, capability, editor]);
 
-  const commit = (next: ApiKeySettings) => {
+  const commit = useCallback((next: ApiKeySettings) => {
     setSettings(next);
     saveApiKeySettings(next);
-  };
+  }, []);
 
-  const loadRemote = async () => {
-    setLoading(true);
+  const loadRemote = useCallback(async () => {
     try {
       const remote = await getUserProviderConfigs();
       const merged = mergeServerProviderConfigs(getApiKeySettings(), remote);
       commit(merged);
+      setLoadError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '读取 API 配置失败');
+      setLoadError(cause instanceof Error ? cause.message : '读取 API 配置失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [commit]);
 
-  useEffect(() => { void loadRemote(); }, []);
+  useEffect(() => {
+    let active = true;
+    getUserProviderConfigs()
+      .then((remote) => {
+        if (!active) return;
+        commit(mergeServerProviderConfigs(getApiKeySettings(), remote));
+      })
+      .catch((cause: unknown) => {
+        if (active) setLoadError(cause instanceof Error ? cause.message : '读取 API 配置失败');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [commit]);
 
   const switchTab = (next: CapabilityTab) => {
     setActiveTab(next);
     setEditor({ mode: 'list' });
-    setError('');
+    setLoadError('');
     setShowKey(false);
   };
 
@@ -198,20 +214,18 @@ export default function ApiSettingsPage() {
       commit({ ...settings, providers: { ...settings.providers, [capability]: { ...settings.providers[capability], entries: nextEntries } } });
     }
     setEditor({ mode: 'list' });
-    setError('');
   };
 
   const startEdit = async (entryId: string, entry: ProviderPresetConfig) => {
     setEditor({ mode: 'edit', entryId, isNew: false });
     setShowKey(false);
-    setError('');
     if (!entry.remoteId) return;
     setLoadingKey(true);
     try {
       const apiKey = await getUserProviderApiKey(entry.remoteId);
       setSettings((current) => updateEntry(current, capability!, entryId, { apiKey }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '读取 API Key 失败');
+      toast.error(cause instanceof Error ? cause.message : '读取 API Key 失败');
     } finally {
       setLoadingKey(false);
     }
@@ -220,11 +234,10 @@ export default function ApiSettingsPage() {
   const saveEntry = async () => {
     if (!capability || editor.mode !== 'edit' || !editingEntry) return;
     if (!editingEntry.label.trim() || !editingEntry.baseUrl.trim()) {
-      setError('请填写配置名称和 Base URL。');
+      toast.warning('请填写配置名称和 Base URL。');
       return;
     }
     setSaving(true);
-    setError('');
     try {
       const saved = await saveUserProviderConfig(capability, toProviderEndpointConfig(editingEntry));
       const selectedModels = saved.model
@@ -261,8 +274,9 @@ export default function ApiSettingsPage() {
       }
       commit(next);
       setEditor({ mode: 'list' });
+      toast.success('供应商配置已保存');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '保存配置失败');
+      toast.error(cause instanceof Error ? cause.message : '保存配置失败');
     } finally {
       setSaving(false);
     }
@@ -271,19 +285,19 @@ export default function ApiSettingsPage() {
   const fetchModels = async () => {
     if (!capability || editor.mode !== 'edit' || !editingEntry) return;
     if (!editingEntry.apiKey.trim() && !editingEntry.apiKeyMasked) {
-      setError('请先填写 API Key，再获取模型。');
+      toast.warning('请先填写 API Key，再获取模型。');
       return;
     }
     setLoadingModels(true);
-    setError('');
     try {
       const models = await discoverProviderModels(capability, toProviderEndpointConfig(editingEntry));
       commit(updateEntry(settings, capability, editor.entryId, {
         availableModels: Array.from(new Set([...models, ...editingEntry.selectedModels])),
         selectedModels: editingEntry.selectedModels.length > 0 ? editingEntry.selectedModels : models.slice(0, 1),
       }));
+      toast.success(`已获取 ${models.length} 个模型`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '获取模型失败');
+      toast.error(cause instanceof Error ? cause.message : '获取模型失败');
     } finally {
       setLoadingModels(false);
     }
@@ -292,12 +306,11 @@ export default function ApiSettingsPage() {
   const setActive = async (entryId: string, entry: ProviderPresetConfig) => {
     if (!capability || entry.active) return;
     if (!entry.remoteId) {
-      setError(`“${entry.label}”尚未同步到后端，请编辑并保存配置后再启用。`);
+      toast.warning(`“${entry.label}”尚未同步到后端，请编辑并保存配置后再启用。`);
       return;
     }
     setSwitchingEntryId(entryId);
     try {
-      setError('');
       await activateUserProviderConfig(entry.remoteId);
       const provider = settings.providers[capability];
       const multiple = supportsMultipleActiveProviders(capability);
@@ -314,8 +327,9 @@ export default function ApiSettingsPage() {
           },
         },
       });
+      toast.success(`已启用“${entry.label}”`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '切换启用配置失败');
+      toast.error(cause instanceof Error ? cause.message : '切换启用配置失败');
     } finally {
       setSwitchingEntryId(null);
     }
@@ -324,12 +338,11 @@ export default function ApiSettingsPage() {
   const setInactive = async (entryId: string, entry: ProviderPresetConfig) => {
     if (!capability || !entry.active) return;
     if (!entry.remoteId) {
-      setError(`“${entry.label}”尚未同步到后端，无法更改启用状态。`);
+      toast.warning(`“${entry.label}”尚未同步到后端，无法更改启用状态。`);
       return;
     }
     setSwitchingEntryId(entryId);
     try {
-      setError('');
       await deactivateUserProviderConfig(entry.remoteId);
       const provider = settings.providers[capability];
       const entries = Object.fromEntries(Object.entries(provider.entries).map(([id, item]) => [id, {
@@ -346,8 +359,9 @@ export default function ApiSettingsPage() {
           [capability]: { activePresetId, entries },
         },
       });
+      toast.success(`已停用“${entry.label}”`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '停用配置失败');
+      toast.error(cause instanceof Error ? cause.message : '停用配置失败');
     } finally {
       setSwitchingEntryId(null);
     }
@@ -360,17 +374,19 @@ export default function ApiSettingsPage() {
       const nextEntries = { ...settings.providers[capability].entries };
       delete nextEntries[entryId];
       commit({ ...settings, providers: { ...settings.providers, [capability]: { ...settings.providers[capability], entries: nextEntries } } });
+      setLoading(true);
       await loadRemote();
+      toast.success(`已删除“${entry.label}”`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '删除配置失败');
+      toast.error(cause instanceof Error ? cause.message : '删除配置失败');
     }
   };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-base">
-      <header className="border-b border-border bg-bg-surface/80 px-5 py-4 backdrop-blur-sm">
+      <header className="border-b border-border glass-panel px-5 py-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-accent/15 bg-accent-soft"><KeyRound size={18} className="text-accent" /></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-b from-accent-soft to-accent-muted shadow-glow"><KeyRound size={18} className="text-accent" /></div>
           <div><h1 className="font-display text-lg font-semibold text-text-primary">API 配置</h1><p className="text-xs text-text-secondary">管理可用于创作、绘图与工作流的供应商配置。</p></div>
         </div>
       </header>
@@ -379,13 +395,13 @@ export default function ApiSettingsPage() {
 
       <main className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto w-full max-w-6xl">
-          {error ? <div role="alert" className="mb-4 border border-accent/25 bg-accent-muted/25 px-4 py-3 text-sm text-accent">{error}</div> : null}
+          {loadError ? <div role="alert" className="mb-4 border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">{loadError}</div> : null}
           {activeTab === 'embedding' ? <EmbeddingSettingsPanel /> : null}
           {capability && editor.mode === 'list' ? (
             <section>
               <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                 <div><h2 className="text-base font-semibold text-text-primary">{TABS.find((tab) => tab.id === capability)?.label}</h2><p className="mt-1 text-sm text-text-secondary">{TABS.find((tab) => tab.id === capability)?.description}</p></div>
-                <button type="button" onClick={startNew} className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"><Plus size={16} />新建供应商</button>
+                <button type="button" onClick={startNew} className="inline-flex items-center gap-1.5 rounded-lg btn-accent px-3 py-2 text-sm font-medium"><Plus size={16} />新建供应商</button>
               </div>
               {loading ? <div className="border border-border bg-bg-surface px-4 py-8 text-center text-sm text-text-secondary">正在读取已保存的供应商配置...</div> : null}
               {!loading && entries.length === 0 ? <div className="border border-dashed border-border bg-bg-surface/60 px-6 py-16 text-center"><div className="text-sm font-medium text-text-primary">还没有供应商配置</div><p className="mt-2 text-sm text-text-secondary">新建一条配置后，可在创作和生成页面选择其中的模型。</p><button type="button" onClick={startNew} className="mt-5 inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-secondary hover:border-accent/40 hover:text-accent"><Plus size={16} />新建供应商</button></div> : null}
@@ -404,14 +420,14 @@ function ProviderRow({ capability, entry, switching, onEdit, onActivate, onDeact
   return <article aria-busy={switching} className={`group flex min-h-24 items-center gap-4 rounded-lg border px-5 py-4 transition-[border-color,background-color,box-shadow] ${entry.active ? 'border-accent/55 bg-accent-muted/15 shadow-sm' : 'border-border bg-bg-surface/55 hover:border-accent/30 hover:bg-bg-surface'}`}>
     <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border text-sm font-semibold ${entry.active ? 'border-accent/25 bg-bg-surface text-accent' : 'border-border bg-bg-raised/70 text-text-secondary'}`}>{entry.label.slice(0, 1).toUpperCase()}</div>
     <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-medium text-text-primary">{entry.label}</h3>{entry.active ? <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs text-success"><CircleCheck size={12} />已启用</span> : null}<span className="rounded-full bg-bg-raised px-2 py-0.5 text-xs text-text-secondary">{preset.label}</span></div><div className="mt-1 truncate text-sm text-accent-tertiary">{entry.baseUrl}</div><div className="mt-1 flex flex-wrap gap-x-4 text-xs text-text-muted"><span>{entry.selectedModels.length} 个已选模型</span><span>{entry.apiKey || entry.apiKeyMasked ? '密钥已保存' : '尚未填写密钥'}</span></div></div>
-    <div className="flex shrink-0 items-center gap-1">{entry.active ? <button type="button" disabled={switching} title="停用供应商" onClick={onDeactivate} className="inline-flex min-w-20 items-center justify-center gap-1.5 rounded-lg border border-border bg-bg-surface px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:cursor-wait disabled:opacity-60">{switching ? <LoaderCircle size={14} className="animate-spin" /> : <PowerOff size={14} />}<span>{switching ? '处理中' : '停用'}</span></button> : <button type="button" disabled={switching} title={entry.remoteId ? '设为使用中' : '保存配置后即可启用'} onClick={onActivate} className="inline-flex min-w-20 items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition-[background-color,box-shadow] hover:bg-accent-hover hover:shadow disabled:cursor-wait disabled:opacity-60">{switching ? <LoaderCircle size={15} className="animate-spin" /> : <Play size={15} fill="currentColor" />}<span>{switching ? '启用中' : '启用'}</span></button>}<button type="button" disabled={switching} title="编辑供应商" onClick={onEdit} className="rounded-md p-2 text-text-secondary transition-colors hover:bg-bg-surface hover:text-accent disabled:opacity-40"><Pencil size={17} /></button><button type="button" disabled={switching} title="删除供应商" onClick={onDelete} className="rounded-md p-2 text-text-muted transition-colors hover:bg-accent-muted/30 hover:text-accent disabled:opacity-40"><Trash2 size={17} /></button><ChevronRight size={17} className="hidden text-text-muted sm:block" /></div>
+    <div className="flex shrink-0 items-center gap-1">{entry.active ? <button type="button" disabled={switching} title="停用供应商" onClick={onDeactivate} className="inline-flex min-w-20 items-center justify-center gap-1.5 rounded-lg border border-border bg-bg-surface px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:cursor-wait disabled:opacity-60">{switching ? <LoaderCircle size={14} className="animate-spin" /> : <PowerOff size={14} />}<span>{switching ? '处理中' : '停用'}</span></button> : <button type="button" disabled={switching} title={entry.remoteId ? '设为使用中' : '保存配置后即可启用'} onClick={onActivate} className="inline-flex min-w-20 items-center justify-center gap-1.5 rounded-lg btn-accent px-3 py-2 text-xs font-semibold disabled:cursor-wait disabled:opacity-60">{switching ? <LoaderCircle size={15} className="animate-spin" /> : <Play size={15} fill="currentColor" />}<span>{switching ? '启用中' : '启用'}</span></button>}<button type="button" disabled={switching} title="编辑供应商" onClick={onEdit} className="rounded-md p-2 text-text-secondary transition-colors hover:bg-bg-surface hover:text-accent disabled:opacity-40"><Pencil size={17} /></button><button type="button" disabled={switching} title="删除供应商" onClick={onDelete} className="rounded-md p-2 text-text-muted transition-colors hover:bg-accent-muted/30 hover:text-accent disabled:opacity-40"><Trash2 size={17} /></button><ChevronRight size={17} className="hidden text-text-muted sm:block" /></div>
   </article>;
 }
 
 function ProviderEditor({ capability, entry, showKey, loadingKey, saving, loadingModels, onBack, onSave, onShowKey, onChange, onPresetChange, onFetchModels }: { capability: ApiCapability; entry: ProviderPresetConfig; showKey: boolean; loadingKey: boolean; saving: boolean; loadingModels: boolean; onBack: () => void; onSave: () => void; onShowKey: () => void; onChange: (patch: Partial<ProviderPresetConfig>) => void; onPresetChange: (presetId: string) => void; onFetchModels: () => void }) {
   const preset = getPreset(capability, entry.presetId);
   const supportsModels = capability !== 'workflow';
-  return <section className="pb-20"><div className="mb-6 flex items-center justify-between gap-3"><button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary"><ArrowLeft size={16} />返回供应商列表</button><button type="button" disabled={saving} onClick={onSave} className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"><Save size={16} />{saving ? '保存中...' : '保存配置'}</button></div>
+  return <section className="pb-20"><div className="mb-6 flex items-center justify-between gap-3"><button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary"><ArrowLeft size={16} />返回供应商列表</button><button type="button" disabled={saving} onClick={onSave} className="inline-flex items-center gap-1.5 rounded-lg btn-accent px-3 py-2 text-sm font-medium disabled:opacity-50"><Save size={16} />{saving ? '保存中...' : '保存配置'}</button></div>
     <div className="border-b border-border pb-5"><h2 className="text-base font-semibold text-text-primary">{entry.remoteId ? `编辑 ${entry.label}` : '新建供应商'}</h2><p className="mt-1 text-sm text-text-secondary">保存后可在对应的模型选择器中使用此供应商。</p></div>
     <div className="grid gap-5 py-6 md:grid-cols-2"><Field label="配置名称"><input value={entry.label} onChange={(event) => onChange({ label: event.target.value })} placeholder="例如：主用 DeepSeek" className="input-field" /></Field><Field label="服务商预设"><div className="flex gap-2"><select value={entry.presetId} onChange={(event) => onPresetChange(event.target.value)} className="input-field"><option value={entry.presetId}>{preset.label}</option>{PROVIDER_PRESETS[capability].filter((item) => item.id !== entry.presetId).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>{preset.docsUrl ? <a title="打开服务商文档" href={preset.docsUrl} target="_blank" rel="noreferrer" className="flex shrink-0 items-center justify-center rounded-lg border border-border bg-bg-surface px-3 text-accent-tertiary hover:border-accent-tertiary/40"><ExternalLink size={16} /></a> : null}</div></Field></div>
     <div className="space-y-5"><Field label="API Key" hint={loadingKey ? '正在读取已保存的密钥...' : entry.apiKey ? '密钥已从后端安全读取，可点击右侧图标查看。' : '尚未配置密钥，请填写后保存。'}><div className="relative"><input type={showKey ? 'text' : 'password'} value={entry.apiKey} disabled={loadingKey} onChange={(event) => onChange({ apiKey: event.target.value })} placeholder={loadingKey ? '正在读取...' : 'sk-...'} className="input-field pr-11 disabled:cursor-wait disabled:opacity-60" autoComplete="off" /><button type="button" disabled={loadingKey || !entry.apiKey} title={showKey ? '隐藏密钥' : '显示密钥'} onClick={onShowKey} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg p-2 text-text-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40">{loadingKey ? <LoaderCircle size={17} className="animate-spin" /> : showKey ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></Field>

@@ -20,6 +20,8 @@ import java.util.UUID;
 @Repository
 public interface MangaAgentRunRepository extends JpaRepository<MangaAgentRun, Long> {
 
+    boolean existsByConversationIdAndStatusIn(Long conversationId, Collection<MangaAgentRunStatus> statuses);
+
     Optional<MangaAgentRun> findByUserIdAndChapterIdAndRequestId(Long userId, Long chapterId, UUID requestId);
 
     Optional<MangaAgentRun> findByConversationIdAndRequestId(Long conversationId, UUID requestId);

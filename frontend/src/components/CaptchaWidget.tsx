@@ -18,7 +18,7 @@ export default function CaptchaWidget({
   const [captchaId, setCaptchaId] = useState<string | null>(null);
   const [captchaImage, setCaptchaImage] = useState<string>('');
   const [userInput, setUserInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const captchaIdRef = useRef<string | null>(null);
 
   const loadCaptcha = (notify: boolean) => {
@@ -42,16 +42,12 @@ export default function CaptchaWidget({
 
   useEffect(() => {
     if (!visible) {
-      setCaptchaId(null);
-      setCaptchaImage('');
-      setUserInput('');
       onTokenChange(null);
       onStatusChange('idle');
       return;
     }
 
     let active = true;
-    setLoading(true);
     onStatusChange('loading');
     getCaptchaImage()
       .then((captcha) => {

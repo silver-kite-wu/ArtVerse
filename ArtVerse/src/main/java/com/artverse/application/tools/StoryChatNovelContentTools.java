@@ -1,6 +1,7 @@
 package com.artverse.application.tools;
 
 import com.artverse.agent.MangaAgentRuntimeContext;
+import com.artverse.agent.NovelDraftBaseContext;
 import com.artverse.application.AgentRunToolStatus;
 import com.artverse.application.AgentToolAuditService;
 import com.artverse.application.NovelContentArtifactService;
@@ -26,8 +27,11 @@ public class StoryChatNovelContentTools {
     public Map<String, Object> draftNovelContent(String content, RuntimeContext runtimeContext) {
         MangaAgentRuntimeContext context = support.resolveContext(runtimeContext);
         return auditService.around("draft_novel_content", context.userId(), context.chapterId(), runtimeContext, () -> {
-            NovelContentArtifactService.ArtifactView artifact = artifactService.draft(content, context);
+            NovelDraftBaseContext base = runtimeContext.get(NovelDraftBaseContext.class);
+            NovelContentArtifactService.ArtifactView artifact = artifactService.draft(content, context,
+                    base == null ? null : base.chapterVersion());
             Map<String, Object> payload = new LinkedHashMap<>(artifact.payload());
+            payload.remove("base_content"); // The editor needs the snapshot; the model already has this context.
             payload.put("artifact_id", artifact.artifactId());
             payload.put("artifact_type", artifact.type());
             payload.put("status", artifact.status());

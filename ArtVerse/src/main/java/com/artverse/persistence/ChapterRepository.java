@@ -14,6 +14,9 @@ import java.util.Optional;
 @Repository
 public interface ChapterRepository extends JpaRepository<Chapter, Long> {
 
+    @Query("SELECT c FROM Chapter c JOIN FETCH c.story s JOIN FETCH s.user LEFT JOIN FETCH c.assetGroup WHERE c.id=:id AND s.user.id=:userId")
+    Optional<Chapter> findByIdAndUserId(@Param("id") Long id,@Param("userId") Long userId);
+
     List<Chapter> findByStoryIdOrderByChapterNumberAsc(Long storyId);
 
     Optional<Chapter> findByStoryIdAndChapterNumber(Long storyId, Integer chapterNumber);

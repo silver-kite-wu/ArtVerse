@@ -3,6 +3,7 @@ package com.artverse.agent.gateway;
 import com.artverse.agent.AgentRunRequest;
 import com.artverse.agent.AgentTaskType;
 import com.artverse.agent.MangaAgentRuntimeContext;
+import com.artverse.agent.NovelDraftBaseContext;
 import com.artverse.application.UserProviderConfig;
 import io.agentscope.core.agent.RuntimeContext;
 import org.junit.jupiter.api.Test;
@@ -55,5 +56,13 @@ class AgentScopeRuntimeContextFactoryTest {
         RuntimeContext runtimeContext = factory.create(request);
 
         assertThat(runtimeContext.get(MangaAgentRuntimeContext.class)).isNull();
+    }
+
+    @Test
+    void novelWriteCarriesServerOwnedChapterVersionForStaleDraftRejection() {
+        AgentRunRequest request = new AgentRunRequest("9", 1L, 2L, AgentTaskType.STORY_CHAT_WRITE,
+                List.of(), Map.of("chapter_version", 6L), null, null, null, null);
+        var context = factory.create(request);
+        assertThat(context.get(NovelDraftBaseContext.class).chapterVersion()).isEqualTo(6L);
     }
 }

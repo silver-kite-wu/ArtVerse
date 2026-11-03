@@ -26,14 +26,14 @@ import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.http.client.PrematureCloseException;
 
 import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import java.io.ByteArrayInputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
-import java.util.UUID;
+import java.util.Locale;
 
 @Slf4j
 @Component
@@ -44,7 +44,8 @@ public class WebClientImage2Client implements Image2Client {
     private final ObjectMapper objectMapper;
 
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(600);
-    private static final int MAX_IN_MEMORY_SIZE = 128 * 1024 * 1024;
+    private static final int MAX_IN_MEMORY_SIZE = 64 * 1024 * 1024;
+    private static final long MAX_IMAGE_PIXELS = 40_000_000;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(30);
     private static final int TRANSIENT_RETRY_ATTEMPTS = 1;
 
@@ -87,6 +88,11 @@ public class WebClientImage2Client implements Image2Client {
         return hasReferences ? generateWithReferences(request, config) : generateWithoutReferences(request, config);
     }
 
+    @Override
+    public Mono<GeneratedImage> generateScheduled(ImageGenerationRequest request, UserProviderConfig providerConfig) {
+        return generate(request,providerConfig).contextWrite(context->context.put("artverse.durableImageRequest",true));
+    }
+
     private Mono<GeneratedImage> generateWithoutReferences(ImageGenerationRequest request, UserProviderConfig config) {
         String body = buildGenerationsRequest(request);
         return clientFor(config).post()
@@ -98,14 +104,19 @@ public class WebClientImage2Client implements Image2Client {
                 .onStatus(status -> status.isError(), response -> response.createException())
                 .bodyToMono(String.class)
                 .timeout(READ_TIMEOUT)
-                .flatMap(response -> parseImageResponse(response, config))
-                .retryWhen(reactor.util.retry.Retry.backoff(TRANSIENT_RETRY_ATTEMPTS, Duration.ofSeconds(1))
-                        .filter(this::isPrematureClose)
-                        .doBeforeRetry(signal -> log.warn("Image provider closed connection before a response; retrying once")))
-                .onErrorMap(this::isPrematureClose, error -> new BusinessException(502,
-                        config.displayName() + " closed the connection before returning an image. Please try again.",
-                        config.displayName()))
-                .onErrorMap(WebClientResponseException.class, ex -> mapHttpError(ex, config));
+                .flatMap(response -> Mono.deferContextual(context -> {
+                    Mono<GeneratedImage> parsed=parseImageResponse(response,config);
+                    return context.getOrDefault("artverse.durableImageRequest",false)
+                            ? parsed.onErrorMap(ImageResultUncertainException::new) : parsed;
+                }))
+                .transformDeferredContextual((attempt,context) -> context.getOrDefault("artverse.durableImageRequest",false)
+                        ? attempt : attempt
+                        .retryWhen(reactor.util.retry.Retry.backoff(TRANSIENT_RETRY_ATTEMPTS, Duration.ofSeconds(1))
+                                .filter(this::isPrematureClose)
+                                .doBeforeRetry(signal -> log.warn("Image provider closed connection before a response; retrying once")))
+                        .onErrorMap(this::isPrematureClose, error -> new BusinessException(502,
+                                config.displayName() + " closed the connection before returning an image. Please try again.",config.displayName()))
+                        .onErrorMap(WebClientResponseException.class, ex -> mapHttpError(ex, config)));
     }
 
     private Mono<GeneratedImage> generateWithReferences(ImageGenerationRequest request, UserProviderConfig config) {
@@ -133,14 +144,19 @@ public class WebClientImage2Client implements Image2Client {
                 .onStatus(status -> status.isError(), response -> response.createException())
                 .bodyToMono(String.class)
                 .timeout(READ_TIMEOUT)
-                .flatMap(response -> parseImageResponse(response, config))
-                .retryWhen(reactor.util.retry.Retry.backoff(TRANSIENT_RETRY_ATTEMPTS, Duration.ofSeconds(1))
-                        .filter(this::isPrematureClose)
-                        .doBeforeRetry(signal -> log.warn("Image provider closed connection before a response; retrying once")))
-                .onErrorMap(this::isPrematureClose, error -> new BusinessException(502,
-                        config.displayName() + " closed the connection before returning an image. Please try again.",
-                        config.displayName()))
-                .onErrorMap(WebClientResponseException.class, ex -> mapHttpError(ex, config));
+                .flatMap(response -> Mono.deferContextual(context -> {
+                    Mono<GeneratedImage> parsed=parseImageResponse(response,config);
+                    return context.getOrDefault("artverse.durableImageRequest",false)
+                            ? parsed.onErrorMap(ImageResultUncertainException::new) : parsed;
+                }))
+                .transformDeferredContextual((attempt,context) -> context.getOrDefault("artverse.durableImageRequest",false)
+                        ? attempt : attempt
+                        .retryWhen(reactor.util.retry.Retry.backoff(TRANSIENT_RETRY_ATTEMPTS, Duration.ofSeconds(1))
+                                .filter(this::isPrematureClose)
+                                .doBeforeRetry(signal -> log.warn("Image provider closed connection before a response; retrying once")))
+                        .onErrorMap(this::isPrematureClose, error -> new BusinessException(502,
+                                config.displayName() + " closed the connection before returning an image. Please try again.",config.displayName()))
+                        .onErrorMap(WebClientResponseException.class, ex -> mapHttpError(ex, config)));
     }
 
     private Mono<GeneratedImage> parseImageResponse(String response, UserProviderConfig config) {
@@ -157,7 +173,11 @@ public class WebClientImage2Client implements Image2Client {
 
                 byte[] imageBytes;
                 if (data.has("b64_json")) {
-                    imageBytes = Base64.getDecoder().decode(data.get("b64_json").asText());
+                    String encoded = data.get("b64_json").asText();
+                    if (encoded.length() > ((long) MAX_IN_MEMORY_SIZE + 2) / 3 * 4) {
+                        throw new BusinessException(502, "Generated image exceeds size limit");
+                    }
+                    imageBytes = Base64.getDecoder().decode(encoded);
                 } else if (data.has("url")) {
                     imageBytes = clientFor(config).get().uri(data.get("url").asText())
                             .retrieve()
@@ -172,24 +192,47 @@ public class WebClientImage2Client implements Image2Client {
                     throw new BusinessException(502, config.displayName() + " returned empty image bytes");
                 }
 
-                BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
-                if (image == null) {
-                    throw new BusinessException(502, "Invalid image format from " + config.displayName());
-                }
-
-                Path tempDir = Files.createTempDirectory("artverse_img_");
-                String filename = "panel_" + UUID.randomUUID().toString().substring(0, 8) + ".png";
-                Path tempFile = tempDir.resolve(filename);
-                ImageIO.write(image, "png", tempFile.toFile());
-                return new GeneratedImage(tempFile, "image/png", Files.size(tempFile));
+                return validateGeneratedImage(imageBytes);
             } catch (BusinessException e) {
                 throw e;
             } catch (Exception e) {
-                log.error("Image response processing failed. Response first 500 chars: {}",
-                        response.length() > 500 ? response.substring(0, 500) : response, e);
-                throw new BusinessException(502, describeImageResponseError(response, config, e));
+                // Provider bodies can contain image Base64 or signed result URLs.
+                log.warn("Image response processing failed for {} ({})", config.displayName(), e.getClass().getSimpleName());
+                throw new BusinessException(502, looksLikeHtml(response)
+                        ? describeImageResponseError(response, config, e)
+                        : "Failed to process image response from " + config.displayName());
             }
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private GeneratedImage validateGeneratedImage(byte[] imageBytes) throws java.io.IOException {
+        if (imageBytes.length > MAX_IN_MEMORY_SIZE) {
+            throw new BusinessException(502, "Generated image exceeds size limit");
+        }
+        // Explicit memory cache avoids ImageIO's optional disk-backed input cache.
+        try (var input = new MemoryCacheImageInputStream(new ByteArrayInputStream(imageBytes))) {
+            var readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) throw new BusinessException(502, "Invalid or unsupported generated image format");
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                String contentType = switch (reader.getFormatName().toLowerCase(Locale.ROOT)) {
+                    case "png" -> "image/png";
+                    case "jpeg", "jpg" -> "image/jpeg";
+                    case "webp" -> "image/webp";
+                    default -> throw new BusinessException(502, "Unsupported generated image format");
+                };
+                int width = reader.getWidth(0), height = reader.getHeight(0);
+                if (width <= 0 || height <= 0 || (long) width * height > MAX_IMAGE_PIXELS) {
+                    throw new BusinessException(502, "Generated image dimensions exceed limit");
+                }
+                // Decode once to retain content validation, but upload the original encoded bytes.
+                if (reader.read(0) == null) throw new BusinessException(502, "Invalid generated image");
+                return new GeneratedImage(imageBytes, contentType);
+            } finally {
+                reader.dispose();
+            }
+        }
     }
 
     private String buildGenerationsRequest(ImageGenerationRequest request) {

@@ -39,8 +39,22 @@ public class MangaGenerationService {
     private final StoryAssetGroupRepository storyAssetGroupRepository;
     private final ArtVerseProperties properties;
     private final ObjectMapper objectMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private ScheduledMangaWorkerSlotService chapterPermits;
 
     private final Map<Long, MangaGenerationJob> activeJobs = new ConcurrentHashMap<>();
+
+    public boolean isGenerationRunning(Long chapterId) {
+        MangaGenerationJob job = activeJobs.get(chapterId);
+        return job != null && job.isRunning();
+    }
+
+    @Transactional(readOnly = true)
+    public String scheduledGenerationProfiles(Long chapterId, Long userId) {
+        Chapter chapter = chapterRepository.findByIdForIdempotencyAndUserId(chapterId, userId)
+                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+        return buildGenerationProfiles(chapter, null);
+    }
 
     @Transactional
     public SseEmitter generateMangaStream(Long chapterId, UserProviderConfig imageConfig) {
@@ -152,11 +166,15 @@ public class MangaGenerationService {
                         if (!job.isRunning()) break;
                         try {
                             // Generate image
-                            GeneratedImage generated = generateImageForJob(imageRequestRefs, imageConfig, prompt, ctx.colorMode());
-
-                            // Upload to MinIO
-                            MangaImage mangaImage = mangaImageStorageService.saveGeneratedPanel(
-                                    ctx.chapterId(), ctx.storyId(), imageNumber, generated.localFile(), prompt);
+                            MangaImage mangaImage;
+                            try(var permit=chapterPermit(ctx.chapterId())) {
+                                var completed=mangaImageStorageService.findPanel(ctx.chapterId(),imageNumber);
+                                if(completed.isPresent())mangaImage=completed.get();
+                                else {
+                                    GeneratedImage generated=generateImageForJob(imageRequestRefs,imageConfig,prompt,ctx.colorMode());
+                                    mangaImage=mangaImageStorageService.saveGeneratedPanel(ctx.chapterId(),ctx.storyId(),imageNumber,generated,prompt);
+                                }
+                            }
 
                             // Send progress (after successful generation)
                             job.broadcastEvent("progress", objectMapper.writeValueAsString(Map.of(
@@ -172,8 +190,6 @@ public class MangaGenerationService {
                                     "url", url
                             )));
 
-                            // Cleanup temp file
-                            mangaImageStorageService.cleanupTempFile(generated.localFile());
                             success = true;
                             break;
                         } catch (Exception e) {
@@ -240,6 +256,53 @@ public class MangaGenerationService {
         return generated;
     }
 
+    private ChapterPermit chapterPermit(Long chapterId) {
+        String key="chapter:"+chapterId,owner="chapter-image:"+UUID.randomUUID();
+        if(chapterPermits!=null&&!chapterPermits.acquireScoped(key,owner))throw new BusinessException(409,"该章节已有生图请求执行中，请稍后重试");
+        return new ChapterPermit(key,owner);
+    }
+    private final class ChapterPermit implements AutoCloseable {
+        private final String key,owner;
+        ChapterPermit(String key,String owner){this.key=key;this.owner=owner;}
+        @Override public void close(){if(chapterPermits!=null)chapterPermits.releaseScoped(key,owner);}
+    }
+
+    /** Runs one persisted scheduled panel through the same provider, prompt, and storage path as immediate generation. */
+    public MangaImage generateScheduledPanel(Long chapterId, Long userId, int imageNumber, String scene,
+                                             List<String> scenes, String profiles, String mangaStyle,
+                                             String colorMode, List<String> referenceImageKeys,
+                                             String imageSize, UserProviderConfig imageConfig,
+                                             java.util.function.BooleanSupplier mayCommit) {
+        try(var permit=chapterPermit(chapterId)) {
+        Chapter chapter = chapterRepository.findByIdForIdempotencyAndUserId(chapterId, userId)
+                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+        if (imageNumber < 1 || imageNumber > scenes.size() || scene == null || scene.isBlank()) {
+            throw new BusinessException(400, "Scheduled panel snapshot is invalid");
+        }
+        Long storyId = chapter.getStory().getId();
+        MangaImageStorageService.ReferenceImages refs = mangaImageStorageService.prepareReferenceImagesFromSnapshot(referenceImageKeys);
+        MangaImage baseline=mangaImageStorageService.findPanel(chapterId,imageNumber).orElse(null);
+        Long baselineId=baseline==null?null:baseline.getId(),baselineVersion=baseline==null?null:baseline.getVersion();
+        try {
+            String prompt = MangaPromptPolicy.buildImagePrompt(scene, profiles, mangaStyle, colorMode,
+                    refs.hasRefs(), scenes, imageNumber);
+            String effectiveModel = !imageConfig.model().isBlank() ? imageConfig.model() : properties.getImage().getModel();
+            GeneratedImage generated = image2Client.generateScheduled(new ImageGenerationRequest(prompt, effectiveModel,
+                    imageSize, refs.requestRefs(), colorMode), imageConfig).block(Duration.ofSeconds(600));
+            if (generated == null) throw new com.artverse.ai.ImageResultUncertainException(null);
+            try {
+                if (!mayCommit.getAsBoolean()) throw new BusinessException(409, "Scheduled generation lease was lost before saving provider output");
+                return mangaImageStorageService.saveGeneratedPanel(chapterId, storyId, imageNumber,
+                        generated, prompt, baselineId, baselineVersion);
+            } catch(Exception error) {
+                throw new com.artverse.ai.ImageResultUncertainException(error);
+            }
+        } finally {
+            mangaImageStorageService.cleanupTempFiles(refs.tempRefs());
+        }
+        }
+    }
+
     @Transactional
     public MangaImage regenerateImage(Long chapterId, int imageNumber, String prompt, UserProviderConfig imageConfig) {
         Chapter chapter = chapterRepository.findByIdForIdempotency(chapterId)
@@ -278,15 +341,11 @@ public class MangaGenerationService {
                 prompt, profiles, effectiveMangaStyle, colorMode, hasRefImages,
                 scenes.isEmpty() ? List.of(prompt) : scenes, imageNumber);
 
-        try {
+        try (var permit=chapterPermit(chapterId)) {
             GeneratedImage generated = generateImageForJob(referenceImages.requestRefs(), imageConfig,
                     generationPrompt, colorMode);
-            try {
-                return mangaImageStorageService.saveGeneratedPanel(chapterId, storyId, imageNumber,
-                        generated.localFile(), generationPrompt);
-            } finally {
-                mangaImageStorageService.cleanupTempFile(generated.localFile());
-            }
+            return mangaImageStorageService.saveGeneratedPanel(chapterId, storyId, imageNumber,
+                    generated, generationPrompt);
         } finally {
             mangaImageStorageService.cleanupTempFiles(referenceImages.tempRefs());
         }
@@ -294,14 +353,21 @@ public class MangaGenerationService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> previewImageRequest(Long chapterId, Long assetGroupId, Long userId, int imageNumber) {
-        Chapter chapter = chapterRepository.findByIdForIdempotency(chapterId)
+        return queueImageInput(chapterId, assetGroupId, userId, imageNumber, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> queueImageInput(Long chapterId, Long assetGroupId, Long userId, int imageNumber, String sceneOverride) {
+        Chapter chapter = chapterRepository.findByIdForIdempotencyAndUserId(chapterId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
         StoryAssetGroup selectedAssetGroup = resolveRequestedAssetGroup(chapter, assetGroupId, userId);
 
-        List<String> scenes = resolveScenesForImageGeneration(chapter);
+        List<String> scenes = new ArrayList<>(resolveScenesForImageGeneration(chapter));
         if (imageNumber < 1 || imageNumber > scenes.size()) {
             throw new BusinessException(400, "Image number must be between 1 and " + scenes.size());
         }
+
+        if (sceneOverride != null && !sceneOverride.isBlank()) scenes.set(imageNumber - 1, sceneOverride);
 
         Long effectiveAssetGroupId = selectedAssetGroup != null ? selectedAssetGroup.getId() :
                 chapter.getAssetGroup() != null ? chapter.getAssetGroup().getId() : null;
@@ -318,6 +384,8 @@ public class MangaGenerationService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("chapter_id", chapter.getId());
+        result.put("image_count", chapter.getImageCount());
+        result.put("chapter_version", chapter.getVersion());
         result.put("image_number", imageNumber);
         result.put("asset_group_id", effectiveAssetGroupId);
         result.put("asset_group_name", selectedAssetGroup != null ? selectedAssetGroup.getName() :

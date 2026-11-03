@@ -2,6 +2,7 @@ package com.artverse.agent.gateway.tools;
 
 import com.artverse.agent.AgentTaskType;
 import io.agentscope.core.tool.Toolkit;
+import io.agentscope.core.tool.mcp.McpClientWrapper;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
@@ -10,7 +11,7 @@ import java.util.Set;
 class NoAgentToolsStrategy implements AgentToolConfigurationStrategy {
     private static final Set<AgentTaskType> TASK_TYPES = Set.of(
             AgentTaskType.CHAT, AgentTaskType.NOVEL, AgentTaskType.MANGA_ROUTER,
-            AgentTaskType.KNOWLEDGE_EXTRACTION);
+            AgentTaskType.KNOWLEDGE_EXTRACTION, AgentTaskType.READER_CHARACTER_CHAT);
 
     @Override
     public Set<AgentTaskType> supportedTaskTypes() {
@@ -18,7 +19,7 @@ class NoAgentToolsStrategy implements AgentToolConfigurationStrategy {
     }
 
     @Override
-    public void configure(Toolkit toolkit) {
+    public void configure(Toolkit toolkit, McpClientWrapper businessTools) {
         // These agents intentionally have no ArtVerse business tools.
     }
 }

@@ -150,6 +150,7 @@ public class AgUiEventFactory {
         Map<String, Object> state = new LinkedHashMap<>();
         state.put("status", status == null ? "" : status);
         state.put("message", message == null ? "" : message);
+        if (run != null && run.getCurrentPhase() != null) state.put("phase", run.getCurrentPhase());
         state.put("route", run == null || run.getRoute() == null ? "DIRECTOR" : run.getRoute().name());
         if (run != null && run.getRouteSource() != null) {
             state.put("routeSource", run.getRouteSource().name());

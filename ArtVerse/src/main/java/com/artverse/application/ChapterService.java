@@ -2,6 +2,7 @@ package com.artverse.application;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.common.BusinessException;
+import com.artverse.application.knowledge.KnowledgeFactService;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.ColorMode;
 import com.artverse.domain.Story;
@@ -24,6 +25,7 @@ public class ChapterService {
     private final ChapterRepository chapterRepository;
     private final StoryRepository storyRepository;
     private final StoryAssetGroupRepository storyAssetGroupRepository;
+    private final KnowledgeFactService knowledgeFacts;
     private static final int MAX_CREATE_RETRIES = 3;
     private static final Set<Integer> ALLOWED_IMAGE_COUNTS = Set.of(4, 6, 8, 10, 12, 15, 20);
 
@@ -67,6 +69,7 @@ public class ChapterService {
     @Transactional
     public void delete(Long id) {
         Chapter chapter = getRequired(id);
+        knowledgeFacts.requireChapterUnreferenced(chapter.getStory().getId(),id);
         chapterRepository.delete(chapter);
     }
 

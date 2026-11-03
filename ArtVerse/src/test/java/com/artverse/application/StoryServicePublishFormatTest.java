@@ -32,7 +32,8 @@ class StoryServicePublishFormatTest {
             mock(UserRepository.class),
             new PublicationStrategyRegistry(List.of(
                     new MangaPublicationStrategy(),
-                    new NovelPublicationStrategy()))
+                    new NovelPublicationStrategy())),
+            mock(com.artverse.application.knowledge.KnowledgeFactService.class)
     );
 
     @Test

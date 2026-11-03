@@ -13,6 +13,7 @@ import {
   type AssetGroupCharacter,
   type CharacterProfile,
 } from '../api';
+import { useToast } from '../ui/toast/useToast';
 
 interface Props {
   storyId: number;
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChange }: Props) {
+  const toast = useToast();
   const [groups, setGroups] = useState<AssetGroup[]>([]);
   const [selectedKey, setSelectedKey] = useState('');
   const [draftName, setDraftName] = useState('');
@@ -30,7 +32,7 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
   const [characterThumbnails, setCharacterThumbnails] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const requestRef = useRef(0);
   const onGroupsChangeRef = useRef(onGroupsChange);
 
@@ -83,7 +85,7 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
       if (requestRef.current === requestId) setCharacterThumbnails(thumbnails);
     }).catch((loadError: unknown) => {
       if (requestRef.current !== requestId) return;
-      setError(`加载设定组失败: ${loadError instanceof Error ? loadError.message : '未知错误'}`);
+      setLoadError(`加载设定组失败: ${loadError instanceof Error ? loadError.message : '未知错误'}`);
     }).finally(() => {
       if (requestRef.current === requestId) setLoading(false);
     });
@@ -96,18 +98,17 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
   const selectGroup = (group: AssetGroup) => {
     setSelectedKey(String(group.id));
     syncDraft(group);
-    setError('');
   };
 
   const addGroup = async () => {
     setSaving(true);
-    setError('');
     try {
       const created = await createStoryAssetGroup(storyId, '新设定组', '');
       const nextGroups = await getStoryAssetGroups(storyId);
       applyGroups(nextGroups, created.id);
+      toast.success('设定组已添加');
     } catch (actionError: unknown) {
-      setError(`新增设定组失败: ${actionError instanceof Error ? actionError.message : '未知错误'}`);
+      toast.error(`新增设定组失败: ${actionError instanceof Error ? actionError.message : '未知错误'}`);
     } finally {
       setSaving(false);
     }
@@ -116,7 +117,6 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
   const saveGroup = async () => {
     if (!activeGroup?.id) return;
     setSaving(true);
-    setError('');
     try {
       const updated = await updateStoryAssetGroup(activeGroup.id, {
         name: draftName,
@@ -125,8 +125,9 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
       });
       const nextGroups = await getStoryAssetGroups(storyId);
       applyGroups(nextGroups, updated.id);
+      toast.success('设定组已保存');
     } catch (actionError: unknown) {
-      setError(`保存设定组失败: ${actionError instanceof Error ? actionError.message : '未知错误'}`);
+      toast.error(`保存设定组失败: ${actionError instanceof Error ? actionError.message : '未知错误'}`);
     } finally {
       setSaving(false);
     }
@@ -136,12 +137,12 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
     if (!activeGroup?.id) return;
     if (!confirm(`删除"${activeGroup.name}"? 已选择该组的章节会恢复为未选择状态。`)) return;
     setSaving(true);
-    setError('');
     try {
       await deleteStoryAssetGroup(storyId, activeGroup.id);
       applyGroups(await getStoryAssetGroups(storyId));
+      toast.success('设定组已删除');
     } catch (actionError: unknown) {
-      setError(`删除设定组失败: ${actionError instanceof Error ? actionError.message : '未知错误'}`);
+      toast.error(`删除设定组失败: ${actionError instanceof Error ? actionError.message : '未知错误'}`);
     } finally {
       setSaving(false);
     }
@@ -161,9 +162,9 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
           </button>
         </div>
 
-        {error && (
+        {loadError && (
           <div className="mx-4 mt-3 rounded-lg border border-accent/20 bg-accent-soft px-3 py-2 text-xs text-accent sm:mx-5">
-            {error}
+            {loadError}
           </div>
         )}
 

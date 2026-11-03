@@ -20,6 +20,7 @@ public class KnowledgeUnit {
     @Column(name = "effective_to_chapter") private Integer effectiveToChapter;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private KnowledgeUnitStatus status = KnowledgeUnitStatus.ACTIVE;
     @Column(nullable = false) private Integer version = 1;
+    @Column(name = "schema_version", nullable = false) private Integer schemaVersion = 2;
     @Column(name = "content_hash", nullable = false, length = 64) private String contentHash;
     @Column(name = "created_at", nullable = false, updatable = false) private OffsetDateTime createdAt;
     @Column(name = "updated_at", nullable = false) private OffsetDateTime updatedAt;

@@ -11,6 +11,7 @@ import com.artverse.common.aspect.RateLimit;
 import com.artverse.domain.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.UUID;
@@ -66,10 +67,11 @@ public class MangaAgentController {
 
     @DeleteMapping("/conversations/{conversationId}")
     @RateLimit(windowSeconds = 60, maxRequests = 5, key = "manga-agent-write")
-    public void deleteConversation(@PathVariable Long chapterId,
+    public ResponseEntity<Void> deleteConversation(@PathVariable Long chapterId,
                                    @PathVariable UUID conversationId) {
         User user = currentUserService.requireCurrentUser();
         mangaAgentService.deleteConversation(chapterId, conversationId, user);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/conversations/{conversationId}/messages")

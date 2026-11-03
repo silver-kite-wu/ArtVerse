@@ -9,6 +9,7 @@ public enum AgentTaskType {
     NOVEL("novel"),
     STORY_CHAT_READ("story-chat-read"),
     STORY_CHAT_WRITE("story-chat-write"),
+    READER_CHARACTER_CHAT("reader-character-chat"),
     MANGA_ROUTER("manga-router"),
     MANGA_CONVERSATION("manga-conversation"),
     MANGA_CREATIVE("manga-creative"),

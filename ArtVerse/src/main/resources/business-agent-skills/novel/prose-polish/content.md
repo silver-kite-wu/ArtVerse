@@ -8,3 +8,4 @@ Focus:
 Rules:
 - Do not quietly add new canon facts.
 - Prefer targeted rewriting over broad stylistic drift when the user asks for optimization or润色.
+- In safe write mode, persist the complete polished prose with draft_novel_content so the author can review a text diff. Keep analysis and change summaries out of the draft content. Never ask the author to copy a chat response into the editor.

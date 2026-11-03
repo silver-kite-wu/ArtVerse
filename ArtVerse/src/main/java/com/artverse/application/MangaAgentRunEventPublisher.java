@@ -80,6 +80,11 @@ public class MangaAgentRunEventPublisher {
         return new RunEventSink(emitter);
     }
 
+    /** Durable background execution has no browser transport or SSE heartbeat. */
+    public RunEventSink newPersistentSink() {
+        return new RunEventSink(null);
+    }
+
     public final class RunEventSink {
         private final SseEmitter emitter;
 
@@ -89,6 +94,14 @@ public class MangaAgentRunEventPublisher {
 
         public void sendStatus(MangaAgentRun run, String message, UUID requestId) {
             MangaAgentRunEventPublisher.this.sendStatus(run, emitter, message, requestId);
+        }
+
+        public void sendPhase(MangaAgentRun run, UUID requestId, String phase, String message) {
+            recordProgress(run, phase);
+            run.setCurrentPhase(phase);
+            Map<String, Object> event = agUiEventFactory.stateSnapshot(run, requestId, "RUNNING", message);
+            appendRunEvent(run, "phase", event);
+            sendAgUi(emitter, event);
         }
 
         public void sendToolEvent(MangaAgentRun run, AgentRunToolStatus.ToolEvent event) {

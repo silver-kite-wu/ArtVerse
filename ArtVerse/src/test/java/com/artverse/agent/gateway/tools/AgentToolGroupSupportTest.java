@@ -1,11 +1,8 @@
 package com.artverse.agent.gateway.tools;
 
-import com.artverse.application.tools.MangaContextTools;
 import com.artverse.application.tools.MangaHitlTools;
-import com.artverse.application.tools.StoryboardAgentTools;
-import com.artverse.application.tools.StoryChatContextTools;
-import com.artverse.application.tools.StoryChatNovelContentTools;
 import io.agentscope.core.tool.Toolkit;
+import io.agentscope.core.tool.mcp.McpClientWrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,33 +18,28 @@ import static org.mockito.Mockito.when;
 
 class AgentToolGroupSupportTest {
 
-    private MangaContextTools contextTools;
-    private StoryboardAgentTools storyboardTools;
     private MangaHitlTools hitlTools;
-    private StoryChatContextTools storyChatContextTools;
-    private StoryChatNovelContentTools storyChatNovelContentTools;
     private Toolkit toolkit;
+    private McpClientWrapper businessTools;
     private AgentToolGroupSupport support;
 
     @BeforeEach
     void setUp() {
-        contextTools = mock(MangaContextTools.class);
-        storyboardTools = mock(StoryboardAgentTools.class);
         hitlTools = mock(MangaHitlTools.class);
-        storyChatContextTools = mock(StoryChatContextTools.class);
-        storyChatNovelContentTools = mock(StoryChatNovelContentTools.class);
         toolkit = mock(Toolkit.class);
+        businessTools = mock(McpClientWrapper.class);
         Toolkit.ToolRegistration registration = mock(Toolkit.ToolRegistration.class);
         when(toolkit.registration()).thenReturn(registration);
         when(registration.tool(any())).thenReturn(registration);
+        when(registration.mcpClient(any())).thenReturn(registration);
+        when(registration.enableTools(any())).thenReturn(registration);
         when(registration.group(anyString())).thenReturn(registration);
-        support = new AgentToolGroupSupport(contextTools, storyboardTools, hitlTools,
-                storyChatContextTools, storyChatNovelContentTools);
+        support = new AgentToolGroupSupport(hitlTools);
     }
 
     @Test
     void contextConfigurationActivatesOnlyReadTools() {
-        support.configureContext(toolkit);
+        support.configureContext(toolkit, businessTools);
 
         verifyGroupCreated(AgentToolGroupSupport.CONTEXT_TOOLS);
         verify(toolkit, never()).createToolGroup(eq(AgentToolGroupSupport.STORYBOARD_TOOLS), anyString(), eq(true));
@@ -56,13 +48,20 @@ class AgentToolGroupSupportTest {
     }
 
     @Test
+    void scheduledGenerationToolIsExposedOnlyWhenConversationRouteRequestsIt() {
+        support.configureContext(toolkit,businessTools,true);
+
+        verify(toolkit.registration()).enableTools(List.of("get_chapter_context","schedule_manga_generation","create_automation","list_automations","update_automation"));
+    }
+
+    @Test
     void storyboardConfigurationActivatesAllMangaTools() {
-        support.configureStoryboard(toolkit);
+        support.configureStoryboard(toolkit, businessTools);
 
         verifyGroupCreated(AgentToolGroupSupport.CONTEXT_TOOLS);
         verifyGroupCreated(AgentToolGroupSupport.STORYBOARD_TOOLS);
         verifyGroupCreated(AgentToolGroupSupport.HITL_TOOLS);
-        verify(toolkit.registration()).tool(storyboardTools);
+        verify(toolkit.registration(), org.mockito.Mockito.atLeastOnce()).mcpClient(businessTools);
         verify(toolkit).setActiveGroups(List.of(
                 AgentToolGroupSupport.CONTEXT_TOOLS,
                 AgentToolGroupSupport.STORYBOARD_TOOLS,
@@ -71,7 +70,7 @@ class AgentToolGroupSupportTest {
 
     @Test
     void directorConfigurationExcludesStoryboardMutationTools() {
-        support.configureDirector(toolkit);
+        support.configureDirector(toolkit, businessTools);
 
         verifyGroupCreated(AgentToolGroupSupport.CONTEXT_TOOLS);
         verifyGroupCreated(AgentToolGroupSupport.HITL_TOOLS);
@@ -83,7 +82,7 @@ class AgentToolGroupSupportTest {
 
     @Test
     void storyChatReadConfigurationExcludesWriteTools() {
-        support.configureStoryChatRead(toolkit);
+        support.configureStoryChatRead(toolkit, businessTools);
 
         verifyGroupCreated(AgentToolGroupSupport.STORY_CHAT_CONTEXT_TOOLS);
         verify(toolkit, never()).createToolGroup(eq(AgentToolGroupSupport.STORY_CHAT_WRITE_TOOLS), anyString(), eq(true));
@@ -92,12 +91,12 @@ class AgentToolGroupSupportTest {
 
     @Test
     void storyChatWriteConfigurationActivatesDraftCommitAndHitlTools() {
-        support.configureStoryChatWrite(toolkit);
+        support.configureStoryChatWrite(toolkit, businessTools);
 
         verifyGroupCreated(AgentToolGroupSupport.STORY_CHAT_CONTEXT_TOOLS);
         verifyGroupCreated(AgentToolGroupSupport.STORY_CHAT_WRITE_TOOLS);
         verifyGroupCreated(AgentToolGroupSupport.HITL_TOOLS);
-        verify(toolkit.registration()).tool(storyChatNovelContentTools);
+        verify(toolkit.registration(), org.mockito.Mockito.atLeastOnce()).mcpClient(businessTools);
         verify(toolkit).setActiveGroups(List.of(
                 AgentToolGroupSupport.STORY_CHAT_CONTEXT_TOOLS,
                 AgentToolGroupSupport.STORY_CHAT_WRITE_TOOLS,

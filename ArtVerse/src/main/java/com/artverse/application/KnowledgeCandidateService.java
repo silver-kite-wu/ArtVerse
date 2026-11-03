@@ -12,6 +12,8 @@ import com.artverse.persistence.KnowledgeCandidateRepository;
 import com.artverse.persistence.ChapterRepository;
 import com.artverse.persistence.StoryRepository;
 import com.artverse.persistence.UserRepository;
+import com.artverse.application.knowledge.KnowledgeSchema;
+import com.artverse.application.knowledge.KnowledgeFactService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,8 @@ import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +40,8 @@ public class KnowledgeCandidateService {
     private final KnowledgeService knowledgeService;
     private final ObjectMapper objectMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final KnowledgeSchema schema;
+    private final KnowledgeFactService facts;
 
     public record CandidateView(
             Long id,
@@ -53,7 +59,9 @@ public class KnowledgeCandidateService {
             Long approvedKnowledgeUnitId,
             String rejectionReason,
             OffsetDateTime createdAt,
-            OffsetDateTime reviewedAt
+            OffsetDateTime reviewedAt,
+            Long version,Integer schemaVersion,Long targetUnitId,Integer baseVersion,
+            Map<String,Object> sourceSnapshot,List<KnowledgeSchema.Issue> validationIssues,Map<String,Object> currentSource,String currentSourceHash,boolean sourceStale
     ) {
     }
 
@@ -72,19 +80,17 @@ public class KnowledgeCandidateService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(404, "User not found"));
         Story story = profile.getStory();
-        Map<String, Object> structured = Map.of(
-                "aliases", List.of(),
-                "identity", "",
-                "personality", "",
-                "abilities", "",
-                "motivation", "",
-                "taboos", "",
-                "status", ""
-        );
+        Map<String, Object> structured = Map.of("character_id",profile.getId());
         String body = profile.getDescription() == null ? "" : profile.getDescription();
-        return propose(user, story, "CHARACTER_PROFILE", String.valueOf(profile.getId()),
+        CandidateView proposed=propose(user, story, "CHARACTER_PROFILE", String.valueOf(profile.getId()),
                 KnowledgeUnitType.CHARACTER_CARD, profile.getName(), body,
                 body.length() <= 300 ? body : body.substring(0, 300), structured, 5, null, null);
+        KnowledgeCandidate candidate=candidateRepository.findById(proposed.id()).orElseThrow();
+        Map<String,Object> snapshot=Map.of("name",profile.getName(),"description",body);
+        candidate.setSourceSnapshot(schema.write(snapshot));candidate.setSourceHash(schema.hash(snapshot));
+        var roots=jdbcTemplate.queryForList("SELECT id,version FROM knowledge_units WHERE character_profile_id=?",profile.getId());
+        if(!roots.isEmpty()) {candidate.setTargetUnitId(((Number)roots.getFirst().get("id")).longValue());candidate.setBaseVersion(((Number)roots.getFirst().get("version")).intValue());}
+        candidateRepository.flush();return toView(candidate);
     }
 
     @Transactional
@@ -128,36 +134,104 @@ public class KnowledgeCandidateService {
                             ? chapter.getChapterNumber()
                             : input.effectiveFromChapter(),
                     input.effectiveToChapter());
-            candidateRepository.findById(created.id()).ifPresent(candidate -> candidate.setChapter(chapter));
-            results.add(created);
+            KnowledgeCandidate candidate=candidateRepository.findById(created.id()).orElseThrow();candidate.setChapter(chapter);
+            Map<String,Object> snapshot=chapterSnapshot(chapter);
+            candidate.setSourceSnapshot(schema.write(snapshot));candidate.setSourceHash(schema.hash(snapshot));
+            Map<String,Object> structured=new LinkedHashMap<>(readMap(candidate.getStructuredData()));
+            structured.put("reveal_chapter_id",chapter.getId());candidate.setStructuredData(schema.write(structured));
+            candidateRepository.flush();results.add(toView(candidate));
         }
         return List.copyOf(results);
     }
 
     @Transactional
     public CandidateView approve(Long storyId, Long candidateId, Long userId) {
+        return approve(storyId,candidateId,userId,null);
+    }
+    @Transactional
+    public CandidateView approve(Long storyId, Long candidateId, Long userId,Long expectedVersion) {
         KnowledgeCandidate candidate = requirePending(storyId, candidateId, userId);
+        checkVersion(candidate,expectedVersion);
+        checkSource(candidate,userId);
+        Map<String,Object> data=schema.normalize(candidate.getKnowledgeType(),readMap(candidate.getStructuredData()));
+        schema.requireValid(candidate.getKnowledgeType(),candidate.getTitle(),candidate.getBody(),data);
+        KnowledgeService.UnitInput input=new KnowledgeService.UnitInput(candidate.getKnowledgeType().name(),candidate.getTitle(),candidate.getBody(),candidate.getSummary(),data,candidate.getImportance(),candidate.getEffectiveFromChapter(),candidate.getEffectiveToChapter());
         KnowledgeService.UnitView unit;
         if ("CHARACTER_PROFILE".equals(candidate.getSourceType())) {
             try {
-                unit = knowledgeService.approveCharacterProfile(
-                        Long.valueOf(candidate.getSourceId()), userId);
+                unit = knowledgeService.approveCharacterSnapshot(storyId,
+                        Long.valueOf(candidate.getSourceId()), userId,input,candidate.getBaseVersion());
             } catch (NumberFormatException error) {
                 throw new BusinessException(409, "Candidate source is no longer valid");
             }
         } else {
-            unit = knowledgeService.create(storyId, userId, new KnowledgeService.UnitInput(
-                    candidate.getKnowledgeType().name(), candidate.getTitle(), candidate.getBody(),
-                    candidate.getSummary(), readMap(candidate.getStructuredData()), candidate.getImportance(),
-                    candidate.getEffectiveFromChapter(), candidate.getEffectiveToChapter()));
+            unit = candidate.getTargetUnitId()==null ? knowledgeService.create(storyId,userId,input)
+                : knowledgeService.updateVersioned(storyId,candidate.getTargetUnitId(),userId,candidate.getBaseVersion(),input);
         }
+        facts.sourceForCandidate(storyId,unit.id(),candidate);
         candidate.setApprovedKnowledgeUnitId(unit.id());
         candidate.setStatus(KnowledgeCandidateStatus.APPROVED);
         candidate.setReviewedBy(userId);
         candidate.setReviewedAt(OffsetDateTime.now());
         candidate.setRejectionReason(null);
         publishDecision(candidate, "KNOWLEDGE_CANDIDATE_APPROVED");
-        return toView(candidateRepository.save(candidate));
+        return toView(candidateRepository.saveAndFlush(candidate));
+    }
+
+    @Transactional(readOnly=true)
+    public CandidateView detail(Long storyId,Long candidateId,Long userId) {
+        requireStory(storyId,userId);
+        return toView(candidateRepository.findByIdAndStoryIdAndUserId(candidateId,storyId,userId).orElseThrow(()->new BusinessException(404,"候选不存在")));
+    }
+    @Transactional
+    public CandidateView edit(Long storyId,Long candidateId,Long userId,Long expectedVersion,KnowledgeService.UnitInput input,Long targetId,Integer baseVersion) {
+        KnowledgeCandidate candidate=requirePending(storyId,candidateId,userId);checkVersion(candidate,expectedVersion);
+        if(expectedVersion==null) throw new BusinessException(400,"编辑候选必须提交版本号");
+        KnowledgeUnitType type=parseKnowledgeType(input.type());
+        Map<String,Object> data=schema.normalize(type,input.structuredData());
+        facts.validateReferences(storyId,data);
+        if("CHARACTER_PROFILE".equals(candidate.getSourceType()) && type!=KnowledgeUnitType.CHARACTER_CARD) throw new BusinessException(400,"人物资料候选不能改为其他类型");
+        if(input.importance()!=null&&(input.importance()<1||input.importance()>5)) throw new BusinessException(400,"重要度应为 1 到 5");
+        if(input.effectiveFromChapter()!=null&&input.effectiveToChapter()!=null&&input.effectiveFromChapter()>input.effectiveToChapter()) throw new BusinessException(400,"章节范围无效");
+        if(targetId!=null) {
+            var targets=jdbcTemplate.queryForList("SELECT type,version FROM knowledge_units WHERE id=? AND story_id=?",targetId,storyId);
+            if(targets.isEmpty()||!targets.getFirst().get("type").equals(type.name())) throw new BusinessException(400,"更新目标应是当前作品同分类知识");
+            if(baseVersion==null||((Number)targets.getFirst().get("version")).intValue()!=baseVersion) throw new BusinessException(409,"目标知识已变化，请重新比较");
+        }
+        candidate.setKnowledgeType(type);candidate.setTitle(input.title());candidate.setBody(input.body());candidate.setSummary(input.summary()==null?"":input.summary());
+        candidate.setStructuredData(schema.write(data));candidate.setImportance(input.importance()==null?3:input.importance());
+        candidate.setEffectiveFromChapter(input.effectiveFromChapter());candidate.setEffectiveToChapter(input.effectiveToChapter());
+        candidate.setTargetUnitId(targetId);candidate.setBaseVersion(baseVersion);candidate.setSchemaVersion(2);
+        candidate.setProposedHash(schema.hash(java.util.Arrays.asList(candidate.getSourceType(),candidate.getSourceId(),type.name(),input.title(),input.body(),input.summary(),data,candidate.getImportance(),input.effectiveFromChapter(),input.effectiveToChapter(),targetId,baseVersion)));
+        return toView(candidateRepository.saveAndFlush(candidate));
+    }
+    @Transactional
+    public CandidateView acknowledgeSource(Long storyId,Long candidateId,Long userId,Long expectedVersion,String expectedSourceHash) {
+        KnowledgeCandidate candidate=requirePending(storyId,candidateId,userId);checkVersion(candidate,expectedVersion);
+        if(expectedVersion==null) throw new BusinessException(400,"请先打开候选详情");
+        Map<String,Object> current=currentSource(candidate);
+        if(!schema.hash(current).equals(expectedSourceHash)) throw new BusinessException(409,"来源再次变化，请重新核对");
+        candidate.setSourceSnapshot(schema.write(current));candidate.setSourceHash(schema.hash(current));
+        return toView(candidateRepository.saveAndFlush(candidate));
+    }
+    private void checkVersion(KnowledgeCandidate candidate,Long expected) {
+        if(expected!=null&&!expected.equals(candidate.getVersion())) throw new BusinessException(409,"候选已更新，请重新查看后确认");
+    }
+    private Map<String,Object> chapterSnapshot(Chapter chapter) {
+        return Map.of("chapter_id",chapter.getId(),"novel",Objects.toString(chapter.getNovelContent(),""),"storyboard",Objects.toString(chapter.getScenesText(),""));
+    }
+    private void checkSource(KnowledgeCandidate candidate,Long userId) {
+        if(candidate.getSourceHash()==null) throw new BusinessException(409,"旧候选缺少来源快照，请重新提取或核对来源后另存为正式知识");
+        Map<String,Object> current=currentSource(candidate);
+        if(!schema.hash(current).equals(candidate.getSourceHash())) throw new BusinessException(409,"来源内容已变更，请重新提取并比较，不能直接批准旧快照");
+    }
+    private Map<String,Object> currentSource(KnowledgeCandidate candidate) {
+        if(candidate.getChapter()!=null) return chapterSnapshot(candidate.getChapter());
+        else if("CHARACTER_PROFILE".equals(candidate.getSourceType())) {
+            var profiles=jdbcTemplate.queryForList("SELECT name,description FROM character_profiles WHERE id=? AND story_id=?",Long.valueOf(candidate.getSourceId()),candidate.getStory().getId());
+            if(profiles.isEmpty()) throw new BusinessException(409,"人物来源已删除");
+            return Map.of("name",profiles.getFirst().get("name"),"description",Objects.toString(profiles.getFirst().get("description"),""));
+        } else return schema.read(candidate.getSourceSnapshot());
     }
 
     @Transactional
@@ -175,9 +249,8 @@ public class KnowledgeCandidateService {
                                   KnowledgeUnitType type, String title, String body, String summary,
                                   Map<String, Object> structuredData, int importance,
                                   Integer effectiveFrom, Integer effectiveTo) {
-        String structured = writeJson(structuredData);
-        String proposedHash = hash(sourceType, sourceId, type.name(), title, body, summary, structured,
-                String.valueOf(effectiveFrom), String.valueOf(effectiveTo));
+        String structured = schema.write(schema.normalize(type,structuredData));
+        String proposedHash = schema.hash(java.util.Arrays.asList(sourceType,sourceId,type.name(),title,body,summary,schema.read(structured),importance,effectiveFrom,effectiveTo));
         return candidateRepository.findFirstByStoryIdAndProposedHashAndStatus(
                         story.getId(), proposedHash, KnowledgeCandidateStatus.PENDING)
                 .map(this::toView)
@@ -210,7 +283,7 @@ public class KnowledgeCandidateService {
 
     private KnowledgeCandidate requirePending(Long storyId, Long candidateId, Long userId) {
         requireStory(storyId, userId);
-        KnowledgeCandidate candidate = candidateRepository.findByIdAndStoryIdAndUserId(
+        KnowledgeCandidate candidate = candidateRepository.lockForReview(
                         candidateId, storyId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Knowledge candidate not found"));
         if (candidate.getStatus() != KnowledgeCandidateStatus.PENDING) {
@@ -235,12 +308,16 @@ public class KnowledgeCandidateService {
     }
 
     private CandidateView toView(KnowledgeCandidate candidate) {
+        Map<String,Object> current;
+        try {current=currentSource(candidate);} catch(BusinessException removed) {current=Map.of("unavailable",true);}
+        String currentHash=schema.hash(current);
         return new CandidateView(candidate.getId(), candidate.getSourceType(), candidate.getSourceId(),
                 candidate.getKnowledgeType().name(), candidate.getTitle(), candidate.getBody(),
-                candidate.getSummary(), readMap(candidate.getStructuredData()), candidate.getImportance(),
+                candidate.getSummary(), schema.normalize(candidate.getKnowledgeType(),readMap(candidate.getStructuredData())), candidate.getImportance(),
                 candidate.getEffectiveFromChapter(), candidate.getEffectiveToChapter(),
                 candidate.getStatus().name(), candidate.getApprovedKnowledgeUnitId(),
-                candidate.getRejectionReason(), candidate.getCreatedAt(), candidate.getReviewedAt());
+                candidate.getRejectionReason(), candidate.getCreatedAt(), candidate.getReviewedAt(),candidate.getVersion(),candidate.getSchemaVersion(),candidate.getTargetUnitId(),candidate.getBaseVersion(),
+                schema.read(candidate.getSourceSnapshot()),schema.issues(candidate.getKnowledgeType(),candidate.getTitle(),candidate.getBody(),readMap(candidate.getStructuredData())),current,currentHash,!currentHash.equals(candidate.getSourceHash()));
     }
 
     private KnowledgeCandidateStatus parseStatus(String status) {
@@ -263,7 +340,7 @@ public class KnowledgeCandidateService {
         try {
             return objectMapper.readValue(json, new TypeReference<>() { });
         } catch (Exception error) {
-            return Map.of();
+            throw new BusinessException(400,"候选结构数据损坏，请修复 JSON 后重试");
         }
     }
 

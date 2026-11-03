@@ -1,4 +1,4 @@
-﻿import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,7 +13,11 @@ import {
   Search,
   Settings2,
   Sparkles,
+  Plus,
+  MessageCircle,
 } from 'lucide-react';
+import StudioArtwork from './StudioArtwork';
+import ReaderCharacterChatPanel, { type ReaderCharacterChatMode } from './ReaderCharacterChatPanel';
 import {
   coverImageUrl,
   getSquareStoryDetail,
@@ -37,12 +41,12 @@ type ReadingState = {
   progress?: number;
   fontSize?: number;
   lineHeight?: number;
-  width?: number;
 };
 
 const readingKey = (storyId: number, format: ContentFormat) => `artverse.square.reading.${storyId}.${format}`;
 
 const LAST_LIST_KEY = 'artverse.square.lastList';
+const READER_CHARACTER_CHAT_MODE_KEY = 'artverse.reader.character-chat.mode';
 
 function readLastListRoute(): SquareLocation | null {
   try {
@@ -52,6 +56,14 @@ function readLastListRoute(): SquareLocation | null {
     return parsed?.kind === 'list' ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+function readReaderCharacterChatMode(): ReaderCharacterChatMode {
+  try {
+    return window.localStorage.getItem(READER_CHARACTER_CHAT_MODE_KEY) === 'docked' ? 'docked' : 'floating';
+  } catch {
+    return 'floating';
   }
 }
 
@@ -181,7 +193,9 @@ export default function SquarePage() {
     go(fallback, true);
   }, [route]);
 
-  return route.kind === 'list' ? <SquareList route={route} /> : <StoryView route={route} onBackToSquare={backToList} />;
+  return route.kind === 'list'
+    ? <SquareList key={`${route.format}:${route.page}:${route.query}`} route={route} />
+    : <StoryView key={`${route.format}:${route.storyId}`} route={route} onBackToSquare={backToList} />;
 }
 
 function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }> }) {
@@ -192,11 +206,7 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
   const [error, setError] = useState('');
   const [input, setInput] = useState(route.query);
 
-  useEffect(() => setInput(route.query), [route.query]);
-
   const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
     try {
       const data = await listSquareStories(route.page, PAGE_SIZE, route.query || undefined, route.format);
       setStories(data.content);
@@ -210,57 +220,63 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
   }, [route]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+    listSquareStories(route.page, PAGE_SIZE, route.query || undefined, route.format)
+      .then((data) => {
+        if (!active) return;
+        setStories(data.content);
+        setTotalPages(data.total_pages);
+        setFacets(data.facets);
+      })
+      .catch(() => {
+        if (active) setError('作品加载失败，请检查网络后重试。');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [route.format, route.page, route.query]);
 
   const switchFormat = (format: ContentFormat) => go({ kind: 'list', format, page: 0, query: route.query });
   const activeLabel = formatLabel(route.format);
 
   return (
-    <main id="square-main" className="page-atmosphere relative flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <a href="#square-content" className="sr-only focus:not-sr-only">跳到作品列表</a>
-      <div className="relative mx-auto w-full max-w-6xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
-        <header className="border-b border-border pb-6 sm:pb-8">
-          <div className="flex items-center gap-2 text-accent">
-            <Compass size={19} />
-            <span className="text-sm font-semibold tracking-[0.18em]">作品广场</span>
+    <main id="square-main" className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <a href="#square-content" onClick={(event) => { event.preventDefault(); document.getElementById('square-content')?.focus(); document.getElementById('square-content')?.scrollIntoView({ behavior: 'smooth' }); }} className="studio-skip-link sr-only focus:not-sr-only">跳到作品列表</a>
+      <header className="studio-topbar">
+        <div className="flex items-center gap-2 text-sm"><Compass size={17} className="text-text-muted" /><span className="font-medium">作品广场</span><span className="mx-2 text-border-strong">/</span><span className="text-xs text-text-muted">发现值得读的故事</span></div>
+        <a href="#/workspace" className="studio-button studio-button-primary"><Plus size={16} />开始创作</a>
+      </header>
+      <div className="studio-page relative mx-auto w-full max-w-[1440px] px-5 py-7 sm:px-8 lg:px-10">
+        <header className="studio-hero">
+          <div className="studio-hero-copy">
+            <span className="studio-eyebrow"><span /> A UNIVERSE OF STORIES</span>
+            <h1>每一个故事，<br />都是一扇<span>新的门。</span></h1>
+            <p>在文字里相遇，在画面中远行。<br />发现创作者笔下的世界，让下一次灵感在这里发生。</p>
+            <button type="button" className="studio-hero-cta" onClick={() => document.getElementById('square-content')?.scrollIntoView({ behavior: 'smooth' })}>探索故事 <ArrowRight size={17} /></button>
           </div>
-          <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="font-display text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-                找一部，读进去
-              </h1>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
-                小说与漫画分栏展示，沿着你的阅读偏好继续发现下一段故事。
-              </p>
-            </div>
-            <div className="hidden items-center gap-2 text-sm text-text-muted sm:flex">
-              <Sparkles size={16} className="text-accent" />
-              已收录 {facets.novel + facets.manga} 部公开作品
-            </div>
-          </div>
+          <StudioArtwork />
+          <span className="studio-hero-footnote">IMAGINATION, UNBOUND.</span>
         </header>
 
-        <div className="sticky top-0 z-10 -mx-4 border-b border-border bg-bg-base/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="studio-square-toolbar sticky top-0 z-10 bg-bg-base/95 py-5 backdrop-blur-xl">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <nav className="flex w-fit items-center rounded-xl bg-bg-surface p-1 ring-1 ring-border" aria-label="作品类型">
+            <nav className="studio-format-tabs flex w-fit items-center gap-2" aria-label="作品类型">
               {(['novel', 'manga'] as ContentFormat[]).map((format) => (
                 <button
                   key={format}
                   type="button"
                   onClick={() => switchFormat(format)}
                   aria-pressed={route.format === format}
-                  className={`min-h-10 rounded-lg px-4 text-sm font-semibold transition-all ${
+                  className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium transition-all ${
                     route.format === format
-                      ? 'bg-accent text-white shadow-sm'
+                      ? 'bg-text-primary text-bg-base'
                       : 'text-text-secondary hover:bg-accent-soft hover:text-text-primary'
                   }`}
                 >
-                  {formatLabel(format)}
+                  {format === 'novel' ? <BookOpenText size={16} /> : <ImageIcon size={16} />}{formatLabel(format)}
                   <span className={`ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[0.625rem] font-bold ${
                     route.format === format
-                      ? 'bg-white/20 text-white'
-                      : 'bg-accent-muted text-accent'
+                      ? 'bg-bg-base/15 text-bg-base'
+                      : 'bg-bg-surface text-text-muted'
                   }`}>{facets[format]}</span>
                 </button>
               ))}
@@ -284,7 +300,7 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
                 />
               </label>
               <button
-                className="h-10 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="studio-search-submit h-10 rounded-lg border border-border bg-bg-surface px-4 text-sm font-medium transition-colors hover:border-accent hover:text-accent"
                 type="submit"
               >
                 搜索
@@ -293,36 +309,37 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
           </div>
         </div>
 
-        <section id="square-content" className="pt-6" aria-live="polite">
-          <div className="mb-5 flex items-baseline justify-between">
-            <h2 className="font-display text-xl font-bold text-text-primary">{activeLabel}书架</h2>
-            <span className="text-sm text-text-muted">第 {route.page + 1} 页</span>
+        <section id="square-content" tabIndex={-1} className="studio-library pt-2" aria-live="polite" aria-label={`${activeLabel}书架`}>
+          <div className="mb-6 flex items-baseline justify-between gap-3">
+            <div><h2 className="text-xl font-semibold tracking-tight text-text-primary">{route.query ? '搜索结果' : '发现好故事'}<span className="ml-3 text-xs font-normal tracking-wider text-text-muted">{route.format === 'novel' ? 'THE READING ROOM' : 'VISUAL STORIES'}</span></h2><p className="mt-2 text-xs text-text-muted">{route.query ? `关于「${route.query}」的${activeLabel}` : `用${route.format === 'novel' ? '文字' : '画面'}构筑世界，总有一个故事与你共鸣。`}</p></div>
+            <span className="shrink-0 text-xs text-text-muted">{facets[route.format]} 部{activeLabel}<span className="mx-2">·</span>第 {route.page + 1} 页</span>
           </div>
 
           {loading ? (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="studio-story-grid">
               {Array.from({ length: 6 }).map((_, index) => (
                 <div key={index} className="h-48 rounded-2xl border border-border bg-bg-surface/50 shimmer-bg" />
               ))}
             </div>
           ) : error ? (
-            <Empty icon={<Compass size={42} />} text={error} action="重试" onAction={() => void load()} />
+            <Empty icon={<Compass size={42} />} text={error} action="重试" onAction={() => { setLoading(true); setError(''); void load(); }} />
           ) : stories.length === 0 ? (
             <Empty
               icon={<Search size={42} />}
-              text={`没有找到符合条件的${activeLabel}`}
-              action="清除搜索"
-              onAction={() => go({ kind: 'list', format: route.format, page: 0, query: '' })}
+              text={route.query ? `没有找到符合条件的${activeLabel}，换个关键词试试。` : `这里的故事正等待被写下，成为第一位分享${activeLabel}的创作者。`}
+              action={route.query ? '清除搜索' : '开始创作'}
+              onAction={() => route.query ? go({ kind: 'list', format: route.format, page: 0, query: '' }) : window.location.assign('#/workspace')}
             />
           ) : (
             <>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="studio-story-grid">
                 {stories.map((story) => <StoryCard key={`${story.id}:${story.format}`} story={story} />)}
               </div>
               <Pagination route={route} totalPages={totalPages} />
             </>
           )}
         </section>
+        <footer className="studio-page-footer"><span className="studio-wordmark">ArtVerse.</span><span>让好故事被看见，让想象不止于想象。</span><span>MADE FOR YOUR IMAGINATION</span></footer>
       </div>
     </main>
   );
@@ -330,7 +347,7 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
 
 function StoryCard({ story }: { story: SquareStory }) {
   return (
-    <article className="group overflow-hidden rounded-2xl border border-border bg-bg-surface transition duration-200 hover:-translate-y-0.5 hover:border-accent/40">
+    <article className="studio-story-card group overflow-hidden rounded-xl border border-border bg-bg-surface transition-all duration-200 hover:-translate-y-1 hover:border-accent/40 hover:shadow-md">
       <a
         href={storyHref(story.format, story.id)}
         className="flex min-h-48 w-full gap-4 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-accent"
@@ -354,8 +371,8 @@ function StoryCard({ story }: { story: SquareStory }) {
             <span>{story.chapter_count} 章</span>
             <span className="h-3 w-px bg-border" />
             <span>{formatCount(story.format, story.content_count)}</span>
-            <span className="ml-auto inline-flex items-center gap-1 font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100">
-              去详情
+            <span className="ml-auto inline-flex items-center gap-1 font-medium text-accent transition-all duration-200 group-hover:translate-x-0.5">
+              阅读
               <ArrowRight size={14} />
             </span>
           </div>
@@ -413,7 +430,7 @@ function Pagination({
   return (
     <div className="mt-8 flex items-center justify-center gap-3">
       <button
-        className="flex h-11 items-center gap-1 rounded-lg border border-border px-3 text-sm text-text-secondary transition hover:border-accent disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-11 items-center gap-1 rounded-lg border border-border bg-bg-surface px-3 text-sm text-text-secondary shadow-sm transition-all duration-200 hover:border-accent hover:text-accent hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-text-secondary disabled:hover:shadow-sm"
         disabled={route.page === 0}
         onClick={() => go({ ...route, page: route.page - 1 })}
       >
@@ -422,7 +439,7 @@ function Pagination({
       </button>
       <span className="text-sm text-text-muted">{route.page + 1} / {Math.max(totalPages, 1)}</span>
       <button
-        className="flex h-11 items-center gap-1 rounded-lg border border-border px-3 text-sm text-text-secondary transition hover:border-accent disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex h-11 items-center gap-1 rounded-lg border border-border bg-bg-surface px-3 text-sm text-text-secondary shadow-sm transition-all duration-200 hover:border-accent hover:text-accent hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-text-secondary disabled:hover:shadow-sm"
         disabled={route.page + 1 >= totalPages}
         onClick={() => go({ ...route, page: route.page + 1 })}
       >
@@ -445,11 +462,11 @@ function Empty({
   onAction: () => void;
 }) {
   return (
-    <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-bg-surface/50 px-4 text-center text-text-muted">
-      <div className="animate-float [&>svg]:h-12 [&>svg]:w-12 [&>svg]:text-accent/40">{icon}</div>
+    <div className="studio-empty flex min-h-64 flex-col items-center justify-center rounded-xl border border-border bg-bg-surface px-6 py-10 text-center text-text-muted">
+      <div className="studio-empty-icon">{icon}</div>
       <p className="mt-5 text-sm">{text}</p>
       <button
-        className="mt-5 min-h-11 rounded-lg bg-accent px-5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+        className="studio-button studio-button-primary mt-5"
         onClick={onAction}
       >
         {action}
@@ -473,8 +490,6 @@ function StoryView({
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError('');
     void getSquareStoryDetail(route.storyId, route.format)
       .then((data) => {
         if (active) setDetail(data);
@@ -547,7 +562,7 @@ function StoryView({
     go({ kind: 'detail', format: detail.format, storyId: detail.id }, true);
   };
 
-  return <Reader detail={detail} chapterId={current.id} onBack={backToDetail} />;
+  return <Reader key={`${detail.id}:${detail.format}`} detail={detail} chapterId={current.id} onBack={backToDetail} />;
 }
 
 function Detail({
@@ -823,14 +838,14 @@ function Reader({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fontSize, setFontSize] = useState(savedState.fontSize ?? 18);
   const [lineHeight, setLineHeight] = useState(savedState.lineHeight ?? 1.8);
-  const [width, setWidth] = useState(savedState.width ?? 800);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMode, setChatMode] = useState<ReaderCharacterChatMode>(readReaderCharacterChatMode);
   const { mode, toggleMode } = useTheme();
 
-  useEffect(() => {
-    setFontSize(savedState.fontSize ?? 18);
-    setLineHeight(savedState.lineHeight ?? 1.8);
-    setWidth(savedState.width ?? 800);
-  }, [savedState.fontSize, savedState.lineHeight, savedState.width]);
+  const changeChatMode = (nextMode: ReaderCharacterChatMode) => {
+    setChatMode(nextMode);
+    try { window.localStorage.setItem(READER_CHARACTER_CHAT_MODE_KEY, nextMode); } catch { /* private browsing */ }
+  };
 
   useEffect(() => {
     const key = readingKey(detail.id, detail.format);
@@ -847,14 +862,13 @@ function Reader({
         progress,
         fontSize,
         lineHeight,
-        width,
       }));
     };
 
     const el = progressRef.current;
     el?.addEventListener('scroll', onScroll, { passive: true });
     return () => el?.removeEventListener('scroll', onScroll);
-  }, [chapterId, detail.format, detail.id, fontSize, lineHeight, width]);
+  }, [chapterId, detail.format, detail.id, fontSize, lineHeight]);
 
   useEffect(() => {
     const el = progressRef.current;
@@ -872,7 +886,7 @@ function Reader({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [chapterId, fontSize, lineHeight, savedState.chapterId, savedState.progress, width]);
+  }, [chapterId, fontSize, lineHeight, savedState.chapterId, savedState.progress]);
 
   const navigate = (offset: -1 | 1) => {
     const next = detail.chapters[index + offset];
@@ -901,8 +915,8 @@ function Reader({
     : chapter.images.length > 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg-base">
-      <header className="border-b border-border bg-bg-surface/95 backdrop-blur">
+    <div className="reader-shell flex min-h-0 flex-1 flex-col bg-bg-base">
+      <header className="reader-topbar border-b border-border bg-bg-surface/95 backdrop-blur">
         <div className="mx-auto flex min-h-14 max-w-5xl items-center justify-between gap-3 px-3 sm:px-6">
           <button className="flex min-h-10 items-center gap-1 rounded-lg px-2 text-sm text-text-secondary transition hover:text-text-primary hover:bg-accent-soft" onClick={onBack}>
             <ChevronLeft size={18} />
@@ -921,6 +935,20 @@ function Reader({
           </button>
         </div>
       </header>
+
+      {detail.format === 'novel' && !chatOpen && (
+        <button
+          type="button"
+          onClick={() => setChatOpen(true)}
+          className="fixed right-3 top-1/2 z-30 inline-flex -translate-y-1/2 items-center gap-2 rounded-l-2xl border border-r-0 border-accent/40 bg-bg-surface/95 px-3 py-3 text-xs font-medium text-accent shadow-lg backdrop-blur transition hover:border-accent hover:bg-accent-soft sm:right-4"
+          aria-label="打开和角色聊聊"
+        >
+          <MessageCircle size={16} />
+          <span className="[writing-mode:vertical-rl]">和角色聊聊</span>
+        </button>
+      )}
+
+      {chatOpen && <ReaderCharacterChatPanel storyId={detail.id} chapterId={chapterId} mode={chatMode} onModeChange={changeChatMode} onClose={() => setChatOpen(false)} />}
 
       {settingsOpen && (
         <div className="border-b border-border bg-bg-surface">
@@ -951,12 +979,6 @@ function Reader({
                 {[1.6, 1.8, 2.0, 2.2, 2.4].map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
-            <label className="fanqie-setting-field">
-              <span>宽度</span>
-              <select value={width} onChange={(event) => setWidth(Number(event.target.value))}>
-                {[680, 760, 840, 920].map((value) => <option key={value} value={value}>{value}px</option>)}
-              </select>
-            </label>
             <button
               className="fanqie-setting-field cursor-pointer hover:border-accent transition"
               onClick={toggleMode}
@@ -971,14 +993,25 @@ function Reader({
         </div>
       )}
 
-      <main ref={progressRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
-        <article className="mx-auto w-full" style={{ maxWidth: detail.format === 'novel' ? width : 'min(920px, 100%)' }}>
-          <header className="fanqie-reader-header">
-            <div className="text-xs uppercase tracking-[0.2em] text-text-muted">
-              {detail.title}
+      <main ref={progressRef} className="reader-scroll flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-10">
+        <article className="reader-paper mx-auto" style={{ maxWidth: detail.format === 'novel' ? '1400px' : 'min(920px, 100%)' }}>
+          <header className="fanqie-reader-header reader-paper-header">
+            <h1 className="font-display text-3xl font-bold tracking-tight text-text-primary sm:text-[2.15rem]">{chapterTitle(chapter)}</h1>
+            <div className="reader-meta-row mt-8">
+              <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-text-secondary">
+                <LibraryBig size={17} aria-hidden="true" />
+                <span className="truncate">{detail.title}</span>
+                <span className="text-text-muted">·</span>
+                <span className="font-normal text-text-muted">{detail.format === 'novel' ? '小说' : '漫画'} · {chapterMetaLabel(chapter, detail.format)}</span>
+              </div>
+              {detail.format === 'novel' && (
+                <div className="reader-inline-controls" aria-label="字号调整">
+                  <button type="button" onClick={() => setFontSize((v) => Math.max(14, v - 2))} disabled={fontSize <= 14}>A-</button>
+                  <button type="button" onClick={() => setFontSize(18)} className="reader-inline-reset">默认</button>
+                  <button type="button" onClick={() => setFontSize((v) => Math.min(28, v + 2))} disabled={fontSize >= 28}>A+</button>
+                </div>
+              )}
             </div>
-            <h1 className="mt-3 font-display text-3xl font-bold text-text-primary">{chapterTitle(chapter)}</h1>
-            <div className="mt-3 text-sm text-text-muted">{chapterMetaLabel(chapter, detail.format)}</div>
           </header>
 
           {hasContent ? (

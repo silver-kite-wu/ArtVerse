@@ -7,7 +7,6 @@ import com.artverse.api.dto.AuthDtos.CaptchaImageResponse;
 import com.artverse.api.dto.AuthDtos.ChallengeConfigResponse;
 import com.artverse.api.dto.AuthDtos.LoginByCodeRequest;
 import com.artverse.api.dto.AuthDtos.LoginRequest;
-import com.artverse.api.dto.AuthDtos.RefreshRequest;
 import com.artverse.api.dto.AuthDtos.ResetPasswordRequest;
 import com.artverse.api.dto.AuthDtos.RegisterRequest;
 import com.artverse.api.dto.AuthDtos.VerifyResetCodeRequest;
@@ -179,11 +178,10 @@ public class AuthController {
     @PostMapping("/refresh")
     @RateLimit(windowSeconds = 60, maxRequests = 20, key = "refresh")
     public ResponseEntity<AuthResponse> refresh(
-            @RequestBody(required = false) RefreshRequest req,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        String refreshToken = resolveRefreshToken(request, req);
+        String refreshToken = authCookieService.readRefreshToken(request);
         Long authenticatedUserId = StpUtil.isLogin() ? StpUtil.getLoginIdAsLong() : null;
 
         if (refreshToken != null && !refreshToken.isBlank()) {
@@ -251,14 +249,4 @@ public class AuthController {
         );
     }
 
-    private String resolveRefreshToken(HttpServletRequest request, RefreshRequest req) {
-        String cookieToken = authCookieService.readRefreshToken(request);
-        if (cookieToken != null && !cookieToken.isBlank()) {
-            return cookieToken;
-        }
-        if (!authCookieService.isRefreshBodyFallbackEnabled() || req == null) {
-            return null;
-        }
-        return req.refreshToken();
-    }
 }

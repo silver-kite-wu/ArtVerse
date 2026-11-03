@@ -25,6 +25,7 @@ import {
   type EmailCodeScenario,
 } from '../api';
 import CaptchaWidget from './CaptchaWidget';
+import { useToast } from '../ui/toast/useToast';
 
 interface Props {
   onAuthSuccess: () => void;
@@ -91,8 +92,6 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resetStage, setResetStage] = useState<'code' | 'password'>('code');
   const [resetTicket, setResetTicket] = useState('');
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [codeCooldown, setCodeCooldown] = useState(0);
@@ -108,6 +107,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
   const [loginChallengeResetSignal, setLoginChallengeResetSignal] = useState(0);
   const firstInputRef = useRef<HTMLInputElement | null>(null);
   const idPrefix = useId();
+  const toast = useToast();
 
   const isModal = variant === 'modal';
   const registerMode = mode === 'register';
@@ -171,8 +171,6 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
 
   const switchMode = (nextMode: Mode) => {
     setMode(nextMode);
-    setError('');
-    setSuccessMessage('');
     setPassword('');
     setConfirmPassword('');
     setEmailCode('');
@@ -211,30 +209,31 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
         setLoginChallengeToken(null);
         setLoginChallengeResetSignal((value) => value + 1);
       }
-      setError(err.message || fallbackMessage);
+      toast.error(err.message || fallbackMessage);
       return;
     }
     if (err instanceof Error) {
-      setError(err.message || fallbackMessage);
+      toast.error(err.message || fallbackMessage);
       return;
     }
-    setError(fallbackMessage);
+    toast.error(fallbackMessage);
   };
 
   const handleSendCode = async () => {
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      setError('请先填写邮箱');
+      toast.warning('请先填写邮箱');
+      firstInputRef.current?.focus();
       return;
     }
     if (sendingCode || codeCooldown > 0) return;
     const scenario = scenarioForMode(mode);
     if (!scenario) return;
     setSendingCode(true);
-    setError('');
     try {
       await sendEmailCode(trimmedEmail, scenario);
       setCodeCooldown(CODE_COOLDOWN_SECONDS);
+      toast.success('验证码已发送，请检查邮箱');
     } catch (err) {
       handleAuthError('验证码发送失败，请稍后重试', err, mode);
     } finally {
@@ -247,8 +246,6 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
     setResetStage('code');
     setResetTicket('');
     setEmailCode('');
-    setError('');
-    setSuccessMessage('');
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -259,58 +256,60 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
     const trimmedEmail = email.trim();
     const trimmedCode = emailCode.trim();
 
-    setError('');
-
     if (registerMode) {
       if (!trimmedUsername || !password.trim()) {
-        setError('请填写用户名和密码');
+        toast.warning('请填写用户名和密码');
+        firstInputRef.current?.focus();
         return;
       }
       if (!trimmedEmail) {
-        setError('请填写邮箱');
+        toast.warning('请填写邮箱');
         return;
       }
       if (mailEnabled && !trimmedCode) {
-        setError('请填写邮箱验证码');
+        toast.warning('请填写邮箱验证码');
         return;
       }
       const passwordLength = codePointLength(password);
       if (passwordLength < MIN_PASSWORD_LENGTH || passwordLength > MAX_PASSWORD_LENGTH) {
-        setError(PASSWORD_HINT);
+        toast.warning(PASSWORD_HINT);
         return;
       }
       if (password !== confirmPassword) {
-        setError('两次输入的密码不一致');
+        toast.warning('两次输入的密码不一致');
         return;
       }
       if (registerChallengeVisible && !registerChallengeToken) {
-        setError('请先完成图形验证码后再注册');
+        toast.warning('请先完成图形验证码后再注册');
         return;
       }
     } else if (passwordLoginMode) {
       if (!trimmedEmail || !password.trim()) {
-        setError('请填写邮箱和密码');
+        toast.warning('请填写邮箱和密码');
+        firstInputRef.current?.focus();
         return;
       }
       if (loginChallengeRequired && !loginChallengeToken) {
-        setError('请先完成图形验证码后再登录');
+        toast.warning('请先完成图形验证码后再登录');
         return;
       }
     } else if (codeLoginMode) {
       if (!trimmedEmail || !trimmedCode) {
-        setError('请填写邮箱和验证码');
+        toast.warning('请填写邮箱和验证码');
+        firstInputRef.current?.focus();
         return;
       }
     } else if (forgotMode) {
       if (resetStage === 'code') {
         if (!trimmedEmail || !trimmedCode) {
-          setError('请填写邮箱和验证码');
+          toast.warning('请填写邮箱和验证码');
+          firstInputRef.current?.focus();
           return;
         }
       } else {
         const passwordLength = codePointLength(password);
         if (passwordLength < MIN_PASSWORD_LENGTH || passwordLength > MAX_PASSWORD_LENGTH) {
-          setError(PASSWORD_HINT);
+          toast.warning(PASSWORD_HINT);
           return;
         }
       }
@@ -339,15 +338,16 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
         setResetStage('password');
         setPassword('');
         setShowPassword(false);
-        setError('');
+        toast.success('身份验证通过，请设置新密码');
         return;
       } else {
         // 第二步：凭一次性票据重置密码
         await resetPassword(resetTicket, password);
         switchMode('login');
-        setSuccessMessage('密码已重置，请使用新密码登录');
+        toast.success('密码已重置，请使用新密码登录');
         return;
       }
+      toast.success(registerMode ? '注册成功，账号已登录' : codeLoginMode ? '验证码登录成功' : '登录成功，欢迎回来');
       onAuthSuccess();
     } catch (err) {
       handleAuthError(
@@ -459,7 +459,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
     <div className={(isModal ? '' : 'min-h-dvh bg-bg-base ') + 'flex items-center justify-center p-4 sm:p-6'}>
       <div className="flex w-full max-w-[38rem] min-h-0 flex-col">
         <div className="mb-5 flex items-center justify-center gap-3 sm:mb-6">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-white shadow-glow">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl btn-accent">
             <Sparkles size={20} />
           </div>
           <div className="text-left">
@@ -474,9 +474,10 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
           aria-modal={isModal ? 'true' : undefined}
           aria-labelledby={isModal ? dialogTitleId : undefined}
           aria-describedby={isModal ? dialogDescriptionId : undefined}
-          className="relative flex h-[min(46rem,calc(100dvh-2rem))] flex-col overflow-hidden rounded-[32px] border border-border/80 bg-bg-raised/95 p-5 sm:p-7"
+          className="relative flex h-[min(46rem,calc(100dvh-2rem))] flex-col overflow-hidden rounded-[32px] border border-border/80 bg-bg-raised/95 p-5 shadow-2xl sm:p-7"
         >
-          <div className="pointer-events-none absolute inset-x-12 top-0 h-28 rounded-full bg-[radial-gradient(circle,rgba(241,72,30,0.16)_0%,rgba(241,72,30,0.06)_32%,rgba(241,72,30,0)_76%)] blur-2xl" />
+          <div className="pointer-events-none absolute inset-x-12 top-0 h-28 rounded-full bg-[radial-gradient(circle,rgba(241,72,30,0.22)_0%,rgba(241,72,30,0.08)_32%,rgba(241,72,30,0)_76%)] blur-2xl" />
+          <div className="pointer-events-none absolute inset-0 rounded-[32px] bg-gradient-to-b from-white/[0.03] via-transparent to-transparent" />
 
           <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1 sm:gap-6">
             <div className="sr-only">
@@ -492,9 +493,9 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
               <p id={dialogDescriptionId}>登录和注册窗口采用固定尺寸布局，切换表单不会改变弹框大小。</p>
             </div>
 
-            {passwordLoginMode && (message || successMessage) && (
+            {passwordLoginMode && message && (
               <p className="rounded-[20px] border border-accent/25 bg-[linear-gradient(135deg,rgba(241,72,30,0.10),rgba(241,72,30,0.03))] px-4 py-3 text-sm text-accent">
-                {message || successMessage}
+                {message}
               </p>
             )}
 
@@ -679,6 +680,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
                 </p>
                 {supportsCaptcha ? (
                   <CaptchaWidget
+                    key={registerMode ? registerChallengeResetSignal : loginChallengeResetSignal}
                     visible={challengeBlockVisible}
                     resetSignal={registerMode ? registerChallengeResetSignal : loginChallengeResetSignal}
                     onTokenChange={registerMode ? setRegisterChallengeToken : setLoginChallengeToken}
@@ -710,15 +712,6 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
               </p>
             )}
 
-            {error && (
-              <p
-                className="rounded-[18px] border border-accent/20 bg-accent-soft px-4 py-3 text-sm text-accent"
-                role="alert"
-              >
-                {error}
-              </p>
-            )}
-
             {pwLockHint && passwordLoginMode && (
               <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-border/80 bg-bg-surface/60 px-4 py-3 text-sm text-text-muted">
                 <span>密码登录已临时锁定，可改用：</span>
@@ -745,7 +738,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-accent px-4 py-4 text-base font-semibold text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-[18px] btn-accent px-4 py-4 text-base font-semibold active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? (
                 <LoaderCircle size={18} className="animate-spin" />

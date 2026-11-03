@@ -54,9 +54,9 @@ public class MangaAgentEventReplayService {
         int emptyPolls = 0;
         try {
             while (connected.get()) {
-                MangaAgentRunService.RunEventReplayPage page =
+                MangaAgentRunSnapshots.RunEventReplayPage page =
                         runService.replayEvents(userId, chapterId, requestId, cursor);
-                for (MangaAgentRunService.RunEventSnapshot event : page.events()) {
+                for (MangaAgentRunSnapshots.RunEventSnapshot event : page.events()) {
                     sendEvent(emitter, event);
                     cursor = event.eventId();
                 }
@@ -86,7 +86,7 @@ public class MangaAgentEventReplayService {
         }
     }
 
-    private void sendEvent(SseEmitter emitter, MangaAgentRunService.RunEventSnapshot event) throws Exception {
+    private void sendEvent(SseEmitter emitter, MangaAgentRunSnapshots.RunEventSnapshot event) throws Exception {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("eventId", event.eventId());
         value.put("eventName", event.eventName());

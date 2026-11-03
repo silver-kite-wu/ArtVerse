@@ -1,6 +1,5 @@
 package com.artverse.api.dto;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -40,13 +39,6 @@ public class AuthDtos {
 
             @Size(max = 2048, message = "challenge token is too long")
             String challengeToken
-    ) {
-    }
-
-    public record RefreshRequest(
-            @JsonAlias("refresh_token")
-            @Size(max = 2048, message = "refresh token is too long")
-            String refreshToken
     ) {
     }
 
@@ -111,7 +103,25 @@ public class AuthDtos {
     public record CaptchaImageResponse(String captchaId, String image) {
     }
 
-    public record UserInfo(Long id, String username, String email) {
+    public record UserInfo(Long id, String username, String email, String avatarUrl) {
+        public static UserInfo from(com.artverse.domain.User user) {
+            String key = user.getAvatarKey();
+            return new UserInfo(user.getId(), user.getUsername(), user.getEmail(),
+                    key == null ? null : "/api/user/me/avatar?v=" + key.substring(key.lastIndexOf('/') + 1));
+        }
+    }
+
+    public record UpdateProfileRequest(
+            @NotBlank(message = "用户名不能为空")
+            @Size(min = 2, max = 50, message = "用户名长度需在 2 到 50 个字符之间") String username
+    ) {
+    }
+
+    public record ChangePasswordRequest(
+            @NotBlank(message = "请输入当前密码") @Size(max = 200) String currentPassword,
+            @NotBlank(message = "请输入新密码") @Size(max = 32) String newPassword,
+            @NotBlank(message = "请确认新密码") @Size(max = 32) String confirmPassword
+    ) {
     }
 
     public record ApiKeyRequest(

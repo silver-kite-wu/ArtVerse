@@ -25,6 +25,20 @@ import java.util.UUID;
 @Setter
 public class KnowledgeCandidate {
 
+    @jakarta.persistence.Version
+    @Column(nullable = false)
+    private Long version = 0L;
+    @Column(name = "schema_version", nullable = false)
+    private Integer schemaVersion = 2;
+    @Column(name = "target_unit_id")
+    private Long targetUnitId;
+    @Column(name = "base_version")
+    private Integer baseVersion;
+    @Column(name = "source_hash", length = 64)
+    private String sourceHash;
+    @Column(name = "source_snapshot", columnDefinition = "jsonb", nullable = false)
+    private String sourceSnapshot = "{}";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

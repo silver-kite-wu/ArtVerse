@@ -1,6 +1,8 @@
 # Local secrets and IDE metadata
 .env
 .env.*
+# Deployment templates must stay tracked
+!**/.env.example
 .idea/
 *.iml
 .vscode/
@@ -55,3 +57,11 @@ test-results/
 # 备份文件
 backup/
 CLAUDE.md
+
+# 个人求职材料与学习笔记（不上传）
+resume/
+/AQS*.md
+/Java多线程全解*.md
+
+# 前端测试（不上传）
+frontend/tests/

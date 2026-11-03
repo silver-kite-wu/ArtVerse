@@ -1,18 +1,18 @@
-﻿import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+﻿import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   BookOpenText,
+  CalendarClock,
   ChevronRight,
   FileText,
   Globe,
-  KeyRound,
   LogIn,
-  LogOut,
   PanelLeftClose,
   PanelLeftOpen,
   Paintbrush,
   Sparkles,
-  UserRound,
 } from 'lucide-react';
+import AccountMenu from './components/AccountMenu';
+import ProfilePage from './components/ProfilePage';
 import ApiSettingsPage from './components/ApiSettingsPage';
 import HomePage from './components/HomePage';
 import ImageGenPage from './components/ImageGenPage';
@@ -22,8 +22,11 @@ import MyWorksPage from './components/MyWorksPage';
 import SquarePage from './components/SquarePage';
 import ThemeToggle from './components/ThemeToggle';
 import WorkspaceEditor from './components/WorkspaceEditor';
-import { getUser, hydrateAuthSession, isAuthenticated, logoutUser, type Story } from './api';
+import AutomationCenterPage from './components/automations/AutomationCenterPage';
+import AutomationComposerHost from './components/automations/AutomationComposerHost';
+import { clearAuth, getUser, subscribeUser, hydrateAuthSession, isAuthenticated, logoutUser, type Story } from './api';
 import {
+  confirmRouteLeave,
   isProtectedRoute,
   parseAppHash,
   pushAppRoute,
@@ -31,6 +34,7 @@ import {
   type AppRoute,
   type AppView,
 } from './appRouting';
+import { useToast } from './ui/toast/useToast';
 
 type View = AppView;
 type TopLevelView = Exclude<AppView, 'editor'>;
@@ -84,6 +88,7 @@ function clearWorkspaceState() {
 
 export default function App() {
   const isMobile = useIsMobile();
+  const toast = useToast();
   const [authenticated, setAuthenticated] = useState(false);
   const [authCheck, setAuthCheck] = useState(false);
   const [route, setRoute] = useState<AppRoute | null>(() => parseAppHash(window.location.hash));
@@ -92,19 +97,18 @@ export default function App() {
   const [loginMessage, setLoginMessage] = useState('请先登录后再使用该功能');
   const [pendingRoute, setPendingRoute] = useState<AppRoute | null>(null);
 
-  const [navigationMessage, setNavigationMessage] = useState('');
   const lastFocusedElementRef = useRef<HTMLElement | null>(null);
 
   const visibleRoute = route && (!authenticated && isProtectedRoute(route)) ? { view: 'square' as const } : route;
   const view: View = visibleRoute?.view ?? 'square';
-  const user = getUser();
-  const userName = user?.username?.trim() || 'Guest';
-  const userEmail = user?.email?.trim() || '登录后同步你的创作配置';
-  const userInitial = userName.slice(0, 1).toUpperCase();
+  const user = useSyncExternalStore(subscribeUser, getUser);
+  const acceptedHash = useRef(window.location.hash);
   // A public work is a destination in its own right. Keep it outside the
   // creator-console chrome so a shared URL opens as an uninterrupted reading
   // page, rather than as a panel inside the application shell.
   const isSquareStoryRoute = visibleRoute?.view === 'square' && 'storyId' in visibleRoute;
+  const isLoginOpen = loginOpen || (authCheck && !authenticated && !!route && isProtectedRoute(route));
+  const routeToResume = pendingRoute ?? (route && isProtectedRoute(route) ? route : null);
 
   useEffect(() => {
     let active = true;
@@ -121,6 +125,11 @@ export default function App() {
   useEffect(() => {
     if (!authCheck) return undefined;
     const syncRoute = () => {
+      if (acceptedHash.current !== window.location.hash && !confirmRouteLeave()) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${acceptedHash.current}`);
+        return;
+      }
+      acceptedHash.current = window.location.hash;
       const parsed = parseAppHash(window.location.hash);
       if (parsed) {
         setRoute(parsed);
@@ -133,18 +142,6 @@ export default function App() {
     syncRoute();
     return () => window.removeEventListener('hashchange', syncRoute);
   }, [authCheck]);
-
-  useEffect(() => {
-    if (!authCheck || authenticated || !route || !isProtectedRoute(route)) return;
-    setPendingRoute(route);
-    if (!loginOpen) {
-      setLoginMessage('请先登录后再使用该功能');
-      if (document.activeElement instanceof HTMLElement) {
-        lastFocusedElementRef.current = document.activeElement;
-      }
-      setLoginOpen(true);
-    }
-  }, [authCheck, authenticated, loginOpen, route]);
 
   useEffect(() => {
     const handleExpired = () => {
@@ -161,8 +158,15 @@ export default function App() {
     return () => window.removeEventListener('artverse:auth-expired', handleExpired);
   }, [route]);
 
+  const cancelLogin = () => {
+    setLoginOpen(false);
+    setPendingRoute(null);
+    clearWorkspaceState();
+    replaceAppRoute({ view: 'square' });
+  };
+
   useEffect(() => {
-    if (!loginOpen) {
+    if (!isLoginOpen) {
       lastFocusedElementRef.current?.focus?.();
       return undefined;
     }
@@ -174,7 +178,7 @@ export default function App() {
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [loginOpen]);
+  }, [isLoginOpen]);
 
   const requireLogin = (target?: AppRoute) => {
     if (document.activeElement instanceof HTMLElement) {
@@ -193,43 +197,46 @@ export default function App() {
       localStorage.removeItem(LS_CHAPTER_IDX);
     }
     localStorage.setItem(LS_STORY_ID, String(story.id));
-    setNavigationMessage('');
     pushAppRoute({ view: 'editor', storyId: story.id });
   };
 
   const leaveEditor = () => {
     clearWorkspaceState();
-    setNavigationMessage('');
     pushAppRoute({ view: 'workspace' });
   };
 
   const handleAuthSuccess = () => {
     setAuthenticated(true);
     setLoginOpen(false);
-    if (pendingRoute) {
-      replaceAppRoute(pendingRoute);
+    if (routeToResume) {
+      replaceAppRoute(routeToResume);
       setPendingRoute(null);
     }
   };
 
-  const cancelLogin = () => {
-    setLoginOpen(false);
-    setPendingRoute(null);
-    clearWorkspaceState();
-    replaceAppRoute({ view: 'square' });
-  };
-
   const handleLogout = async () => {
+    if (!confirmRouteLeave()) return;
     await logoutUser();
     setAuthenticated(false);
     setPendingRoute(null);
     setLoginOpen(false);
     clearWorkspaceState();
     replaceAppRoute({ view: 'square' });
+    toast.success('已退出登录');
+  };
+
+  const handlePasswordChanged = () => {
+    clearAuth();
+    clearWorkspaceState();
+    setAuthenticated(false);
+    setPendingRoute({ view: 'profile' });
+    setLoginMessage('密码已修改，请使用新密码重新登录');
+    setLoginOpen(true);
+    toast.success('密码已更新，请重新登录');
   };
 
   const goView = (target: TopLevelView) => {
-    const targetRoute: AppRoute = { view: target };
+    const targetRoute: AppRoute = target === 'automations' ? { view: 'automations' } : { view: target };
     if (target !== 'square' && !authenticated) {
       requireLogin(targetRoute);
       return;
@@ -237,16 +244,15 @@ export default function App() {
     if (view === 'editor') {
       clearWorkspaceState();
     }
-    setNavigationMessage('');
     pushAppRoute(targetRoute);
   };
 
   const handleEditorLoadError = useCallback((message: string) => {
     if (!isAuthenticated()) return;
     clearWorkspaceState();
-    setNavigationMessage(message || '故事不存在或当前账号无权访问，已返回故事工作区。');
+    toast.error(message || '故事不存在或当前账号无权访问，已返回故事工作区。');
     replaceAppRoute({ view: 'workspace' });
-  }, []);
+  }, [toast]);
 
   const navItem = (icon: ReactNode, label: string, target: TopLevelView) => {
     const active = view === target;
@@ -255,10 +261,12 @@ export default function App() {
         type="button"
         onClick={() => goView(target)}
         title={!sidebarOpen ? label : undefined}
+        aria-label={label}
+        aria-current={active ? 'page' : undefined}
         className={
-          'group relative flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm font-medium transition-all duration-200 '
+          'studio-nav-item group relative flex min-h-10 w-full items-center rounded-xl px-3 text-left text-sm font-medium transition-all duration-200 '
           + (active
-            ? 'bg-accent-muted text-accent font-semibold ring-1 ring-accent/20'
+            ? 'is-active bg-accent-muted text-accent font-semibold'
             : 'text-text-secondary hover:bg-accent-soft hover:text-text-primary')
         }
       >
@@ -278,6 +286,8 @@ export default function App() {
       <button
         type="button"
         onClick={() => goView(target)}
+        aria-label={label}
+        aria-current={active ? 'page' : undefined}
         className={
           'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-[0.625rem] font-medium transition-all duration-200 '
           + (active ? 'text-accent' : 'text-text-muted hover:text-text-secondary')
@@ -292,45 +302,6 @@ export default function App() {
     );
   };
 
-  const sidebarUtilityItem = (
-    icon: ReactNode,
-    label: string,
-    onClick: () => void,
-    options?: {
-      description?: string;
-      accent?: boolean;
-      title?: string;
-    },
-  ) => (
-    <button
-      type="button"
-      onClick={onClick}
-      title={!sidebarOpen ? (options?.title ?? label) : undefined}
-      className={
-        'group flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-all duration-200 '
-        + (options?.accent
-          ? 'text-text-secondary hover:bg-accent-muted/30 hover:text-accent'
-          : 'text-text-secondary hover:bg-accent-soft hover:text-text-primary')
-        + (!sidebarOpen ? ' justify-center px-0' : '')
-      }
-    >
-      <span className="shrink-0">{icon}</span>
-      {sidebarOpen && (
-        <>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate">{label}</span>
-            {options?.description && (
-              <span className="mt-0.5 block truncate text-[0.6875rem] font-normal text-text-muted">
-                {options.description}
-              </span>
-            )}
-          </span>
-          <ChevronRight size={15} className="shrink-0 text-text-muted transition-transform duration-200 group-hover:translate-x-0.5" />
-        </>
-      )}
-    </button>
-  );
-
   if (!authCheck) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-bg-base">
@@ -340,31 +311,31 @@ export default function App() {
   }
 
   return (
-    <div className="relative flex h-dvh w-full overflow-hidden bg-bg-base text-text-primary">
+    <div className="studio-shell relative flex h-dvh w-full overflow-hidden bg-bg-base text-text-primary">
       {!isMobile && !isSquareStoryRoute && (
         <aside
+          data-collapsed={!sidebarOpen}
           className={
-            'flex shrink-0 flex-col border-r border-border glass-panel transition-[width] duration-300 '
-            + (sidebarOpen ? 'w-[14.5rem]' : 'w-[4.25rem]')
+            'studio-sidebar flex shrink-0 flex-col border-r border-border transition-[width] duration-300 '
+            + (sidebarOpen ? 'w-[15.5rem]' : 'w-[5rem]')
           }
         >
-          <div className="flex h-16 items-center gap-3 border-b border-border px-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-white shadow-glow">
-              <Sparkles size={18} />
+          <div className={'studio-brand flex h-24 items-center gap-3 ' + (sidebarOpen ? 'px-5' : 'flex-col justify-center gap-1 px-2')}>
+            <div className="studio-logo flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+              <BookOpenText size={22} strokeWidth={1.6} />
             </div>
             {sidebarOpen && (
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-display text-base font-bold text-text-primary">ArtVerse</span>
-                  <span className="seal-stamp h-4! min-w-4! text-[0.5rem]! font-normal">墨</span>
+                  <span className="studio-wordmark text-xl font-bold text-text-primary">ArtVerse<span className="text-accent">.</span></span>
                 </div>
-                <div className="text-[0.625rem] text-text-muted">AI 漫画创作工坊</div>
+                <div className="mt-1 text-[0.625rem] tracking-[0.14em] text-text-muted">让想象，自由生长</div>
               </div>
             )}
             <button
               type="button"
               onClick={() => setSidebarOpen((prev) => !prev)}
-              className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-accent-soft hover:text-text-primary"
+              className={(sidebarOpen ? 'ml-auto ' : '') + 'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-accent-soft hover:text-text-primary'}
               aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
               title={sidebarOpen ? '收起侧栏' : '展开侧栏'}
             >
@@ -372,68 +343,21 @@ export default function App() {
             </button>
           </div>
 
-          <nav className="flex flex-1 flex-col gap-1 px-2 py-4">
-            {sidebarOpen && <p className="mb-1 px-3 text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted">创作空间</p>}
+          <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-5" aria-label="主导航">
+            {sidebarOpen && <p className="mb-2 px-3 text-[0.625rem] font-medium tracking-[0.18em] text-text-muted">创作空间 / CREATE</p>}
             {navItem(<BookOpenText size={18} />, '故事工作区', 'workspace')}
             {navItem(<Paintbrush size={18} />, 'AI 生图', 'imagegen')}
-            {sidebarOpen && <p className="mb-1 mt-4 px-3 text-[0.625rem] font-semibold uppercase tracking-wider text-text-muted">发现与管理</p>}
+            {navItem(<CalendarClock size={18} />, '定时任务', 'automations')}
+            {sidebarOpen && <p className="mb-2 mt-7 px-3 text-[0.625rem] font-medium tracking-[0.18em] text-text-muted">探索更多 / EXPLORE</p>}
             {navItem(<Globe size={18} />, '作品广场', 'square')}
             {navItem(<FileText size={18} />, '作品管理', 'myworks')}
           </nav>
 
-          <div className="border-t border-border px-3 py-3">
-            <div
-              className={
-                'rounded-[22px] border border-border/80 bg-bg-surface/75 backdrop-blur-sm '
-                + (sidebarOpen ? 'p-3' : 'p-2')
-              }
-              title={!sidebarOpen ? (authenticated ? userName : '游客模式') : undefined}
-            >
-              <div
-                className={
-                  'flex items-center gap-3 rounded-2xl border border-border/70 bg-bg-base/70 '
-                  + (sidebarOpen ? 'px-3 py-3' : 'justify-center px-0 py-3')
-                }
-              >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent text-white shadow-glow">
-                  {authenticated ? <span className="text-sm font-semibold">{userInitial}</span> : <UserRound size={18} />}
-                </div>
-                {sidebarOpen && (
-                  <>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-text-primary">{authenticated ? userName : '游客模式'}</div>
-                      <div className="mt-0.5 truncate text-[0.6875rem] text-text-muted">
-                        {authenticated ? userEmail : '登录后保存模型配置与创作记录'}
-                      </div>
-                    </div>
-                    <span className={`shrink-0 rounded-full px-2 py-1 text-[0.625rem] font-semibold ${authenticated ? 'bg-accent-muted text-accent' : 'bg-bg-raised text-text-muted'}`}>
-                      {authenticated ? '已登录' : '访客'}
-                    </span>
-                  </>
-                )}
-              </div>
-
-              <div className="mt-2 rounded-2xl border border-border/70 bg-bg-base/55 p-1.5">
-                {authenticated
-                  ? sidebarUtilityItem(<KeyRound size={18} />, 'API 设置', () => goView('settings'), {
-                      description: '管理供应商、模型与密钥',
-                    })
-                  : sidebarUtilityItem(<LogIn size={18} />, '登录账号', () => requireLogin(), {
-                      description: '同步创作进度与个人配置',
-                    })}
-                <div className="mx-2 my-1 border-t border-border/70" />
-                <ThemeToggle compact={!sidebarOpen} />
-                {authenticated && (
-                  <>
-                    <div className="mx-2 my-1 border-t border-border/70" />
-                    {sidebarUtilityItem(<LogOut size={18} />, '退出登录', () => { void handleLogout(); }, {
-                      description: '清除当前会话并返回广场',
-                      accent: true,
-                    })}
-                  </>
-                )}
-              </div>
-            </div>
+          {sidebarOpen && <div className="studio-sidebar-note mx-5 mb-5 rounded-xl p-4"><Sparkles size={19} strokeWidth={1.5} /><p className="mt-3 text-sm font-semibold">故事，从一个想法开始</p><p className="mt-2 text-xs leading-5 text-text-secondary">让 AI 成为灵感搭档，<br />把脑海中的世界带到眼前。</p><button type="button" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-accent" onClick={() => goView('workspace')}>开启创作 <ChevronRight size={14} /></button></div>}
+          <div className="studio-account border-t border-border px-4 py-3">
+            {authenticated && user
+              ? <AccountMenu user={user} compact={!sidebarOpen} onProfile={() => goView('profile')} onSettings={() => goView('settings')} onLogout={handleLogout} />
+              : <><button type="button" onClick={() => requireLogin()} className="account-trigger" aria-label="登录账号"><LogIn size={20} />{sidebarOpen && <span className="account-identity"><strong>登录账号</strong><small>登录，留住每一次灵感</small></span>}</button><ThemeToggle compact={!sidebarOpen} /></>}
           </div>
         </aside>
       )}
@@ -443,28 +367,17 @@ export default function App() {
         className={'flex min-h-0 min-w-0 flex-1 animate-view-enter flex-col ' + (isMobile && view !== 'editor' && !isSquareStoryRoute ? 'pb-[calc(64px+env(safe-area-inset-bottom))]' : '')}
       >
         {isMobile && view !== 'editor' && !isSquareStoryRoute && (
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border glass-panel px-4">
+          <header className="studio-mobile-header flex h-14 shrink-0 items-center justify-between border-b border-border glass-panel px-4">
             <button type="button" onClick={() => goView('workspace')} className="flex items-center gap-2" aria-label="返回故事工作区">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white shadow-glow"><Sparkles size={16} /></span>
-              <span className="font-display text-base font-bold text-text-primary">ArtVerse</span>
+              <span className="studio-logo flex h-8 w-8 items-center justify-center rounded-lg"><BookOpenText size={18} /></span>
+              <span className="studio-wordmark text-lg font-bold text-text-primary">ArtVerse<span className="text-accent">.</span></span>
             </button>
             <div className="flex items-center gap-2">
-              <ThemeToggle compact />
-              <button
-                type="button"
-                onClick={() => authenticated ? goView('settings') : requireLogin()}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-bg-surface text-text-secondary"
-                aria-label={authenticated ? 'API 设置' : '登录'}
-              >
-                {authenticated ? <KeyRound size={17} /> : <LogIn size={17} />}
-              </button>
+              {authenticated && user
+                ? <AccountMenu user={user} compact mobile onProfile={() => goView('profile')} onSettings={() => goView('settings')} onLogout={handleLogout} />
+                : <><ThemeToggle compact /><button type="button" onClick={() => requireLogin()} className="profile-button secondary" aria-label="登录"><LogIn size={17} /></button></>}
             </div>
           </header>
-        )}
-        {navigationMessage && (
-          <div className="shrink-0 border-b border-warning/30 bg-warning/10 px-4 py-2 text-sm text-text-primary" role="status">
-            {navigationMessage}
-          </div>
         )}
         {view === 'square' && <SquarePage />}
         {view === 'workspace' && (
@@ -473,25 +386,27 @@ export default function App() {
           />
         )}
         {visibleRoute?.view === 'editor' && (
-          <WorkspaceEditor storyId={visibleRoute.storyId} onBack={leaveEditor} onLoadError={handleEditorLoadError} />
+          <WorkspaceEditor key={visibleRoute.storyId} storyId={visibleRoute.storyId} onBack={leaveEditor} onLoadError={handleEditorLoadError} />
         )}
         {view === 'imagegen' && <ImageGenPage />}
         {view === 'myworks' && <MyWorksPage />}
         {view === 'settings' && <ApiSettingsPage />}
+        {view === 'profile' && user && <ProfilePage user={user} onPasswordChanged={handlePasswordChanged} onBack={() => goView('workspace')} />}
+        {visibleRoute?.view === 'automations' && <AutomationCenterPage key={visibleRoute.automationId ?? 'all'} automationId={visibleRoute.automationId} runId={visibleRoute.runId} />}
       </div>
 
       {isMobile && view !== 'editor' && !isSquareStoryRoute && (
-        <nav className="absolute inset-x-0 bottom-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom))] border-t border-border glass-panel pb-[env(safe-area-inset-bottom)]" aria-label="主导航">
+        <nav className="studio-mobile-nav absolute inset-x-0 bottom-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom))] border-t border-border glass-panel pb-[env(safe-area-inset-bottom)]" aria-label="主导航">
           {mobileNavItem(<BookOpenText size={19} />, '故事', 'workspace')}
           {mobileNavItem(<Paintbrush size={19} />, '生图', 'imagegen')}
+          {mobileNavItem(<CalendarClock size={19} />, '任务', 'automations')}
           {mobileNavItem(<Globe size={19} />, '广场', 'square')}
           {mobileNavItem(<FileText size={19} />, '作品', 'myworks')}
         </nav>
       )}
 
-      <div id="overlay-root" className="app-overlay-layer" />
-
-      {loginOpen && (
+      {authenticated && <AutomationComposerHost />}
+      {isLoginOpen && (
         <div
           className="absolute inset-0 z-50 flex items-center justify-center bg-bg-overlay/95 p-4 backdrop-blur-md sm:p-6"
           onClick={cancelLogin}

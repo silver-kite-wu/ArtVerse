@@ -10,8 +10,7 @@ artverse:
     api-key: "test-key"
   image:
     api-key: "test-key"
-  minio:
-    access-key: "test-key"
-    secret-key: "test-secret"
+  oss:
+    enabled: false
   agent:
     outbox-worker-enabled: false

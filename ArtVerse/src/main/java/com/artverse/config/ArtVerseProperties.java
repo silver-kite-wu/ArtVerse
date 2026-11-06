@@ -21,7 +21,7 @@ public class ArtVerseProperties {
     private MangaGeneration mangaGeneration = new MangaGeneration();
     private DeepSeek deepseek = new DeepSeek();
     private Image image = new Image();
-    private Minio minio = new Minio();
+    private Oss oss = new Oss();
     private Coze coze = new Coze();
     private Flyway flyway = new Flyway();
     private RateLimit rateLimit = new RateLimit();
@@ -149,15 +149,21 @@ public class ArtVerseProperties {
     }
 
     @Data
-    public static class Minio {
-        private String endpoint = "http://localhost:9000";
+    public static class Oss {
+        private boolean enabled = true;
+        private String endpoint = "";
+        /** V4 签名必需；留空时从标准 endpoint（oss-cn-beijing.aliyuncs.com）推导 */
+        private String region = "";
         private String bucket = "artverse-manga";
-        private String region = "us-east-1";
+        private String privateBucket = "artverse-generation-private";
         private String accessKey = "";
         private String secretKey = "";
-        private boolean secure = false;
         private String publicBaseUrl = "";
         private int presignedUrlExpireSeconds = 3600;
+        private int connectTimeoutSeconds = 10;
+        private int readTimeoutSeconds = 30;
+        private int maxConnections = 128;
+        private boolean autoCreateBucket = true;
     }
 
     @Data

@@ -93,7 +93,7 @@ public class ImageRequestInputs {
                 byte[] bytes;
                 Path local=media.resolveRelativePath(key);
                 if(local!=null&&Files.exists(local)) { if(Files.size(local)>props.getUpload().getMaxImageBytes())throw new IOException();bytes=Files.readAllBytes(local); }
-                else try(var in=storage.get(props.getMinio().getBucket(),key)) { bytes=in.readNBytes((int)props.getUpload().getMaxImageBytes()+1); }
+                else try(var in=storage.get(storage.defaultBucket(),key)) { bytes=in.readNBytes((int)props.getUpload().getMaxImageBytes()+1); }
                 media.validateImageBytes(bytes,props.getUpload().getMaxImageBytes());values.add(Base64.getEncoder().encodeToString(bytes));
             } catch(Exception e) { throw new ImageRequestException("INVALID_INPUT","参考图片无法固定，请检查参考图"); }
         }

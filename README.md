@@ -46,7 +46,7 @@ ArtVerse is a full-stack creation platform for manga-oriented storytelling. It c
 - Two-phase storyboard generation with image-count tiers from 4 to 20
 - Reference-image-assisted generation, generation history query and deletion
 - Redis-backed guard layer with rate limiting (@RateLimit) and idempotency (single-flight)
-- Thumbnail processing and MinIO object storage
+- Thumbnail processing and Aliyun OSS object storage
 
 ### Accounts & Security
 
@@ -76,7 +76,7 @@ ArtVerse is a full-stack creation platform for manga-oriented storytelling. It c
 | Backend | Java 21, Spring Boot 3.3.5, Spring Web, Spring Data JPA, Flyway, Resilience4j |
 | Frontend | React 19, TypeScript 6, Vite 8, Tailwind CSS 4 |
 | Agent Runtime | AgentScope Harness 2.0, AG-UI protocol (SSE streaming) |
-| Data & Storage | PostgreSQL 16 (pgvector), Redis 7, MinIO |
+| Data & Storage | PostgreSQL 16 (pgvector), Redis 7, Aliyun OSS |
 | Auth & Security | Sa-Token (Redis integration), BCrypt, Spring Mail (direct SMTP) |
 
 ## Repository Layout
@@ -114,7 +114,7 @@ cd ArtVerse
 docker compose up -d
 ```
 
-This starts PostgreSQL 16 (pgvector), Redis 7, and MinIO from `ArtVerse/docker-compose.yml`.
+This starts PostgreSQL 16 (pgvector) and Redis 7 from `ArtVerse/docker-compose.yml`. Object storage is Aliyun OSS and is not started by Compose.
 
 ### 2. Configure environment variables
 
@@ -124,9 +124,12 @@ The backend loads a `.env` file from the repository root via `spring.config.impo
 # Database (matches docker-compose.yml)
 POSTGRES_PASSWORD=postgres
 
-# MinIO object storage
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
+# Aliyun OSS object storage (V4 signature; two private buckets are required)
+ARTVERSE_OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com
+ARTVERSE_OSS_BUCKET=artverse-manga
+ARTVERSE_OSS_PRIVATE_BUCKET=artverse-generation-private
+ARTVERSE_OSS_ACCESS_KEY=
+ARTVERSE_OSS_SECRET_KEY=
 
 # Encryption and auth-risk HMAC keys (required in production; distinct random values of at least 32 characters)
 ARTVERSE_SECRET_ENCRYPTION_KEY=
@@ -145,7 +148,7 @@ Notes:
 - Without `ARTVERSE_MAIL_HOST`, the mail feature is disabled automatically; everything else keeps working
 - API keys and base URLs for AI capabilities (LLM / image / workflow) are saved per user on the settings page and stored encrypted; the repository ships no operator credentials
 - `.env` is ignored by `.gitignore` and will not be committed
-- The current Compose file uses local development credentials and publishes PostgreSQL, Redis, and MinIO ports. Use it only in a trusted development environment; production deployments need separate strong credentials and network or firewall restrictions for dependency services.
+- The current Compose file uses local development credentials and publishes PostgreSQL and Redis ports. Use it only in a trusted development environment; production deployments need separate strong credentials and network or firewall restrictions for dependency services.
 - The `prod` or `production` Spring profile validates key length and separation, HTTPS cookies, enforced CSRF, and disabled Flyway checksum auto-repair; the application refuses to start if these requirements are not met.
 
 ### 3. Run the backend
@@ -184,7 +187,8 @@ The frontend dev server runs at `http://localhost:5173`, with CORS pre-configure
 | Variable | Description | Default |
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | PostgreSQL password | `postgres` |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO credentials | empty (storage disabled) |
+| `ARTVERSE_OSS_ENDPOINT` / `ARTVERSE_OSS_ACCESS_KEY` / `ARTVERSE_OSS_SECRET_KEY` | Aliyun OSS endpoint and credentials (`artverse.oss.enabled=true` requires all three) | empty (application refuses to start) |
+| `ARTVERSE_OSS_BUCKET` / `ARTVERSE_OSS_PRIVATE_BUCKET` | Public image bucket and private generation bucket | `artverse-manga` / `artverse-generation-private` |
 | `ARTVERSE_SECRET_ENCRYPTION_KEY` | Encryption key for user-stored credentials | empty |
 | `ARTVERSE_AUTH_RISK_HMAC_KEY` | HMAC key for login risk control | empty |
 | `ARTVERSE_MAIL_HOST` / `PORT` | SMTP server and port | empty / `465` |
@@ -220,7 +224,7 @@ npm run preview   # preview production build
 
 - Frontend build output is served by Nginx (SPA fallback `try_files ... /index.html`) and reverse-proxies `/api` and SSE endpoints (`proxy_buffering off`)
 - The backend is packaged as a JAR managed by systemd (`Restart=always`), with `.env` placed next to the JAR
-- Do not deploy the repository's local-development Compose configuration as-is; production needs separate credentials and network or firewall restrictions for PostgreSQL, Redis, and MinIO.
+- Do not deploy the repository's local-development Compose configuration as-is; production needs separate credentials and network or firewall restrictions for PostgreSQL and Redis, plus a properly secured OSS bucket policy.
 - Set `SPRING_PROFILES_ACTIVE=production` and configure distinct encryption and HMAC keys with at least 32 characters.
 - Set `ARTVERSE_AUTH_COOKIE_SECURE=true` behind HTTPS. Actuator requires an administrator login except for `/actuator/health`, and health details are hidden.
 - Flyway checksum mismatches stop startup and require migration-history review; deployed database checksums are not repaired automatically.

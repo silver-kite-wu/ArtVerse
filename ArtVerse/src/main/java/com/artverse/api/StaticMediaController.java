@@ -1,6 +1,5 @@
 package com.artverse.api;
 
-import com.artverse.config.ArtVerseProperties;
 import com.artverse.media.MediaStorageService;
 import com.artverse.storage.ObjectStorageService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,14 +25,13 @@ public class StaticMediaController {
 
     private final MediaStorageService mediaStorageService;
     private final ObjectStorageService objectStorageService;
-    private final ArtVerseProperties properties;
 
     @GetMapping("/**")
     public void serveImage(HttpServletRequest request, HttpServletResponse response) {
         String path = request.getRequestURI().substring("/static/manga/".length());
 
         // Strip _thumb/ prefix — the frontend uses /static/manga/_thumb/... URLs
-        // but MinIO object keys do not include the _thumb/ segment.
+        // but object keys do not include the _thumb/ segment.
         if (path.startsWith("_thumb/")) {
             path = path.substring("_thumb/".length());
         }
@@ -46,11 +44,11 @@ public class StaticMediaController {
             return;
         }
 
-        serveMinioObject(path, response);
+        serveStoredObject(path, response);
     }
 
-    private void serveMinioObject(String objectKey, HttpServletResponse response) {
-        var bucket = properties.getMinio().getBucket();
+    private void serveStoredObject(String objectKey, HttpServletResponse response) {
+        var bucket = objectStorageService.defaultBucket();
 
         // Try to set Content-Length so the browser can show download progress.
         objectStorageService.stat(bucket, objectKey)
@@ -65,9 +63,9 @@ public class StaticMediaController {
             in.transferTo(out);
         } catch (Exception e) {
             if (isConnectionReset(e)) {
-                log.debug("Client disconnected while serving MinIO object {}: {}", objectKey, e.getMessage());
+                log.debug("Client disconnected while serving object storage object {}: {}", objectKey, e.getMessage());
             } else {
-                log.warn("Failed to serve MinIO object {}: {}", objectKey, e.getMessage());
+                log.warn("Failed to serve object storage object {}: {}", objectKey, e.getMessage());
             }
             response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);

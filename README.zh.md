@@ -48,7 +48,7 @@ ArtVerse 是一个全栈 AI 漫画创作平台，目标是把"故事设定、章
 - 分镜两阶段生成，支持 4–20 张的出图数量档位
 - 参考图参与生成、生成历史查询与删除
 - Redis guard 层提供限流（@RateLimit）与幂等（single-flight）保护
-- 图片缩略处理与 MinIO 对象存储
+- 图片缩略处理与阿里云 OSS 对象存储
 
 ### 账号与安全
 
@@ -78,7 +78,7 @@ ArtVerse 是一个全栈 AI 漫画创作平台，目标是把"故事设定、章
 | 后端 | Java 21、Spring Boot 3.3.5、Spring Web、Spring Data JPA、Flyway、Resilience4j |
 | 前端 | React 19、TypeScript 6、Vite 8、Tailwind CSS 4 |
 | 智能体运行时 | AgentScope Harness 2.0、AG-UI 协议（SSE 流式） |
-| 数据与存储 | PostgreSQL 16（pgvector）、Redis 7、MinIO |
+| 数据与存储 | PostgreSQL 16（pgvector）、Redis 7、阿里云 OSS |
 | 认证与安全 | Sa-Token（Redis 集成）、BCrypt、Spring Mail（SMTP 直连） |
 
 ## 仓库结构
@@ -116,7 +116,7 @@ cd ArtVerse
 docker compose up -d
 ```
 
-会启动 PostgreSQL 16（pgvector）、Redis 7 和 MinIO（见 `ArtVerse/docker-compose.yml`）。
+会启动 PostgreSQL 16（pgvector）与 Redis 7（见 `ArtVerse/docker-compose.yml`）。对象存储使用阿里云 OSS，不由 Compose 启动。
 
 ### 2. 配置环境变量
 
@@ -126,9 +126,12 @@ docker compose up -d
 # 数据库（与 docker-compose.yml 保持一致）
 POSTGRES_PASSWORD=postgres
 
-# MinIO 对象存储
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
+# 阿里云 OSS 对象存储（V4 签名；需要两个私有 bucket）
+ARTVERSE_OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com
+ARTVERSE_OSS_BUCKET=artverse-manga
+ARTVERSE_OSS_PRIVATE_BUCKET=artverse-generation-private
+ARTVERSE_OSS_ACCESS_KEY=
+ARTVERSE_OSS_SECRET_KEY=
 
 # 敏感数据加密密钥与风控 HMAC 密钥（生产必填，至少 32 个字符且必须不同）
 ARTVERSE_SECRET_ENCRYPTION_KEY=
@@ -147,7 +150,7 @@ ARTVERSE_MAIL_FROM=you@qq.com
 - 未配置 `ARTVERSE_MAIL_HOST` 时邮件功能自动禁用，其余功能不受影响
 - AI 能力（LLM / 图像 / 工作流）的 API Key 与 Base URL 由每个用户在设置页自行保存，加密入库，仓库不内置任何运营方凭据
 - `.env` 已被 `.gitignore` 忽略，不会被提交
-- 当前 Compose 文件使用本地开发凭据并发布数据库、Redis 与 MinIO 端口，仅适用于可信的开发环境；生产环境应使用独立的强凭据，并通过部署网络或防火墙限制依赖服务访问
+- 当前 Compose 文件使用本地开发凭据并发布数据库与 Redis 端口，仅适用于可信的开发环境；生产环境应使用独立的强凭据，并通过部署网络或防火墙限制依赖服务访问
 - `prod` 或 `production` Spring Profile 会校验密钥长度与差异、HTTPS Cookie、CSRF 强制模式及 Flyway 校验和自动修复关闭；未满足时应用拒绝启动
 
 ### 3. 启动后端
@@ -186,7 +189,8 @@ npm run dev
 | 变量 | 说明 | 默认值 |
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | PostgreSQL 密码 | `postgres` |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO 凭据 | 空（未配置则存储不可用） |
+| `ARTVERSE_OSS_ENDPOINT` / `ARTVERSE_OSS_ACCESS_KEY` / `ARTVERSE_OSS_SECRET_KEY` | 阿里云 OSS 地址与凭据（`artverse.oss.enabled=true` 时三项必填） | 空（应用拒绝启动） |
+| `ARTVERSE_OSS_BUCKET` / `ARTVERSE_OSS_PRIVATE_BUCKET` | 图片 bucket 与生图私有 bucket | `artverse-manga` / `artverse-generation-private` |
 | `ARTVERSE_SECRET_ENCRYPTION_KEY` | 用户凭据字段加密密钥 | 空 |
 | `ARTVERSE_AUTH_RISK_HMAC_KEY` | 登录风控 HMAC 密钥 | 空 |
 | `ARTVERSE_MAIL_HOST` / `PORT` | SMTP 服务器与端口 | 空 / `465` |
@@ -222,7 +226,7 @@ npm run preview   # 预览生产构建
 
 - 前端 `npm run build` 产物由 Nginx 托管（SPA 路由 `try_files ... /index.html`），并反代 `/api` 与 SSE 接口（`proxy_buffering off`）
 - 后端打包为 JAR，由 systemd 托管（`Restart=always`），`.env` 与 JAR 同目录
-- 不要直接以仓库中的本地开发 Compose 配置部署生产服务；生产环境需使用独立凭据，并由部署网络或防火墙限制 PostgreSQL、Redis 和 MinIO 的访问
+- 不要直接以仓库中的本地开发 Compose 配置部署生产服务；生产环境需使用独立凭据，并由部署网络或防火墙限制 PostgreSQL、Redis 的访问，同时为 OSS bucket 配置最小权限策略
 - 生产环境设置 `SPRING_PROFILES_ACTIVE=production`，并配置独立且至少 32 字符的加密密钥与 HMAC 密钥
 - HTTPS 环境记得设置 `ARTVERSE_AUTH_COOKIE_SECURE=true`；Actuator 除 `/actuator/health` 外要求管理员登录，健康详情不对外显示
 - Flyway 校验和不一致会中止启动，应检查并修复迁移历史；不要自动修复已部署数据库的校验和

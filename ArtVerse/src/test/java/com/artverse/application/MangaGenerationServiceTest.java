@@ -58,7 +58,7 @@ class MangaGenerationServiceTest {
     void generatesImagesFromStoryboardScenes() throws Exception {
         ArtVerseProperties properties = new ArtVerseProperties();
         properties.getImage().setModel("gpt-image-2");
-        properties.getMinio().setBucket("artverse-test");
+        properties.getOss().setBucket("artverse-test");
         properties.getStorage().setRoot(Files.createTempDirectory("artverse-manga-test-").toString());
 
         Story story = new Story();
@@ -85,8 +85,7 @@ class MangaGenerationServiceTest {
                 mangaImageRepository,
                 chapterRepository,
                 new CapturingObjectStorage(),
-                new MediaStorageService(properties),
-                properties
+                new MediaStorageService(properties)
         );
 
         MangaGenerationService service = new MangaGenerationService(
@@ -112,7 +111,7 @@ class MangaGenerationServiceTest {
     void fallsBackToDefaultModelWhenImageConfigModelIsBlank() throws Exception {
         ArtVerseProperties properties = new ArtVerseProperties();
         properties.getImage().setModel("gpt-image-2");
-        properties.getMinio().setBucket("artverse-test");
+        properties.getOss().setBucket("artverse-test");
         properties.getStorage().setRoot(Files.createTempDirectory("artverse-manga-test-").toString());
 
         Story story = new Story();
@@ -139,8 +138,7 @@ class MangaGenerationServiceTest {
                 mangaImageRepository,
                 chapterRepository,
                 new CapturingObjectStorage(),
-                new MediaStorageService(properties),
-                properties
+                new MediaStorageService(properties)
         );
 
         MangaGenerationService service = new MangaGenerationService(
@@ -167,7 +165,7 @@ class MangaGenerationServiceTest {
     void preloadsAssetGroupCharactersBeforeGenerating() throws Exception {
         ArtVerseProperties properties = new ArtVerseProperties();
         properties.getImage().setModel("gpt-image-2");
-        properties.getMinio().setBucket("artverse-test");
+        properties.getOss().setBucket("artverse-test");
         properties.getStorage().setRoot(Files.createTempDirectory("artverse-manga-test-").toString());
 
         Story story = new Story();
@@ -208,8 +206,7 @@ class MangaGenerationServiceTest {
                 mangaImageRepository,
                 chapterRepository,
                 new CapturingObjectStorage(),
-                new MediaStorageService(properties),
-                properties
+                new MediaStorageService(properties)
         );
 
         MangaGenerationService service = new MangaGenerationService(
@@ -236,7 +233,7 @@ class MangaGenerationServiceTest {
     void wrapsImageGenerationClientFailure() throws Exception {
         ArtVerseProperties properties = new ArtVerseProperties();
         properties.getImage().setModel("gpt-image-2");
-        properties.getMinio().setBucket("artverse-test");
+        properties.getOss().setBucket("artverse-test");
         properties.getStorage().setRoot(Files.createTempDirectory("artverse-manga-test-").toString());
 
         Story story = new Story();
@@ -262,8 +259,7 @@ class MangaGenerationServiceTest {
                 mangaImageRepository,
                 chapterRepository,
                 new CapturingObjectStorage(),
-                new MediaStorageService(properties),
-                properties
+                new MediaStorageService(properties)
         );
 
         MangaGenerationService service = new MangaGenerationService(
@@ -308,6 +304,16 @@ class MangaGenerationServiceTest {
 
     private static class CapturingObjectStorage implements ObjectStorageService {
         @Override
+        public String defaultBucket() {
+            return "artverse-test";
+        }
+
+        @Override
+        public String privateBucket() {
+            return "artverse-test-private";
+        }
+
+        @Override
         public StoredObject put(String objectKey, InputStream content, long sizeBytes, String contentType) {
             try {
                 assertThat(content.readAllBytes()).hasSize((int) sizeBytes);
@@ -315,6 +321,11 @@ class MangaGenerationServiceTest {
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
+        }
+
+        @Override
+        public Optional<StoredObject> putIfAbsent(String bucket, String objectKey, InputStream content, long sizeBytes, String contentType, java.util.Map<String, String> metadata) {
+            throw new UnsupportedOperationException();
         }
 
         @Override
@@ -329,6 +340,11 @@ class MangaGenerationServiceTest {
         @Override
         public InputStream get(String bucket, String objectKey) {
             return new ByteArrayInputStream(new byte[0]);
+        }
+
+        @Override
+        public Optional<InputStream> openIfPresent(String bucket, String objectKey) {
+            return Optional.empty();
         }
 
         @Override

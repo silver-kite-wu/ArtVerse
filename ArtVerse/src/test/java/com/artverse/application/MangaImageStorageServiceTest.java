@@ -25,7 +25,7 @@ class MangaImageStorageServiceTest {
     private final ObjectStorageService storage = mock(ObjectStorageService.class);
     private final ArtVerseProperties properties = new ArtVerseProperties();
     private final MangaImageStorageService service = new MangaImageStorageService(
-            images, chapters, storage, new MediaStorageService(properties), properties);
+            images, chapters, storage, new MediaStorageService(properties));
 
     @Test
     void savesJpegStreamAndPersistsActualMetadata() {

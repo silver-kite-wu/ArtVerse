@@ -69,7 +69,7 @@ class MangaAgentServiceTest {
     }
 
     @Test
-    void synchronousHitlPersistsWaitingRun() {
+    void synchronousHitlPropagatesTheOrchestratorsPersistedWaitWithoutAnUnclaimedCallback() {
         Fixture fixture = fixture();
         UUID requestId = fixture.waitingRun.getRequestId();
         AgentUserInputRequest request = new AgentUserInputRequest(
@@ -83,7 +83,7 @@ class MangaAgentServiceTest {
                 7L, "rewrite", requestId, fixture.user, TEST_LLM_CONFIG))
                 .isInstanceOf(AgentUserInputRequiredException.class);
 
-        verify(fixture.runService).markWaiting(fixture.conversation, requestId, request);
+        org.mockito.Mockito.verifyNoInteractions(fixture.runService);
     }
 
     @Test
@@ -153,7 +153,7 @@ class MangaAgentServiceTest {
 
         MangaAgentService service = new MangaAgentService(
                 conversationService, runService, eventPublisher, orchestrator,
-                toolStatus, accessService, props, gate, mock(AgentScopeHarnessAgentGateway.class), rejectingExecutor,
+                toolStatus, accessService, props, gate, mock(AgentScopeHarnessAgentGateway.class), mock(StoryboardArtifactService.class), rejectingExecutor,
                 mock(MangaRoutingMetrics.class));
 
         MangaAgentRunEventPublisher.RunEventSink sink = mock(MangaAgentRunEventPublisher.RunEventSink.class);
@@ -202,6 +202,7 @@ class MangaAgentServiceTest {
                 properties,
                 concurrencyGate,
                 mock(AgentScopeHarnessAgentGateway.class),
+                mock(StoryboardArtifactService.class),
                 Executors.newSingleThreadExecutor(),
                 mock(MangaRoutingMetrics.class)
         );

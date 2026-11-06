@@ -1,5 +1,6 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Search, Sparkles } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import {
   API_KEY_CHANGE_EVENT,
   getProviderModelSelections,
@@ -60,6 +61,10 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
+  const listId = `${menuId}-list`;
 
   useEffect(() => {
     const sync = () => setModels(getProviderModelSelections(capability));
@@ -68,25 +73,24 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
     return () => window.removeEventListener(API_KEY_CHANGE_EVENT, sync);
   }, [capability]);
 
-  const close = useCallback(() => {
+  const close = useCallback((restoreFocus = false) => {
     setOpen(false);
     setSearch('');
     setFocusedIndex(-1);
+    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) close();
+      if (!containerRef.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) close();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open, close]);
 
   useEffect(() => {
-    if (!open) return;
-    const timer = setTimeout(() => searchInputRef.current?.focus(), 80);
-    return () => clearTimeout(timer);
+    if (open) searchInputRef.current?.focus({ preventScroll: true });
   }, [open]);
 
   const filteredModels = useMemo(() => {
@@ -98,6 +102,63 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
       return detectProvider(option.providerPresetId).label.toLowerCase().includes(q);
     });
   }, [models, search]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const menu = menuRef.current;
+    const trigger = triggerRef.current;
+    if (!menu || !trigger) return;
+    const composer = trigger.closest('.ai-composer');
+    const positionMenu = () => {
+      const anchor = trigger.getBoundingClientRect();
+      const composerBounds = composer?.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const viewportLeft = viewport?.offsetLeft ?? 0;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportWidth = viewport?.width ?? window.innerWidth;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const padding = 12;
+      const gap = 8;
+      const leftEdge = viewportLeft + padding;
+      const rightEdge = viewportLeft + viewportWidth - padding;
+      const topEdge = viewportTop + padding;
+      const bottomEdge = viewportTop + viewportHeight - padding;
+      if (anchor.bottom < topEdge || anchor.top > bottomEdge || anchor.right < leftEdge || anchor.left > rightEdge) {
+        close();
+        return;
+      }
+      const width = Math.max(0, Math.min(282, (composerBounds?.width ?? 302) - 20, rightEdge - leftEdge));
+      const above = Math.max(0, anchor.top - topEdge - gap);
+      const below = Math.max(0, bottomEdge - anchor.bottom - gap);
+      const openAbove = above >= Math.min(260, below);
+      menu.style.width = `${width}px`;
+      menu.style.maxHeight = `${openAbove ? above : below}px`;
+      // Anchor to the button itself, including after the panel is resized.
+      // The composer supplies only the width limit, never the horizontal origin.
+      menu.style.left = `${Math.max(leftEdge, Math.min(anchor.right - width, rightEdge - width))}px`;
+      menu.style.top = `${openAbove ? Math.max(topEdge, anchor.top - gap - menu.getBoundingClientRect().height) : anchor.bottom + gap}px`;
+      menu.dataset.placement = openAbove ? 'top-end' : 'bottom-end';
+    };
+    positionMenu();
+    const observer = new ResizeObserver(positionMenu);
+    observer.observe(menu);
+    observer.observe(trigger);
+    if (composer) observer.observe(composer);
+    const onScroll = (event: Event) => {
+      if (!menu.contains(event.target as Node)) positionMenu();
+    };
+    window.addEventListener('resize', positionMenu);
+    window.addEventListener('scroll', onScroll, true);
+    window.visualViewport?.addEventListener('resize', positionMenu);
+    window.visualViewport?.addEventListener('scroll', positionMenu);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', positionMenu);
+      window.removeEventListener('scroll', onScroll, true);
+      window.visualViewport?.removeEventListener('resize', positionMenu);
+      window.visualViewport?.removeEventListener('scroll', positionMenu);
+    };
+  }, [open, close]);
 
   const groupedModels = useMemo<GroupedModels[]>(() => {
     const groups: Record<string, GroupedModels> = {};
@@ -126,6 +187,12 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
     setFocusedIndex(-1);
   }, []);
 
+  useEffect(() => {
+    if (open && focusedIndex >= 0) {
+      document.getElementById(`${menuId}-option-${focusedIndex}`)?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [open, focusedIndex, menuId]);
+
   const selectedOption = useMemo(
     () => models.find((option) => option.value === selectedModel) || null,
     [models, selectedModel],
@@ -135,107 +202,101 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
     [selectedOption?.providerPresetId, selectedModel],
   );
   const providerLabel = selectedOption?.providerLabel || selectedProvider.label;
-  const triggerLabel = selectedOption ? `${providerLabel} · ${selectedOption.model}` : null;
+  const triggerLabel = selectedOption?.model || null;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!open) return;
+    if (!open || e.nativeEvent.isComposing || e.keyCode === 229) return;
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
+        e.stopPropagation();
+        if (!flatModelList.length) break;
         setFocusedIndex((prev) => (prev + 1 < flatModelList.length ? prev + 1 : 0));
         break;
       case 'ArrowUp':
         e.preventDefault();
+        e.stopPropagation();
+        if (!flatModelList.length) break;
         setFocusedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : flatModelList.length - 1));
         break;
       case 'Enter':
         e.preventDefault();
-        if (focusedIndex >= 0 && focusedIndex < flatModelList.length) {
-          onSelect(flatModelList[focusedIndex]);
-          close();
+        e.stopPropagation();
+        if (flatModelList.length === 1 || (focusedIndex >= 0 && focusedIndex < flatModelList.length)) {
+          onSelect(flatModelList[flatModelList.length === 1 ? 0 : focusedIndex]);
+          close(true);
         }
         break;
       case 'Escape':
         e.preventDefault();
-        close();
+        e.stopPropagation();
+        close(true);
+        break;
+      case 'Tab':
+        close(true);
         break;
     }
   };
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      close();
-      return;
-    }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      handleKeyDown(e);
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (flatModelList.length === 1) {
-        onSelect(flatModelList[0]);
-        close();
-      } else if (focusedIndex >= 0 && focusedIndex < flatModelList.length) {
-        onSelect(flatModelList[focusedIndex]);
-        close();
-      }
-    }
-  };
-
   return (
-    <div ref={containerRef} className="relative inline-flex items-center" onKeyDown={handleKeyDown}>
+    <div ref={containerRef} className="model-switcher" onKeyDown={handleKeyDown}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => {
-          if (!disabled) setOpen((prev) => !prev);
+          if (!disabled) {
+            if (open) close();
+            else setOpen(true);
+          }
         }}
-        className={
-          'inline-flex h-7 max-w-[180px] items-center gap-1.5 rounded-lg border px-2 text-sm font-medium transition-all duration-200 sm:max-w-[240px] ' +
-          (open
-            ? 'border-accent/40 bg-accent-soft text-accent shadow-sm'
-            : 'border-border bg-bg-surface/80 text-text-secondary hover:border-accent/30 hover:bg-bg-base hover:text-text-primary') +
-          (disabled ? ' cursor-not-allowed opacity-50' : ' cursor-pointer')
-        }
+        className="model-switcher__trigger"
+        aria-label={triggerLabel ? `选择模型：${triggerLabel}` : '选择模型'}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={open ? listId : undefined}
         title={selectedModel ? `${selectedOption?.model || selectedModel}\n${providerLabel}` : '选择模型'}
       >
         {triggerLabel ? (
           <>
-            <span className="text-[0.75rem] leading-none" aria-hidden>{selectedProvider.emoji}</span>
-            <span className="truncate text-[0.75rem]">{triggerLabel}</span>
+            <span className="model-switcher__label">{triggerLabel}</span>
           </>
         ) : (
           <>
             <Sparkles size={12} className="text-text-muted" />
-            <span className="text-[0.75rem] text-text-muted">选择模型</span>
+            <span className="model-switcher__label">选择模型</span>
           </>
         )}
         <ChevronDown
-          size={12}
-          className={`shrink-0 text-text-muted transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          size={14}
+          className="model-switcher__chevron"
         />
       </button>
 
-      {open && (
-        <div className="absolute right-0 bottom-[calc(100%+6px)] z-30 flex w-[min(300px,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-border/80 bg-bg-raised animate-fade-in">
-          <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2.5">
+      {open && createPortal(
+        <div ref={menuRef} id={menuId} className="model-switcher__menu">
+          <div className="model-switcher__heading"><span>选择模型</span><span>{models.length} 个可用</span></div>
+          <div className="model-switcher__search">
             <Search size={14} className="shrink-0 text-text-muted" />
             <input
               ref={searchInputRef}
               type="text"
               value={search}
               onChange={(e) => updateSearch(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
+              role="combobox"
+              aria-label="搜索模型"
+              aria-expanded="true"
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={focusedIndex >= 0 && focusedIndex < flatModelList.length ? `${menuId}-option-${focusedIndex}` : undefined}
               placeholder="搜索模型..."
-              className="min-w-0 flex-1 bg-transparent text-[0.8125rem] text-text-primary placeholder:text-text-muted/60 outline-none"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => updateSearch('')}
-                className="rounded p-0.5 text-text-muted hover:text-text-secondary transition-colors"
+                className="model-switcher__clear"
                 aria-label="清除搜索"
               >
                 <span className="text-[0.6875rem]">×</span>
@@ -243,9 +304,9 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
             )}
           </div>
 
-          <div className="max-h-[280px] overflow-y-auto overscroll-contain p-2">
+          <div id={listId} role="listbox" aria-label="可用模型" className="model-switcher__list">
             {groupedModels.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+              <div className="model-switcher__empty" role="presentation">
                 <Search size={20} className="text-text-muted/30" />
                 <p className="text-[0.8125rem] text-text-muted">
                   {search ? '没有匹配的模型' : '暂无可选模型'}
@@ -262,18 +323,12 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
               </div>
             ) : (
               groupedModels.map((group) => (
-                <div key={group.id} className="mb-0.5 last:mb-0">
-                  <div className="flex items-center gap-1.5 px-2 py-1.5">
-                    <span
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-lg  text-[0.6875rem] leading-none ${group.provider.color}`}
-                      aria-hidden
-                    >
-                      {group.provider.emoji}
-                    </span>
-                    <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-text-muted/80">
+                <div key={group.id} className="model-switcher__group" role="group" aria-label={group.provider.label}>
+                  <div className="model-switcher__provider" aria-hidden="true">
+                    <span className="model-switcher__provider-name">
                       {group.provider.label}
                     </span>
-                    <span className="text-[0.625rem] text-text-muted/50">{group.models.length}</span>
+                    <span>{group.models.length}</span>
                   </div>
                   {group.models.map((option) => {
                     const selected = option.value === selectedModel;
@@ -283,22 +338,18 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
                       <button
                         key={option.value}
                         type="button"
+                        id={`${menuId}-option-${flatIdx}`}
+                        role="option"
+                        aria-selected={selected}
+                        tabIndex={-1}
                         onClick={() => {
                           onSelect(option.value);
-                          close();
+                          close(true);
                         }}
-                        onMouseEnter={() => setFocusedIndex(flatIdx)}
-                        className={
-                          'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors duration-100 ' +
-                          (selected
-                            ? 'bg-accent-soft text-accent'
-                            : focused
-                              ? 'bg-bg-surface text-text-primary'
-                              : 'text-text-primary hover:bg-bg-surface')
-                        }
+                        className={`model-switcher__option${focused ? ' is-focused' : ''}`}
                       >
-                        <span className="truncate text-[0.8125rem] font-medium">{option.model}</span>
-                        {selected && <Check size={14} className="ml-auto shrink-0 text-accent" />}
+                        <span className="model-switcher__option-label" title={option.model}>{option.model}{selected && <small>当前使用</small>}</span>
+                        {selected && <Check size={14} />}
                       </button>
                     );
                   })}
@@ -306,7 +357,7 @@ export default function ModelSwitcher({ capability, selectedModel, onSelect, dis
               ))
             )}
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );

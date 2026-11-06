@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
-import { useReducer } from 'react';
-import { Clock3, History, LoaderCircle, MessageSquarePlus, Send, Square, Trash2 } from 'lucide-react';
+import { Fragment, useReducer } from 'react';
+import { ArrowUp, Clock3, History, LoaderCircle, MessageSquarePlus, Square, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import {
   API_KEY_CHANGE_EVENT,
@@ -12,24 +12,34 @@ import {
   getPrimaryProviderModel,
   getProviderModelOptions,
   getStoryChatRunArtifacts,
+  getStoryChatRun,
   listAiConversations,
   listStoryChatMessages,
   renameAiConversation,
   replayStoryChatRunEvents,
   decideNovelDraft,
   runStoryChatAgUiStream,
+  resumeStoryChatAgUiStream,
+  listStoryChatRuns,
   type AiConversationSummary,
   type ArtVerseAgUiEvent,
   type Chapter,
   type ChatMessage,
   type MangaAgentRunEvent,
+  type AgentUserInputRequest,
+  type AgentAnswer,
 } from '../api';
 import MarkdownRenderer from './MarkdownRenderer';
 import ModelSwitcher from './ModelSwitcher';
 import { randomUUID } from '../utils/browserSecurity';
 import InlineConversationTitle from './InlineConversationTitle';
 import NovelDraftReview, { type NovelReviewDraft } from './NovelDraftReview';
+import AgentQuestion from './AgentQuestion';
 import { initialStoryChatTask, isStoryChatBusy, parseStoryChatPhase, storyChatPhaseLabel, storyChatTaskReducer } from './storyChatState';
+import StoryChatActivity from './StoryChatActivity';
+import AutomationCommandProposals from './automations/AutomationCommandProposals';
+import CreativeProposals from './CreativeProposals';
+import { applyStoryChatActivity, restoreStoryChatActivity, type StoryChatActivities } from './storyChatActivityState';
 
 type DisplayMessage = ChatMessage & { local_id?: string };
 
@@ -60,6 +70,10 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   const preparing = task.phase === 'SAVING';
   const streaming = busy && !preparing;
   const [streamContent, setStreamContent] = useState('');
+  const streamContentRef = useRef('');
+  const updateStream = (text: string) => { streamContentRef.current = text; setStreamContent(text); };
+  const [activities, setActivities] = useState<StoryChatActivities>({});
+  const [continuation, setContinuation] = useState<{ requestId: string; artifactId: string } | null>(null);
   const [taskNotice, setTaskNotice] = useState('');
   const [selectedLlmModel, setSelectedLlmModel] = useState(() => getPrimaryProviderModel('llm'));
   const [conversation, setConversation] = useState<AiConversationSummary | null>(null);
@@ -68,6 +82,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   const [conversationLoading, setConversationLoading] = useState(() => !!chapter);
   const [conversationError, setConversationError] = useState('');
   const [pendingDraft, setPendingDraft] = useState<PendingDraftState | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<{ requestId: string; request: AgentUserInputRequest } | null>(null);
   const initialConversationsRef = useRef<Promise<AiConversationSummary[]> | null>(null);
   const conversationMutationRef = useRef(false);
 
@@ -84,6 +99,8 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   const conversationRef = useRef<string | null>(null);
   const lifecycleRef = useRef(0);
   const attemptRef = useRef(0);
+  const recoveringRef = useRef(false);
+  const questionLoadRef = useRef(0);
   conversationRef.current = conversation?.conversationId ?? null;
 
   const chapterId = chapter?.id;
@@ -92,6 +109,23 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   const titleConversationId = conversation?.conversationId;
   const titleSource = conversation?.titleSource;
   const titleState = conversation?.titleState;
+
+  useEffect(() => {
+    const selected = conversation?.conversationId;
+    if (!chapterId || !selected) return;
+    let current = true;
+    setActivities({});
+    setContinuation(null);
+    setPendingQuestion(null);
+    void listStoryChatRuns(chapterId, selected).then(runs => {
+      if (!current || conversationRef.current !== selected) return;
+      setActivities(previous => runs.reduce(restoreStoryChatActivity, previous));
+      const pending = runs.find(run => (run.status === 'FAILED' || run.status === 'WAITING_USER') && run.runAttributes?.review_result);
+      const receipt = pending?.runAttributes?.review_result as { artifact_id?: string } | undefined;
+      if (pending && receipt?.artifact_id) setContinuation({ requestId: pending.requestId, artifactId: receipt.artifact_id });
+    }).catch(() => { /* Sending remains available if optional history recovery fails. */ });
+    return () => { current = false; };
+  }, [chapterId, conversation?.conversationId]);
 
   useEffect(() => {
     if (!chapterId || !titleConversationId || titleSource === 'USER'
@@ -177,7 +211,9 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
         if (!current || generation !== lifecycleRef.current || requestRef.current || !run) return;
         const requestId = run.requestId ?? run.request_id;
         if (!requestId) return;
+        setActivities(previous => restoreStoryChatActivity(previous, run));
         if (run.status === 'WAITING_USER') {
+          if (run.runAttributes?.review_result) return;
           await loadDraftCard(requestId, conversation.conversationId);
           return;
         }
@@ -186,9 +222,10 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
           streamingChapterIdRef.current = chapter.id;
           dispatchTask({ type: 'start', requestId, phase: parseStoryChatPhase(run.currentPhase) });
           dispatchTask({ type: 'accept', requestId });
-          abortRef.current = replayStoryChatRunEvents(chapter.id, conversation.conversationId, requestId, 0,
+          const cursor = Math.max(0, ...run.events.map(event => event.eventId || 0));
+          abortRef.current = replayStoryChatRunEvents(chapter.id, conversation.conversationId, requestId, cursor,
             event => handleRunStreamEvent(event, requestId, conversation.conversationId, {
-              append() {}, finalText() { return ''; },
+              append(delta) { updateStream(streamContentRef.current + delta); }, finalText() { return streamContentRef.current; },
             }));
         }
       })
@@ -200,7 +237,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
 
   useEffect(() => {
     if (active && !userScrolledUp.current) messagesEndRef.current?.scrollIntoView({ behavior: streaming ? 'instant' : 'smooth', block: 'nearest' });
-  }, [active, messages, streamContent, streaming, pendingDraft, preparing, taskNotice]);
+  }, [active, messages, streamContent, streaming, pendingDraft, pendingQuestion, preparing, taskNotice, activities]);
   useEffect(() => { userScrolledUp.current = false; }, [messages.length]);
   useEffect(() => {
     const element = scrollContainerRef.current;
@@ -225,11 +262,23 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
 
   async function loadDraftCard(requestId: string, conversationId: string) {
     if (!chapter) return;
-    const artifacts = await getStoryChatRunArtifacts(chapter.id, conversationId, requestId);
-    if (!mountedRef.current || conversationRef.current !== conversationId) return;
+    const generation = lifecycleRef.current;
+    const load = ++questionLoadRef.current;
+    const [artifacts, run] = await Promise.all([
+      getStoryChatRunArtifacts(chapter.id, conversationId, requestId),
+      getStoryChatRun(chapter.id, conversationId, requestId),
+    ]);
+    if (!mountedRef.current || generation !== lifecycleRef.current || load !== questionLoadRef.current
+      || conversationRef.current !== conversationId) return;
     const draft = [...artifacts].reverse().find((item) =>
       item.type === 'NOVEL_CONTENT_DRAFT' && (item.status === 'VALIDATED' || item.status === 'DRAFT'));
-    if (!draft) return;
+    if (!draft) {
+      setPendingDraft(null);
+      setPendingQuestion(run.status === 'WAITING_USER' && run.userInputRequest?.purpose === 'USER_QUESTION'
+        ? { requestId, request: run.userInputRequest } : null);
+      return;
+    }
+    setPendingQuestion(null);
     const payload = draft.payload || {};
     const content = String(payload.content || '');
     setPendingDraft({
@@ -358,15 +407,19 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
     requestRef.current = null;
     abortRef.current = null;
     streamingChapterIdRef.current = null;
-    setStreamContent('');
+    updateStream('');
+    setContinuation(null);
+    setPendingQuestion(null);
+    setTaskNotice('');
     const decision = decisionRef.current;
     decisionRef.current = null;
     if (decision) setPendingDraft(null);
     if (reply.trim()) {
-      setMessages((previous) => [...previous, {
+      setMessages((previous) => [...previous.filter(item => !(item.role === 'assistant' && item.request_id === requestId)), {
         local_id: `assistant-${Date.now()}`,
         id: Date.now(),
         role: 'assistant',
+        request_id: requestId,
         content: reply.trim(),
         completion_status: 'complete',
         created_at: new Date().toISOString(),
@@ -376,9 +429,15 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
       if (decision === 'confirm' && chapter) await onChapterRefresh?.(chapter.id);
       else await onMessageSent?.();
       if (chapter && finishedConversation) {
-        const history = await listStoryChatMessages(chapter.id, finishedConversation);
+        const [history, runs] = await Promise.all([
+          listStoryChatMessages(chapter.id, finishedConversation),
+          listStoryChatRuns(chapter.id, finishedConversation),
+        ]);
         if (mountedRef.current && generation === lifecycleRef.current
-            && conversationRef.current === finishedConversation && attempt === attemptRef.current) setMessages(history);
+            && conversationRef.current === finishedConversation && attempt === attemptRef.current) {
+          setMessages(history);
+          setActivities(previous => runs.reduce(restoreStoryChatActivity, previous));
+        }
       }
       await refreshConversationList().catch(() => undefined);
     } catch (error) {
@@ -393,15 +452,25 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   const failStream = (detail: string) => {
     const requestId = requestRef.current;
     if (!requestId) return;
+    const partial = streamContentRef.current;
+    if (partial.trim()) setMessages(previous => [...previous.filter(item => !(item.role === 'assistant' && item.request_id === requestId)), {
+      id: Date.now(), local_id: `partial-${requestId}`, request_id: requestId, role: 'assistant',
+      content: partial, completion_status: 'partial', created_at: new Date().toISOString(),
+    }]);
+    setActivities(previous => applyStoryChatActivity(previous, requestId, { type: 'error', data: { detail } }));
     dispatchTask({ type: 'phase', requestId, phase: 'FAILED' });
     requestRef.current = null;
     if (decisionRef.current) setPendingDraft(current => current ? { ...current, busy: false, error: detail } : current);
     showTaskNotice(detail);
     decisionRef.current = null;
     onApplyingChange?.(false);
-    setStreamContent('');
+    updateStream('');
     abortRef.current = null;
     streamingChapterIdRef.current = null;
+    const selected = conversationRef.current;
+    if (selected && pendingQuestion?.requestId === requestId) {
+      void loadDraftCard(requestId, selected).catch(() => { /* Retain the original input until status can be verified. */ });
+    }
   };
 
   const handleStoryChatEvent = (
@@ -460,7 +529,12 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
       if (event.outcome?.type === 'interrupt' || interrupts.length > 0) {
         abortRef.current = null;
         streamingChapterIdRef.current = null;
-        setStreamContent('');
+        const partial = stream.finalText();
+        if (partial.trim()) setMessages(previous => [...previous.filter(item => !(item.role === 'assistant' && item.request_id === requestId)), {
+          id: Date.now(), local_id: `partial-${requestId}`, request_id: requestId, role: 'assistant',
+          content: partial, completion_status: 'partial', created_at: new Date().toISOString(),
+        }]);
+        updateStream('');
         dispatchTask({ type: 'phase', requestId, phase: 'WAITING_USER' });
         requestRef.current = null;
         setConversationLoading(true);
@@ -488,6 +562,42 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
     stream: { append: (delta: string) => void; finalText: () => string },
   ) => {
     if (!mountedRef.current || requestRef.current !== requestId || conversationRef.current !== conversationId) return;
+    if (event.type === 'error' && event.data.transport && chapter) {
+      if (recoveringRef.current) return;
+      recoveringRef.current = true;
+      const attempt = attemptRef.current;
+      showTaskNotice('回复连接中断，正在核对服务端任务状态…');
+      const inspect = async () => {
+        for (let retry = 0; ; retry++) {
+          try { return await getStoryChatRun(chapter.id, conversationId, requestId); }
+          catch (error) {
+            if (retry >= 2 || !mountedRef.current || requestRef.current !== requestId || attempt !== attemptRef.current) throw error;
+            await new Promise(resolve => window.setTimeout(resolve, 1000));
+          }
+        }
+      };
+      void inspect().then(run => {
+        if (!mountedRef.current || requestRef.current !== requestId || conversationRef.current !== conversationId
+          || attempt !== attemptRef.current) return;
+        setActivities(previous => restoreStoryChatActivity(previous, run));
+        if (run.status === 'SUCCEEDED') { showTaskNotice('任务已完成，已恢复执行结果。'); void finishStream(run.finalReply || ''); }
+        else if (run.status === 'RUNNING') {
+          showTaskNotice('服务端仍在执行，已重新连接执行记录。');
+          abortRef.current?.abort();
+          const cursor = Math.max(0, ...run.events.map(item => item.eventId || 0));
+          abortRef.current = replayStoryChatRunEvents(chapter.id, conversationId, requestId, cursor,
+            next => handleRunStreamEvent(next, requestId, conversationId, stream));
+        } else if (run.status === 'WAITING_USER') {
+          handleStoryChatEvent({ type: 'STATE_SNAPSHOT', snapshot: { status: 'WAITING_USER' } } as ArtVerseAgUiEvent,
+            requestId, conversationId, stream);
+        } else failStream(run.errorMessage || '任务已结束，请查看执行记录。');
+      }).catch(() => {
+        if (mountedRef.current && requestRef.current === requestId && attempt === attemptRef.current)
+          failStream('连接中断，暂时无法核实任务结果。已有内容已保留，请刷新查看状态。');
+      }).finally(() => { recoveringRef.current = false; });
+      return;
+    }
+    setActivities(previous => applyStoryChatActivity(previous, requestId, event));
     if (event.type === 'error') {
       const detail = event.data?.detail || event.data?.error || '小说对话执行失败。';
       failStream(detail);
@@ -497,7 +607,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !chapter || !conversation || busy || conversationLoading || sendingRef.current || requestRef.current || pendingDraft) return;
+    if (!input.trim() || !chapter || !conversation || busy || conversationLoading || sendingRef.current || requestRef.current || pendingDraft || pendingQuestion) return;
     const text = input.trim();
     const requestId = randomUUID();
     const generation = lifecycleRef.current;
@@ -522,6 +632,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
       local_id: `local-user-${Date.now()}`,
       id: Date.now(),
       role: 'user',
+      request_id: requestId,
       content: text,
       completion_status: 'complete',
       created_at: new Date().toISOString(),
@@ -530,7 +641,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     dispatchTask({ type: 'phase', requestId, phase: 'PREPARING_CONTEXT' });
-    setStreamContent('');
+    updateStream('');
     setPendingDraft(null);
     let accumulated = '';
     streamingChapterIdRef.current = chapter.id;
@@ -546,7 +657,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
         text,
         requestId,
         (event: MangaAgentRunEvent) => attempt === attemptRef.current && handleRunStreamEvent(event, requestId, activeConversation.conversationId, {
-          append(delta) { accumulated += delta; setStreamContent(accumulated); },
+          append(delta) { accumulated += delta; updateStream(accumulated); },
           finalText() { return accumulated; },
         }),
         selectedLlmModel,
@@ -602,16 +713,73 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
     setTaskNotice('');
     try {
       const result = await decideNovelDraft(chapter.id, conversation.conversationId, pendingDraft.requestId, pendingDraft.artifactId, {
-        decision, content, base_version: pendingDraft.baseVersion, expected_content_hash: pendingDraft.contentHash,
+        decision, content, base_version: pendingDraft.baseVersion, expected_content_hash: pendingDraft.contentHash, continue_agent: true,
       });
       if (!mountedRef.current) return;
+      const reviewed = { requestId: pendingDraft.requestId, artifactId: pendingDraft.artifactId };
+      setActivities(previous => applyStoryChatActivity(previous, reviewed.requestId, { type: 'run_event', data: {
+        type: 'review_saved', phase: 'review', status: 'succeeded', createdAt: new Date().toISOString(),
+        label: decision === 'confirm' ? '人工审核已确认，正文已保存' : '人工审核已放弃，正文未改变',
+      } }));
       setPendingDraft(null);
+      setContinuation(reviewed);
       showTaskNotice(decision === 'discard' ? '已放弃本次修改，正文未改变。' : result.changed ? '已保存为新版本，可在版本历史中恢复。' : '正文已是确认的版本。');
-      if (decision === 'confirm') await onChapterRefresh?.(chapter.id);
-      await refreshConversationList();
+      if (decision === 'confirm') await Promise.resolve(onChapterRefresh?.(chapter.id)).catch(() => showTaskNotice('正文已保存，编辑器刷新失败，请稍后刷新。'));
+      continueReviewedRun(reviewed.requestId, reviewed.artifactId);
+      void refreshConversationList();
     } catch (error) {
       if (mountedRef.current) setPendingDraft(current => current ? { ...current, busy: false, error: errorMessage(error) || '操作未完成，草稿已保留，可重试。' } : current);
     } finally { onApplyingChange?.(false); }
+  };
+
+  const continueReviewedRun = (requestId: string, artifactId: string) => {
+    if (!chapter || !conversation || requestRef.current) return;
+    setTaskNotice('');
+    const selected = conversation.conversationId;
+    const attempt = ++attemptRef.current;
+    requestRef.current = requestId;
+    streamingChapterIdRef.current = chapter.id;
+    dispatchTask({ type: 'start', requestId, phase: 'WAITING_MODEL' });
+    updateStream('');
+    let accumulated = '';
+    abortRef.current = resumeStoryChatAgUiStream(chapter.id, selected, requestId, { decision: 'reviewed', artifactId }, event => {
+      if (attempt !== attemptRef.current) return;
+      handleRunStreamEvent(event, requestId, selected, {
+        append(delta) { accumulated += delta; updateStream(accumulated); }, finalText() { return accumulated; },
+      });
+    }, selectedLlmModel);
+  };
+
+  const answerQuestion = (answer: AgentAnswer) => {
+    if (!chapter || !conversation || !pendingQuestion || busy || requestRef.current || conversationLoading) return;
+    const { requestId, request } = pendingQuestion;
+    if (!request.toolCallId || !request.pendingVersion) return;
+    const selected = conversation.conversationId;
+    const attempt = ++attemptRef.current;
+    requestRef.current = requestId;
+    streamingChapterIdRef.current = chapter.id;
+    dispatchTask({ type: 'start', requestId, phase: 'WAITING_MODEL' });
+    setTaskNotice('');
+    updateStream('');
+    let accumulated = '';
+    abortRef.current = resumeStoryChatAgUiStream(chapter.id, selected, requestId,
+      { decision: 'answer', toolCallId: request.toolCallId, pendingVersion: request.pendingVersion, ...answer }, event => {
+        if (attempt !== attemptRef.current) return;
+        handleRunStreamEvent(event, requestId, selected, {
+          append(delta) { accumulated += delta; updateStream(accumulated); }, finalText() { return accumulated; },
+        });
+      }, selectedLlmModel);
+  };
+
+  const cancelQuestion = async () => {
+    if (!chapter || !conversation || !pendingQuestion || busy || conversationLoading) return;
+    const selected = conversation.conversationId;
+    setConversationLoading(true);
+    try {
+      await cancelStoryChatConversationRun(chapter.id, selected, pendingQuestion.requestId);
+      if (mountedRef.current && conversationRef.current === selected) { setPendingQuestion(null); setTaskNotice('任务已停止。'); }
+    } catch (error) { showTaskNotice(errorMessage(error)); }
+    finally { if (mountedRef.current && conversationRef.current === selected) setConversationLoading(false); }
   };
 
   return <div className="story-chat-panel relative flex h-full min-h-0 min-w-0 flex-col bg-bg-base">
@@ -651,21 +819,28 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
       {conversationError && <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-500" role="alert">{conversationError}</div>}
       {conversationLoading && messages.length === 0 && <div className="flex h-full items-center justify-center"><div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent" /></div>}
       {!conversationLoading && messages.length === 0 && !busy && !pendingDraft && !taskNotice && <div className="story-chat-empty"><div className="story-chat-empty-icon"><MessageSquarePlus size={20} /></div><p className="mt-3 text-sm font-medium text-text-primary">开始一段新对话</p><p className="mt-1 max-w-52 text-center text-xs leading-5 text-text-muted">讨论剧情、润色文字或让 AI 准备修改草稿。</p></div>}
-      {messages.map((message) => <div key={message.local_id ?? message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'w-full justify-start'}`}><div className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${message.role === 'user' ? 'max-w-[80%] rounded-br-sm bg-accent-muted/40 text-text-primary' : 'w-full rounded-bl-sm border border-border bg-bg-raised text-text-primary shadow-sm'}`}><MarkdownRenderer content={message.content} /></div></div>)}
+      {messages.map((message) => <Fragment key={message.local_id ?? message.id}><div className={`flex ${message.role === 'user' ? 'justify-end' : 'w-full justify-start'}`}><div className={`rounded-xl px-4 py-3 text-sm leading-relaxed ${message.role === 'user' ? 'max-w-[80%] rounded-br-sm bg-accent-muted/40 text-text-primary' : 'w-full rounded-bl-sm border border-border bg-bg-raised text-text-primary shadow-sm'}`}><MarkdownRenderer content={message.content} />{message.completion_status === 'partial' && <p className="mt-2 text-[10px] text-text-muted">阶段回复 · 本轮尚未完成</p>}</div></div>{message.role === 'user' && message.request_id && activities[message.request_id] && <StoryChatActivity activity={activities[message.request_id]} />}</Fragment>)}
       {pendingDraft && <><section className="novel-review-summary"><h3>本章修改已准备好</h3><p>基于版本 {pendingDraft.baseVersion}，在正文区逐处审阅后保存。</p><button type="button" className="workspace-secondary-button" onClick={() => { onOpenReview?.(); reviewTarget?.focus(); }}>审阅修改</button></section>{reviewTarget ? createPortal(<NovelDraftReview key={pendingDraft.artifactId} draft={pendingDraft} stale={chapter?.version !== pendingDraft.baseVersion} onDecision={handleDraftDecision} />, reviewTarget) : <NovelDraftReview key={pendingDraft.artifactId} draft={pendingDraft} stale={chapter?.version !== pendingDraft.baseVersion} onDecision={handleDraftDecision} />}</>}
+      {pendingQuestion && !pendingDraft && <AgentQuestion key={`${pendingQuestion.requestId}:${pendingQuestion.request.toolCallId}:${pendingQuestion.request.pendingVersion}`}
+        request={pendingQuestion.request} busy={busy || conversationLoading} onAnswer={answerQuestion} onCancel={() => void cancelQuestion()} />}
+      {chapterId && conversation?.conversationId && <AutomationCommandProposals key={conversation.conversationId}
+        chapterId={chapterId} conversationId={conversation.conversationId} refreshToken={String(busy)} />}
+      {chapterId && conversation?.conversationId && <CreativeProposals key={`creative:${conversation.conversationId}`}
+        chapterId={chapterId} conversationId={conversation.conversationId} refreshToken={String(busy)} />}
       {taskNotice && <div role={task.phase === 'FAILED' ? 'alert' : 'status'} className="rounded-xl border border-border bg-bg-surface px-3 py-3 text-xs leading-5 text-text-secondary">{taskNotice}</div>}
+      {continuation && !busy && !pendingDraft && <button type="button" className="workspace-secondary-button" onClick={() => continueReviewedRun(continuation.requestId, continuation.artifactId)}>继续生成审阅总结</button>}
       {busy && <div className="flex justify-start"><div className="relative w-full rounded-xl rounded-bl-sm border border-border bg-bg-raised px-4 py-3 text-sm leading-relaxed text-text-primary shadow-sm"><div className="gen-beam" />{streamContent ? <><MarkdownRenderer content={streamContent} /><span className="ml-0.5 inline-block h-4 w-1.5 rounded-sm bg-accent" /></> : <div role="status" aria-live="polite"><div className="flex items-center gap-2"><LoaderCircle size={15} className="animate-spin text-accent motion-reduce:animate-none" aria-hidden="true" /><span>思考中…</span></div><p className="mt-1 pl-6 text-xs text-text-muted">{storyChatPhaseLabel(task.phase)}</p></div>}</div></div>}
       <div ref={messagesEndRef} className="!mt-0" />
     </div>
-    <div className="border-t border-border/80 bg-bg-base/90 px-3 py-3 backdrop-blur-md">
-      <div className="group relative overflow-visible rounded-2xl border border-border bg-bg-surface/95 transition-all duration-200 focus-within:border-accent/70 focus-within:bg-bg-raised focus-within:shadow-[0_0_0_3px_var(--color-accent-muted)]">
-        <textarea ref={textareaRef} value={input} onChange={(event) => { setInput(event.target.value); autoResize(event.target); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend(); } }} aria-label="AI 修改要求" disabled={preparing} placeholder="向 AI 助手提问，或描述需要修改的内容…" rows={2} className="min-h-16 w-full resize-none bg-transparent px-3 pb-1 pt-3 text-sm leading-6 text-text-primary outline-none placeholder:text-text-muted/70" style={{ maxHeight: '10rem', overflow: 'auto' }} />
-        <div className="flex items-center justify-between gap-2 px-2 pb-2">
+    <div className="ai-composer__footer--chat">
+      <div className="ai-composer ai-composer--chat">
+        <textarea ref={textareaRef} value={input} onChange={(event) => { setInput(event.target.value); autoResize(event.target); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); handleSend(); } }} aria-label="AI 修改要求" disabled={preparing || !!pendingQuestion} placeholder={pendingQuestion ? '请先回复上方问题' : '聊聊剧情，或描述你想修改的内容…'} rows={3} className="ai-composer__input" />
+        <div className="ai-composer__toolbar">
           <ModelSwitcher capability="llm" selectedModel={selectedLlmModel} onSelect={setSelectedLlmModel} disabled={streaming || preparing || !!pendingDraft?.busy} />
-          {busy ? <button type="button" onClick={handleAbort} disabled={!task.accepted || !!pendingDraft?.busy} className="story-chat-send-button" title={preparing ? '正在保存正文，请稍候' : !task.accepted ? '正在连接助手，请稍候' : pendingDraft?.busy ? '正在处理修改，请稍候' : '停止生成'} aria-label={preparing ? '正在保存正文' : !task.accepted ? '正在连接助手' : pendingDraft?.busy ? '正在处理修改' : '停止生成'}><Square size={15} /></button> : <button type="button" onClick={handleSend} disabled={!chapter || !conversation || !input.trim() || conversationLoading || !!pendingDraft} className="story-chat-send-button" title="发送消息" aria-label="发送消息"><Send size={16} /></button>}
+          {busy ? <button type="button" onClick={handleAbort} disabled={!task.accepted || !!pendingDraft?.busy} className="ai-composer__send" title={preparing ? '正在保存正文，请稍候' : !task.accepted ? '正在连接助手，请稍候' : pendingDraft?.busy ? '正在处理修改，请稍候' : '停止生成'} aria-label={preparing ? '正在保存正文' : !task.accepted ? '正在连接助手' : pendingDraft?.busy ? '正在处理修改' : '停止生成'}><Square size={14} /></button> : <button type="button" onClick={handleSend} disabled={!chapter || !conversation || !input.trim() || conversationLoading || !!pendingDraft || !!pendingQuestion} className="ai-composer__send" title="发送消息" aria-label="发送消息"><ArrowUp size={17} /></button>}
         </div>
       </div>
-      <p className="mt-2 text-center text-[10px] text-text-muted">{pendingDraft ? '请先审阅并处理本次修改' : 'Enter 发送 · Shift + Enter 换行'}</p>
+      <p className="ai-composer__caption">{pendingDraft ? '请先审阅并处理本次修改' : 'Enter 发送 · Shift + Enter 换行'}</p>
     </div>
   </div>;
 }

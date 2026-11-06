@@ -214,8 +214,23 @@ public class MangaDirectorAgentNode implements MangaWorkflowNodeHandler {
                 .orElse(null);
         if (restored != null
                 && restored.steps().stream().map(ExecutionStep::route).toList().equals(suggested)) {
+            if (context.answerResume() != null) {
+                var original = restored.steps().stream().filter(step ->
+                        (restored.planId() + ":" + step.sequence()).equals(context.answerResume().stepId())).findFirst()
+                        .orElseThrow(() -> new BusinessException(409, "原提问节点与当前计划不一致"));
+                if ("COMPLETED".equals(original.status())) {
+                    runService.requireCompletedAnswerStep(context);
+                    context.answerResume().turn().close();
+                } else {
+                    var current = restored.steps().stream().filter(step -> !"COMPLETED".equals(step.status())).findFirst()
+                            .orElseThrow(() -> new BusinessException(409, "原计划已经完成，不能重新投递答复"));
+                    if (current != original || !"RUNNING".equals(current.status()))
+                        throw new BusinessException(409, "原提问节点与当前计划不一致");
+                }
+            }
             return restored;
         }
+        if (context.answerResume() != null) throw new BusinessException(409, "原提问计划缺失或已变化，已有产物保留");
         RoutingDecision decision = readRoutingDecision(context);
         return buildAndValidatePlan(decision);
     }
@@ -232,8 +247,7 @@ public class MangaDirectorAgentNode implements MangaWorkflowNodeHandler {
     private void persistPlan(MangaWorkflowExecutionContext context, ExecutionPlan plan) {
         try {
             String json = objectMapper.writeValueAsString(plan);
-            runService.updateExecutionPlan(
-                    context.user().getId(), context.chapter().getId(), context.requestId(), json);
+            runService.updateExecutionPlan(context, json);
         } catch (JsonProcessingException e) {
             throw new BusinessException(500, "Failed to persist Director execution plan");
         }
@@ -309,7 +323,9 @@ public class MangaDirectorAgentNode implements MangaWorkflowNodeHandler {
                 original.chapter(),
                 original.workflowContext(),
                 false,
-                stepId
+                stepId,
+                original.executionClaim(),
+                original.answerResume()
         );
     }
 

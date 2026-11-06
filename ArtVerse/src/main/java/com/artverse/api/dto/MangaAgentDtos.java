@@ -23,12 +23,18 @@ public final class MangaAgentDtos {
     public record RunResponse(String reply, UUID requestId) {
     }
 
-    public record ResumeRequest(String answer, String model, String provider, String label, String apiKey, String baseUrl, Long configId) {
+    @com.fasterxml.jackson.databind.annotation.JsonNaming(com.fasterxml.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
+    public record ResumeRequest(String answer, String model, String provider, String label, String apiKey, String baseUrl,
+                                Long configId, String toolCallId, Long pendingVersion, String selectedOptionId) {
+        public ResumeRequest(String answer, String model, String provider, String label, String apiKey, String baseUrl, Long configId) {
+            this(answer, model, provider, label, apiKey, baseUrl, configId, null, null, null);
+        }
     }
 
+    @com.fasterxml.jackson.databind.annotation.JsonNaming(com.fasterxml.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record StoryChatResumeRequest(String decision, UUID artifactId, String answer, String model,
                                          String provider, String label, String apiKey, String baseUrl,
-                                         Long configId) {
+                                         Long configId, String toolCallId, Long pendingVersion, String selectedOptionId) {
     }
 
     public record OpenRunResponse(RunStateResponse run) {

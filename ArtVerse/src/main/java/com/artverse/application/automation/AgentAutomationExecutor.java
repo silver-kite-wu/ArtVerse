@@ -6,7 +6,6 @@ import com.artverse.domain.*;
 import com.artverse.persistence.MangaAgentRunRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import java.time.*;
 import java.util.*;
 
 @Component
@@ -22,6 +21,7 @@ public class AgentAutomationExecutor implements AutomationExecutor {
     public Set<String> keys() { return Set.of("MANGA_AGENT","STORY_CHAT"); }
 
     public Observation execute(AutomationStore.Run run) {
+        if(!store.owned(run))return Observation.running("执行权已转移");
         boolean story="STORY_CHAT".equals(run.definition().executorKey());
         long chapterId=run.definition().payload().path("chapterId").asLong();
         User user=inputs.user(run.userId());
@@ -29,32 +29,83 @@ public class AgentAutomationExecutor implements AutomationExecutor {
         var child=runs.findByUserIdAndChapterIdAndRequestId(run.userId(),chapterId,run.id()).orElse(null);
         store.attach(run,"agent",run.definition().executorKey(),child==null?null:child.getId(),null,null,conversation.getConversationUuid(),run.id());
         if(child!=null&&"RUNNING".equals(child.getStatus().name())) {
-            if(child.getLeaseUntil()!=null&&child.getLeaseUntil().isBefore(OffsetDateTime.now()))
+            boolean expired=!runService.hasActiveExecutionLease(child);
+            boolean resume=run.response()!=null&&("answer".equals(run.response().path("decision").asText())
+                    || (story&&"reviewed".equals(run.response().path("decision").asText())));
+            if(expired&&!resume)
                 return Observation.waiting("AGENT_INTERRUPTED","上次 Agent 执行已中断，请核对已有产物后关闭或重新执行");
-            return Observation.running("Agent 正在执行");
+            if(!expired)return Observation.running("Agent 正在执行");
+        }
+        // Cleanup after a completed invocation does not require a live provider configuration.
+        if(child!=null&&run.response()!=null
+                &&(child.getStatus()==MangaAgentRunStatus.SUCCEEDED||child.getStatus()==MangaAgentRunStatus.WAITING_USER)
+                &&consumptionReady(run,conversation,child)) {
+            consumeResponse(run);
+            return observe(child);
         }
         UserProviderConfig config=inputs.config(run.userId(),run.definition().payload(),false);
+        var parentClaim = new com.artverse.agent.AutomationExecutionClaim(run.id(),run.leaseOwner(),run.fencingToken());
         if(child==null) {
             if(!store.owned(run))return Observation.running("执行权已转移");
-            if(story)novel.runBackground(conversation,run.definition().instruction(),run.id(),config);
-            else manga.runBackground(conversation,run.definition().instruction(),run.id(),config);
-        } else if(child.getStatus()==MangaAgentRunStatus.WAITING_USER&&run.response()!=null) {
+            if(story)novel.runBackground(conversation,run.definition().instruction(),run.id(),config,parentClaim);
+            else manga.runBackground(conversation,run.definition().instruction(),run.id(),config,parentClaim);
+        } else if(story&&run.response()!=null&&"reviewed".equals(run.response().path("decision").asText())) {
+            novel.resumeBackground(conversation,run.id(),"reviewed",UUID.fromString(run.response().path("artifactId").asText()),
+                    null,null,null,null,config,parentClaim);
+            var refreshed=runService.findRun(conversation,run.id()).orElse(null);
+            if(refreshed!=null&&"COMPLETED".equals(runService.snapshot(refreshed).runAttributes().get("review_summary_status")))consumeResponse(run);
+        } else if(run.response()!=null&&(child.getStatus()==MangaAgentRunStatus.WAITING_USER
+                ||("answer".equals(run.response().path("decision").asText())
+                   &&Set.of(MangaAgentRunStatus.RUNNING,MangaAgentRunStatus.FAILED,MangaAgentRunStatus.INTERRUPTED).contains(child.getStatus())))) {
             var response=run.response();
-            if(story)novel.resumeBackground(conversation,run.id(),response.path("decision").asText(),
-                    response.hasNonNull("artifactId")?UUID.fromString(response.path("artifactId").asText()):null,response.path("answer").asText(),config);
-            else manga.resumeBackground(conversation,run.id(),response.path("answer").asText(),config);
-            store.jdbc().update("UPDATE automation_run SET response=NULL WHERE id=? AND fencing_token=?",run.id(),run.fencingToken());
+            if(story) {
+                try {
+                    novel.resumeBackground(conversation,run.id(),response.path("decision").asText(),
+                            response.hasNonNull("artifactId")?UUID.fromString(response.path("artifactId").asText()):null,response.path("answer").asText(null),
+                            response.path("toolCallId").asText(null),response.hasNonNull("pendingVersion")?response.path("pendingVersion").asLong():null,
+                            response.path("selectedOptionId").asText(null),config,parentClaim);
+                } catch (RuntimeException error) {
+                    try { if(consumptionReady(run,conversation,child))consumeResponse(run); }
+                    catch(RuntimeException cleanup) { error.addSuppressed(cleanup); }
+                    throw error;
+                }
+                if(consumptionReady(run,conversation,child))consumeResponse(run);
+            } else {
+                try {
+                    manga.resumeBackground(conversation,run.id(),response.path("answer").asText(null),
+                            response.path("toolCallId").asText(null),response.hasNonNull("pendingVersion")?response.path("pendingVersion").asLong():null,
+                            response.path("selectedOptionId").asText(null),config,parentClaim);
+                } catch (RuntimeException error) {
+                    try { if(consumptionReady(run,conversation,child))consumeResponse(run); }
+                    catch(RuntimeException cleanup) { error.addSuppressed(cleanup); }
+                    throw error;
+                }
+                if(consumptionReady(run,conversation,child))consumeResponse(run);
+            }
         } else if(Set.of(MangaAgentRunStatus.FAILED,MangaAgentRunStatus.DEGRADED).contains(child.getStatus())
                 &&run.response()!=null&&"retry".equals(run.response().path("action").asText())) {
-            // Reopen only an explicitly failed run. Existing artifact/tool idempotency remains authoritative.
-            store.jdbc().update("UPDATE manga_agent_runs SET status='WAITING_USER',completed_at=NULL,error_message=NULL WHERE id=? AND status IN ('FAILED','DEGRADED')",child.getId());
-            if(story)novel.runBackground(conversation,run.definition().instruction(),run.id(),config);
-            else manga.runBackground(conversation,run.definition().instruction(),run.id(),config);
-            store.jdbc().update("UPDATE automation_run SET response=NULL WHERE id=? AND fencing_token=?",run.id(),run.fencingToken());
+            return Observation.waiting("AGENT_INTERRUPTED","原执行无法安全重放，已有产物保留；请核对后关闭并创建新的明确运行");
         }
         child=runs.findByUserIdAndChapterIdAndRequestId(run.userId(),chapterId,run.id()).orElseThrow(()->new BusinessException(503,"Agent 尚未启动"));
         store.attach(run,"agent",run.definition().executorKey(),child.getId(),null,null,conversation.getConversationUuid(),run.id());
         return observe(child);
+    }
+
+    private boolean consumptionReady(AutomationStore.Run run,MangaAgentConversation conversation,MangaAgentRun child) {
+        var response=run.response();
+        if("answer".equals(response.path("decision").asText()))
+            return runService.isNativeAnswerRecorded(conversation,run.id(),response.path("toolCallId").asText(null),
+                    response.hasNonNull("pendingVersion")?response.path("pendingVersion").asLong():null);
+        if("reviewed".equals(response.path("decision").asText())) {
+            var refreshed=runService.findRun(conversation,run.id()).orElse(child);
+            return "COMPLETED".equals(runService.snapshot(refreshed).runAttributes().get("review_summary_status"));
+        }
+        return false;
+    }
+
+    private void consumeResponse(AutomationStore.Run run) {
+        if(!store.consumeResponse(run)&&!store.responseConsumed(run))
+            throw new BusinessException(409,"原答复尚未完成消费或执行权已转移，已保留当前响应");
     }
     public Observation cancel(AutomationStore.Run run) {
         long chapterId=run.definition().payload().path("chapterId").asLong();

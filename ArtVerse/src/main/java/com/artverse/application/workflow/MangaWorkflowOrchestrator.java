@@ -10,6 +10,8 @@ import com.artverse.application.MangaAgentRunEventPublisher;
 import com.artverse.application.MangaAgentRunService;
 import com.artverse.application.MangaAgentRunSnapshots.RunContextSnapshot;
 import com.artverse.application.UserProviderConfig;
+import com.artverse.application.AgentUserInputRequiredException;
+import com.artverse.common.BusinessException;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.MangaAgentConversation;
 import com.artverse.domain.MangaAgentRun;
@@ -73,6 +75,10 @@ public class MangaWorkflowOrchestrator {
         }
         var cached = mangaAgentConversationService.findAssistantReply(conversation, effectiveRequestId);
         if (cached.isPresent()) {
+            var persisted = mangaAgentRunService.reconcileCachedReply(conversation, effectiveRequestId, cached.get().getContent());
+            if (persisted.isPresent() && persisted.get().getStatus() != MangaAgentRunStatus.SUCCEEDED
+                    && persisted.get().getStatus() != MangaAgentRunStatus.DEGRADED)
+                throw new BusinessException(409, "Cached reply does not prove the current execution completed");
             return Map.of("reply", cached.get().getContent());
         }
 
@@ -82,13 +88,16 @@ public class MangaWorkflowOrchestrator {
         MangaAgentRun run = mangaAgentRunService.startOrReuse(
                 conversation, effectiveRequestId, message,
                 route == null ? MangaWorkflowRoute.DIRECTOR : route);
-        MangaAgentRun configuredRun = mangaAgentRunService.recordModelConfig(run, llmConfig.configId());
+        var originalClaim = MangaWorkflowExecutionContext.ExecutionClaim.from(run);
+        try {
+        mangaAgentRunService.bindAutomationExecutionClaim(conversation, effectiveRequestId, originalClaim, null);
+        MangaAgentRun configuredRun = mangaAgentRunService.recordModelConfig(run, llmConfig.configId(), originalClaim);
         // Keep compatibility with older/test adapters that persisted metadata
         // but did not return the attached entity.
         if (configuredRun != null) run = configuredRun;
-        run = mangaAgentRunService.markRouting(run);
+        run = mangaAgentRunService.markRouting(run, originalClaim);
         RoutingDecision decision = resolveRoute(conversation, message, effectiveRequestId, route, modelSpec, llmConfig.apiKey());
-        run = mangaAgentRunService.updateRoutingDecision(run, decision, routeSource(decision, requestedSource));
+        run = mangaAgentRunService.updateRoutingDecision(run, decision, routeSource(decision, requestedSource), originalClaim);
         MangaWorkflowRoute effectiveRoute = decision.route();
         MangaAgentRun workflowRun = run;
         Map<String, Object> result = generationGuardService.executeMangaAgentRun(
@@ -100,20 +109,28 @@ public class MangaWorkflowOrchestrator {
                 modelSpec.model(),
                 AgentModelSpecFactory.shortHash(modelSpec.baseUrl()),
                 () -> runWorkflowLeader(conversation, message, effectiveRequestId, llmConfig.apiKey(), modelSpec,
-                        decision, toolState, workflowRun)
+                        decision, toolState, workflowRun, originalClaim, null)
         );
-        return completeSyncRun(conversation, effectiveRequestId, effectiveRoute, result);
+        return completeSyncRun(conversation, effectiveRequestId, effectiveRoute, result, originalClaim);
+        } catch (AgentUserInputRequiredException waiting) {
+            mangaAgentRunService.markWaiting(conversation, effectiveRequestId, waiting.request(), originalClaim);
+            throw waiting;
+        } catch (RuntimeException failure) {
+            recordOwnedFailure(conversation, effectiveRequestId, originalClaim, failure);
+            throw failure;
+        }
     }
 
     private Map<String, Object> runWorkflowLeader(MangaAgentConversation conversation, String message,
                                                   UUID effectiveRequestId, String llmApiKey,
                                                   AgentModelSpec modelSpec, RoutingDecision decision,
                                                   AgentRunToolStatus.RunState toolState,
-                                                  MangaAgentRun run) {
+                                                  MangaAgentRun run, MangaWorkflowExecutionContext.ExecutionClaim originalClaim,
+                                                  MangaWorkflowExecutionContext.AnswerResume answerResume) {
         MangaWorkflowContextSnapshot workflowContext = contextAssembler.assemble(conversation, message, decision);
-        persistContextSnapshot(run, workflowContext);
+        persistContextSnapshot(run, workflowContext, originalClaim);
         List<String> missingRequired = contextPolicy.missingRequiredFields(workflowContext);
-        if (!missingRequired.isEmpty()) {
+        if (answerResume == null && !missingRequired.isEmpty()) {
             if (contextPolicy.blocksWrite(decision)) {
                 throw contextPolicy.missingContextHitl(workflowContext, decision);
             }
@@ -122,7 +139,7 @@ public class MangaWorkflowOrchestrator {
         }
         log.info("Workflow route for request {} -> {}", effectiveRequestId, decision.route());
         MangaWorkflowExecutionContext context = executionContext(
-                conversation, message, effectiveRequestId, llmApiKey, modelSpec, toolState, workflowContext);
+                conversation, message, effectiveRequestId, llmApiKey, modelSpec, toolState, workflowContext, originalClaim, answerResume);
         return nodeRegistry.handlerFor(decision.route()).run(context).toPayload();
     }
 
@@ -147,6 +164,14 @@ public class MangaWorkflowOrchestrator {
                                 AgentRunToolStatus.RunState toolState, MangaAgentRunEventPublisher.RunEventSink sink,
                                 AtomicReference<MangaAgentRun> runRef, UserProviderConfig llmConfig,
                                 MangaRouteSource requestedSource) {
+        runStreamLeader(conversation, message, effectiveRequestId, route, toolState, sink, runRef, llmConfig, requestedSource, null);
+    }
+
+    public void runStreamLeader(MangaAgentConversation conversation, String message, UUID effectiveRequestId,
+                                MangaWorkflowRoute route, AgentRunToolStatus.RunState toolState,
+                                MangaAgentRunEventPublisher.RunEventSink sink, AtomicReference<MangaAgentRun> runRef,
+                                UserProviderConfig llmConfig, MangaRouteSource requestedSource,
+                                com.artverse.agent.AutomationExecutionClaim parentClaim) {
         if (message == null || message.isBlank()) {
             throw new com.artverse.common.BusinessException(400, "Message cannot be empty");
         }
@@ -164,7 +189,10 @@ public class MangaWorkflowOrchestrator {
         MangaAgentRun run = mangaAgentRunService.startOrReuse(
                 conversation, effectiveRequestId, message,
                 route == null ? MangaWorkflowRoute.DIRECTOR : route);
-        run = mangaAgentRunService.markRouting(run);
+        var originalClaim = MangaWorkflowExecutionContext.ExecutionClaim.from(run);
+        try {
+        mangaAgentRunService.bindAutomationExecutionClaim(conversation, effectiveRequestId, originalClaim, parentClaim);
+        run = mangaAgentRunService.markRouting(run, originalClaim);
         runRef.set(run);
         sink.sendStatus(run, "Agent started processing the current chapter", effectiveRequestId);
 
@@ -172,7 +200,7 @@ public class MangaWorkflowOrchestrator {
         sink.sendRunEvent(run, AgentRunEvent.step("ROUTER", "running", "正在识别任务并选择智能体", Map.of()));
         RoutingDecision decision = resolveRoute(conversation, message, effectiveRequestId, route, modelSpec, llmConfig.apiKey());
         MangaWorkflowRoute effectiveRoute = decision.route();
-        run = mangaAgentRunService.updateRoutingDecision(run, decision, routeSource(decision, requestedSource));
+        run = mangaAgentRunService.updateRoutingDecision(run, decision, routeSource(decision, requestedSource), originalClaim);
         runRef.set(run);
         MangaAgentRun routedRun = run;
         sink.sendRunEvent(run, AgentRunEvent.step("ROUTER", "completed", "已选择" + effectiveRoute.name() + "智能体",
@@ -187,10 +215,17 @@ public class MangaWorkflowOrchestrator {
                 modelSpec.model(),
                 AgentModelSpecFactory.shortHash(modelSpec.baseUrl()),
                 () -> runWorkflowStream(conversation, message, effectiveRequestId, sink, decision, toolState,
-                        llmConfig.apiKey(), modelSpec, routedRun)
+                        llmConfig.apiKey(), modelSpec, routedRun, originalClaim, null)
         );
 
-        completeRun(routedRun, sink, chapterId, user, effectiveRequestId, result);
+        completeRun(routedRun, sink, chapterId, user, effectiveRequestId, result, originalClaim);
+        } catch (AgentUserInputRequiredException waiting) {
+            mangaAgentRunService.markWaiting(conversation, effectiveRequestId, waiting.request(), originalClaim);
+            throw waiting;
+        } catch (RuntimeException failure) {
+            recordOwnedFailure(conversation, effectiveRequestId, originalClaim, failure);
+            throw failure;
+        }
     }
 
     private void replayCachedReply(MangaAgentConversation conversation, UUID requestId, String reply,
@@ -215,17 +250,18 @@ public class MangaWorkflowOrchestrator {
         }
     }
 
-    public Map<String, Object> runWorkflowStream(MangaAgentConversation conversation, String message,
+    private Map<String, Object> runWorkflowStream(MangaAgentConversation conversation, String message,
                                                  UUID effectiveRequestId,
                                                  MangaAgentRunEventPublisher.RunEventSink sink,
                                                  RoutingDecision decision,
                                                  AgentRunToolStatus.RunState toolState,
                                                  String llmApiKey, AgentModelSpec modelSpec,
-                                                 MangaAgentRun run) {
+                                                 MangaAgentRun run, MangaWorkflowExecutionContext.ExecutionClaim originalClaim,
+                                                 MangaWorkflowExecutionContext.AnswerResume answerResume) {
         MangaWorkflowContextSnapshot workflowContext = contextAssembler.assemble(conversation, message, decision);
-        persistContextSnapshot(run, workflowContext);
+        persistContextSnapshot(run, workflowContext, originalClaim);
         MangaWorkflowExecutionContext context = executionContext(
-                conversation, message, effectiveRequestId, llmApiKey, modelSpec, toolState, workflowContext);
+                conversation, message, effectiveRequestId, llmApiKey, modelSpec, toolState, workflowContext, originalClaim, answerResume);
 
         sink.sendRunEvent(run, AgentRunEvent.step(
                 MangaWorkflowNode.COLLECTING_CONTEXT.name(),
@@ -235,7 +271,7 @@ public class MangaWorkflowOrchestrator {
         ));
 
         List<String> missingRequired = contextPolicy.missingRequiredFields(workflowContext);
-        if (!missingRequired.isEmpty()) {
+        if (answerResume == null && !missingRequired.isEmpty()) {
             if (contextPolicy.blocksWrite(decision)) {
                 throw contextPolicy.missingContextHitl(workflowContext, decision);
             }
@@ -257,13 +293,13 @@ public class MangaWorkflowOrchestrator {
     }
 
     public void completeRun(MangaAgentRun run, MangaAgentRunEventPublisher.RunEventSink sink, Long chapterId, User user,
-                            UUID requestId, Map<String, Object> result) {
+                            UUID requestId, Map<String, Object> result, MangaWorkflowExecutionContext.ExecutionClaim claim) {
         if (mangaAgentRunService.isTerminal(requestId, user.getId(), chapterId)) {
             sink.complete();
             return;
         }
         MangaWorkflowResult finalized = resultFinalizer.finalizeResult(
-                run.getConversation(), requestId, run.getRoute(), MangaWorkflowResult.fromPayload(result));
+                run.getConversation(), requestId, run.getRoute(), MangaWorkflowResult.fromPayload(result), claim);
         routingMetrics.recordRunOutcome(run.getRoute(), finalized.degraded() ? "DEGRADED" : "SUCCEEDED");
         sink.sendDone(run, finalized.reply(), requestId);
     }
@@ -276,11 +312,18 @@ public class MangaWorkflowOrchestrator {
         );
     }
 
+    public void completeWaitingDecision(MangaAgentConversation conversation, UUID requestId,
+                                         com.artverse.application.AgentUserInputRequest expected, String reply) {
+        resultFinalizer.finalizeWaitingDecision(conversation, requestId, expected, reply);
+    }
+
     private MangaWorkflowExecutionContext executionContext(MangaAgentConversation conversation, String message,
                                                            UUID effectiveRequestId, String llmApiKey,
                                                            AgentModelSpec modelSpec,
                                                            AgentRunToolStatus.RunState toolState,
-                                                           MangaWorkflowContextSnapshot workflowContext) {
+                                                           MangaWorkflowContextSnapshot workflowContext,
+                                                           MangaWorkflowExecutionContext.ExecutionClaim originalClaim,
+                                                           MangaWorkflowExecutionContext.AnswerResume answerResume) {
         return new MangaWorkflowExecutionContext(
                 conversation,
                 message,
@@ -290,7 +333,11 @@ public class MangaWorkflowOrchestrator {
                 toolState,
                 conversation.getUser(),
                 conversation.getChapter(),
-                workflowContext
+                workflowContext,
+                answerResume == null,
+                answerResume == null ? null : answerResume.stepId(),
+                originalClaim,
+                answerResume
         );
     }
 
@@ -300,6 +347,56 @@ public class MangaWorkflowOrchestrator {
             return RoutingDecision.fixed(requestedRoute, "persisted_route");
         }
         return workflowRouter.route(conversation, message, requestId, modelSpec, llmApiKey);
+    }
+
+    /** Resume one persisted external call through the original workflow; never reclassify its answer. */
+    public Map<String, Object> resumeAnswerWithToolState(MangaAgentConversation conversation, UUID requestId,
+            MangaAgentRunService.AcceptedAnswer accepted, MangaAgentRunService.AnswerExecution execution,
+            com.artverse.agent.gateway.AgentSessionTurns.Lease turn, AgentRunToolStatus.RunState toolState,
+            UserProviderConfig config, MangaAgentRunEventPublisher.RunEventSink sink, AtomicReference<MangaAgentRun> runRef) {
+        return resumeAnswerWithToolState(conversation, requestId, accepted, execution, turn, toolState, config, sink, runRef, null);
+    }
+
+    public Map<String, Object> resumeAnswerWithToolState(MangaAgentConversation conversation, UUID requestId,
+            MangaAgentRunService.AcceptedAnswer accepted, MangaAgentRunService.AnswerExecution execution,
+            com.artverse.agent.gateway.AgentSessionTurns.Lease turn, AgentRunToolStatus.RunState toolState,
+            UserProviderConfig config, MangaAgentRunEventPublisher.RunEventSink sink, AtomicReference<MangaAgentRun> runRef,
+            com.artverse.agent.AutomationExecutionClaim parentClaim) {
+        var continuation = mangaAgentRunService.claimAnswerDelivery(conversation, requestId, accepted);
+        MangaAgentRun run = continuation.run();
+        if (runRef != null) runRef.set(run);
+        if (!continuation.claimed()) {
+            String reply = run.getFinalReply() == null ? "这份答复已受理，请查看当前任务状态。" : run.getFinalReply();
+            if (sink != null) sink.sendStatus(run, reply, requestId);
+            return Map.of("reply", reply);
+        }
+        var claim = MangaWorkflowExecutionContext.ExecutionClaim.from(run);
+        try {
+            mangaAgentRunService.bindAutomationExecutionClaim(conversation, requestId, claim, parentClaim);
+            if (run.getRunType() != com.artverse.domain.AgentRunType.MANGA_AGENT)
+                throw new BusinessException(409, "原提问不属于漫画工作流");
+            RoutingDecision decision = mangaAgentRunService.routingDecision(run);
+            if (decision == null || decision.route() != run.getRoute())
+                throw new BusinessException(409, "原提问路由缺失或已变化，已有产物保留");
+            var model = agentModelSpecFactory.fromProviderConfig(config);
+            mangaAgentRunService.recordModelConfig(run, config.configId(), claim);
+            var resume = new MangaWorkflowExecutionContext.AnswerResume(continuation.delivery(), turn, execution.taskType(), execution.stepId());
+            String original = run.getInputMessage();
+            if (sink == null) {
+                var result = runWorkflowLeader(conversation, original, requestId, config.apiKey(), model, decision, toolState, run, claim, resume);
+                return completeSyncRun(conversation, requestId, decision.route(), result, claim);
+            }
+            var result = runWorkflowStream(conversation, original, requestId, sink, decision, toolState,
+                    config.apiKey(), model, run, claim, resume);
+            completeRun(run, sink, conversation.getChapter().getId(), conversation.getUser(), requestId, result, claim);
+            return result;
+        } catch (AgentUserInputRequiredException waiting) {
+            mangaAgentRunService.markWaiting(conversation, requestId, waiting.request(), claim);
+            throw waiting;
+        } catch (RuntimeException failure) {
+            recordOwnedFailure(conversation, requestId, claim, failure);
+            throw failure;
+        }
     }
 
     private MangaRouteSource routeSource(RoutingDecision decision, MangaRouteSource requestedSource) {
@@ -318,11 +415,23 @@ public class MangaWorkflowOrchestrator {
     }
 
     private Map<String, Object> completeSyncRun(MangaAgentConversation conversation, UUID requestId,
-                                                MangaWorkflowRoute route, Map<String, Object> result) {
+                                                MangaWorkflowRoute route, Map<String, Object> result,
+                                                MangaWorkflowExecutionContext.ExecutionClaim claim) {
         MangaWorkflowResult finalized = resultFinalizer.finalizeResult(
-                conversation, requestId, route, MangaWorkflowResult.fromPayload(result));
+                conversation, requestId, route, MangaWorkflowResult.fromPayload(result), claim);
         routingMetrics.recordRunOutcome(route, finalized.degraded() ? "DEGRADED" : "SUCCEEDED");
         return finalized.toPayload();
+    }
+
+    private void recordOwnedFailure(MangaAgentConversation conversation, UUID requestId,
+                                    MangaWorkflowExecutionContext.ExecutionClaim claim, RuntimeException failure) {
+        try {
+            resultFinalizer.finalizeFailure(conversation, requestId,
+                    failure.getMessage() == null ? "Agent request failed" : failure.getMessage(), claim);
+        } catch (BusinessException stale) {
+            // The original callback may no longer own this continuation; preserve its real failure only.
+            failure.addSuppressed(stale);
+        }
     }
 
     private void persistRunAttributes(MangaAgentConversation conversation, UUID requestId, Map<String, Object> result) {
@@ -337,7 +446,8 @@ public class MangaWorkflowOrchestrator {
         }
     }
 
-    private void persistContextSnapshot(MangaAgentRun run, MangaWorkflowContextSnapshot workflowContext) {
+    private void persistContextSnapshot(MangaAgentRun run, MangaWorkflowContextSnapshot workflowContext,
+                                        MangaWorkflowExecutionContext.ExecutionClaim claim) {
         mangaAgentRunService.recordContextSnapshot(run, new RunContextSnapshot(
                 workflowContext.storyId(),
                 workflowContext.chapterId(),
@@ -349,7 +459,7 @@ public class MangaWorkflowOrchestrator {
                 null,
                 workflowContext.requiredFields(),
                 workflowContext.warnings()
-        ));
+        ), claim);
     }
 
     private Map<String, Object> saveReadOnlyExplanation(MangaAgentConversation conversation, String message,

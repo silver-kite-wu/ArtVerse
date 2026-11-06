@@ -33,9 +33,10 @@ public class ArtVerseSkillRegistry {
     private static final String CATALOG = ROOT + "catalog.yml";
     private static final String PUBLISHED = "PUBLISHED";
     private static final Set<String> ALLOWED_TOOL_GROUPS = Set.of(
-            "context-tools",
-            "storyboard-tools",
-            "hitl-tools"
+            "story-context", "storyboard-draft", "storyboard-commit", "hitl", "novel-draft",
+            "automation-read", "automation-manage", "review-experts", "knowledge-read", "asset-read",
+            "artifact-read", "artifact-draft-management", "novel-history-read", "knowledge-candidate-read",
+            "settings-draft", "knowledge-draft", "image-proposal"
     );
     private static final Map<AgentTaskType, List<String>> DEFAULT_TASK_SKILLS = Map.of(
             AgentTaskType.MANGA_CONVERSATION, List.of("manga.creative-direction"),
@@ -99,6 +100,9 @@ public class ArtVerseSkillRegistry {
 
     public BusinessSkillSelection resolveSelection(AgentRunRequest request) {
         if (request == null || !properties.getAgent().isBusinessSkillsEnabled()) {
+            return BusinessSkillSelection.empty();
+        }
+        if (Boolean.TRUE.equals(request.variables().get("review_completed"))) {
             return BusinessSkillSelection.empty();
         }
         if (request.businessSkillSelection() != null) {

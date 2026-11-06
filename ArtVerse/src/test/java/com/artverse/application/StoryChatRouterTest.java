@@ -39,5 +39,16 @@ class StoryChatRouterTest {
         String input = "审核本章创作质量";
         assertThat(router.classify(input)).isEqualTo(StoryChatRoute.REVIEW);
         assertThat(new NovelBusinessSkillRouter().classify(input).mode()).isEqualTo(NovelBusinessSkillMode.REVIEW);
+        String advice = "评审一下本章节的创作质量如何，有什么优化的方向吗";
+        assertThat(router.classify(advice)).isEqualTo(StoryChatRoute.REVIEW);
+        assertThat(new NovelBusinessSkillRouter().classify(advice).mode()).isEqualTo(NovelBusinessSkillMode.REVIEW);
+    }
+
+    @Test void historicalRestorePreparesReviewWhileHistoryQuestionsRemainReadOnly() {
+        assertThat(router.classify("请恢复本章正文到历史版本 3")).isEqualTo(StoryChatRoute.WRITE);
+        assertThat(router.classify("Restore the prose from revision 3")).isEqualTo(StoryChatRoute.WRITE);
+        assertThat(router.classify("如何恢复历史版本？")).isEqualTo(StoryChatRoute.READ);
+        assertThat(router.classify("查看历史正文版本")).isEqualTo(StoryChatRoute.READ);
+        assertThat(router.classify("不要恢复旧稿")).isEqualTo(StoryChatRoute.READ);
     }
 }

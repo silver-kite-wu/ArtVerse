@@ -197,26 +197,35 @@ public class ArtVerseProperties {
     public static class Agent {
         private int firstEventTimeoutSeconds = 90;
         private int modelIdleTimeoutSeconds = 180;
+        private int modelActivityBudgetSeconds = 900;
         private int toolIdleTimeoutSeconds = 600;
         private long runWatchdogIntervalMs = 30_000;
         private int maxConcurrentRuns = 32;
         private int maxConcurrentRunsPerUser = 2;
-        private int budgetTtlSeconds = 86_400;
         private int routerMaxModelCalls = 2;
         private int conversationMaxModelCalls = 4;
         private int conversationMaxToolCalls = 4;
         private int storyboardMaxModelCalls = 8;
-        private int storyboardMaxToolCalls = 6;
-        private int reviewMaxModelCalls = 13;
-        private int reviewMaxToolCalls = 4;
+        private int storyboardMaxToolCalls = 12;
+        private int reviewMaxModelCalls = 20;
+        private int reviewMaxToolCalls = 24;
         private int directorMaxModelCalls = 12;
-        private int maxInputTokens = 60_000;
-        private int maxOutputTokens = 20_000;
-        private int maxOutputBytes = 160_000;
+        private int directorMaxToolCalls = 4;
+        private int directorRootMaxModelCalls = 48;
+        private int directorRootMaxToolCalls = 64;
+        private int textMaxModelCalls = 4;
+        private int textMaxToolCalls = 2;
+        private int storyChatReadMaxModelCalls = 4;
+        private int storyChatReadMaxToolCalls = 8;
+        private int storyChatWriteMaxModelCalls = 8;
+        private int storyChatWriteMaxToolCalls = 12;
+        private int maxInputTokens = 224_000;
+        private int maxInputBytes = 896_000;
+        private int maxOutputTokens = 32_000;
+        private int maxOutputBytes = 256_000;
         private int maxSubagents = 4;
         private boolean ragInjectionEnabled = true;
         private boolean businessSkillsEnabled = true;
-        private boolean storyboardTwoPhaseEnabled = true;
         private boolean multiInstanceEventBusEnabled = true;
         private boolean outboxWorkerEnabled = true;
         private int outboxBatchSize = 8;
@@ -224,32 +233,25 @@ public class ArtVerseProperties {
         private int outboxMaxAttempts = 5;
         private boolean providerAllowHttp = false;
         private List<String> providerAllowedPrivateCidrs = List.of();
+        private List<ModelCapability> modelCapabilities = List.of();
+
+        @Data
+        public static class ModelCapability {
+            private String provider;
+            private String baseUrl;
+            private String model;
+            private Long configId;
+            private boolean toolCalling;
+            private boolean nativeStructuredOutput;
+            private boolean nativeStructuredOutputWithTools;
+            private String declarationVersion;
+        }
 
         // Automatic multi-agent routing
         private boolean autoRoutingEnabled = true;
         private boolean routingShadowMode = false;
         private double routingDirectThreshold = 0.80;
         private double routingReadOnlyThreshold = 0.55;
-        private int agentCacheMaxSize = 256;
-        private int agentCacheExpireAfterMinutes = 30;
-        private Mcp mcp = new Mcp();
-
-        @Data
-        public static class Mcp {
-            private boolean enabled = true;
-            private String baseUrl = "http://127.0.0.1:8080/internal/mcp";
-            // Ephemeral default is suitable for a single local process. Multi-instance or
-            // split deployments must provide the same high-entropy secret to both services.
-            private String sharedSecret = java.util.UUID.randomUUID().toString();
-            private int tokenLifetimeSeconds = 3600;
-        }
-
-        // Retry
-        private int maxRetries = 2;
-        private long retryMinBackoffMs = 1_000;
-        private long retryMaxBackoffMs = 10_000;
-        private double retryMultiplier = 2.0;
-
         // Circuit breaker
         private int circuitBreakerFailureThreshold = 5;
         private int circuitBreakerWaitSeconds = 30;

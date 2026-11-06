@@ -1,6 +1,7 @@
 package com.artverse.application;
 
 import com.artverse.agent.MangaAgentRuntimeContext;
+import com.artverse.agent.AgentToolAttempt;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.agent.RuntimeContext;
 import lombok.extern.slf4j.Slf4j;
@@ -113,17 +114,26 @@ public class AgentToolAuditService {
     }
 
     private void consumeToolBudget(String toolName, RuntimeContext runtimeContext) {
-        if (budgetService == null || runtimeContext == null) {
+        if (budgetService == null || runtimeContext == null || hasNativeBoundaryEvidence(toolName, runtimeContext)) {
             return;
         }
-        budgetService.consumeToolCall(runtimeContext.get(MangaAgentRuntimeContext.class), toolName);
+        if (runtimeContext.get(MangaAgentRuntimeContext.class) != null)
+            throw new com.artverse.common.BusinessException(403, "工具调用缺少原生边界的预算授权");
+    }
+
+    private boolean hasNativeBoundaryEvidence(String toolName, RuntimeContext runtimeContext) {
+        if (runtimeContext.get(com.artverse.agent.gateway.tools.AgentToolCapability.class) != null) return true;
+        AgentToolAttempt attempt = runtimeContext.get(AgentToolAttempt.class);
+        if (attempt == null || !attempt.toolName().equals(toolName)) return false;
+        MangaAgentRuntimeContext context = runtimeContext.get(MangaAgentRuntimeContext.class);
+        if (context != null) attempt.requireScope(context);
+        return true;
     }
 
     private Map<String, Object> successEnvelope(Map<String, Object> result) {
         Map<String, Object> safeData = result == null ? Map.of() : Map.copyOf(result);
         Map<String, Object> envelope = new LinkedHashMap<>(safeData);
         envelope.put("success", true);
-        envelope.put("data", safeData);
         envelope.put("errorCode", "");
         envelope.put("retryable", false);
         envelope.put("auditId", UUID.randomUUID().toString());

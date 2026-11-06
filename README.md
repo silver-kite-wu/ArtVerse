@@ -157,6 +157,18 @@ mvn spring-boot:run
 
 The backend listens on `http://localhost:8080`.
 
+For local Windows development, run from the repository root:
+
+```powershell
+.\ArtVerse\start-backend-local.ps1
+# Run in the background with logs under ArtVerse/target:
+.\ArtVerse\start-backend-local.ps1 -Background
+# If another app owns IPv4 port 6379 while local Redis is available over IPv6:
+.\ArtVerse\start-backend-local.ps1 -Background -RedisHost ::1
+```
+
+Stop the old backend on port 8080 first. The script uses the `local` profile, allows `http://localhost:5173` and `http://127.0.0.1:5173`, uses non-Secure cookies for local HTTP, and enforces CSRF. Overrides apply only to this launch; `.env` and global environment variables are preserved. For IDE launches, set `SPRING_PROFILES_ACTIVE=local`, `ARTVERSE_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173`, and `ARTVERSE_AUTH_COOKIE_SECURE=false`. Production keeps its separate HTTPS origins, Secure cookies, and production profile. See the [local login CSRF implementation notes](ArtVerse/docs/login-csrf-analysis-and-plan.md) (Chinese).
+
 ### 4. Run the frontend
 
 ```bash

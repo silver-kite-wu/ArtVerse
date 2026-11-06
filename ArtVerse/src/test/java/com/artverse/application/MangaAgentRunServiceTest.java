@@ -23,14 +23,96 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class MangaAgentRunServiceTest {
+
+    @Test
+    void recordingAValidatedExternalQuestionAlsoEntersTheDurableWaitingState() {
+        var fixture = fixture();
+        var leases = mock(AgentRunLeaseService.class);
+        var service = new MangaAgentRunService(fixture.runRepository, fixture.eventRepository,
+                fixture.objectMapper, null, null, leases);
+        var jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        when(jdbc.queryForList(org.mockito.ArgumentMatchers.contains("SELECT r.id,r.run_attributes_json"),
+                any(Object[].class))).thenReturn(List.of(Map.of("id", 99L, "attributes", "{}")));
+        when(jdbc.queryForList(org.mockito.ArgumentMatchers.contains("FROM automation_run a"),
+                any(Object[].class))).thenReturn(List.of());
+        service.setAutomationClaimJdbc(jdbc);
+
+        var requestId = UUID.randomUUID();
+        var conversationId = UUID.randomUUID();
+        var run = run(fixture.user, fixture.chapter, requestId, "修改正文");
+        var conversation = new com.artverse.domain.MangaAgentConversation();
+        conversation.setId(12L);
+        conversation.setConversationUuid(conversationId);
+        conversation.setUser(fixture.user);
+        conversation.setStory(fixture.chapter.getStory());
+        conversation.setChapter(fixture.chapter);
+        run.setConversation(conversation);
+        run.setFencingToken(1L);
+        run.setOwnerInstanceId("worker");
+        run.setRunAttributesJson("{}");
+        when(fixture.runRepository.findForUpdate(1L, 7L, requestId)).thenReturn(Optional.of(run));
+        when(fixture.runRepository.findForUpdate(12L, requestId)).thenReturn(Optional.of(run));
+        when(fixture.runRepository.saveAndFlush(run)).thenReturn(run);
+        when(leases.owns(run, 1L)).thenReturn(true);
+        var context = new com.artverse.agent.MangaAgentRuntimeContext(
+                1L, 3L, 7L, conversationId, requestId, null,
+                com.artverse.agent.AgentTaskType.STORY_CHAT_WRITE, "story-chat:WRITE", 1L, null, "worker");
+
+        var recorded = service.recordExternalQuestion(context, "question-1",
+                new AgentUserInputRequest("确认草稿？", List.of(), true, ""));
+
+        assertThat(recorded.created()).isTrue();
+        service.markWaiting(conversation, requestId, recorded.request(),
+                new com.artverse.application.workflow.MangaWorkflowExecutionContext.ExecutionClaim("worker", 1L));
+        service.requireWaitingExecutionClaim(conversation, requestId,
+                new com.artverse.application.workflow.MangaWorkflowExecutionContext.ExecutionClaim("worker", 1L));
+        assertThat(run.getStatus()).isEqualTo(MangaAgentRunStatus.WAITING_USER);
+        assertThat(run.getUserInputRequestJson()).contains("question-1");
+        assertThat(run.getRunAttributesJson()).contains("external_questions", "WAITING");
+        assertThat(run.getOwnerInstanceId()).isNull();
+    }
+
+    @Test
+    void resumedExecutionCannotChangeThePersistedModelCapabilityDeclaration() throws Exception {
+        Fixture fixture = fixture();
+        var conversation = new com.artverse.domain.MangaAgentConversation();
+        conversation.setConversationUuid(UUID.randomUUID());
+        var run = run(fixture.user, fixture.chapter, UUID.randomUUID(), "fixture");
+        run.setConversation(conversation); run.setFencingToken(1L); run.setOwnerInstanceId("original-worker");
+        run.setRunAttributesJson("{}");
+        var jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        when(jdbc.queryForList(org.mockito.ArgumentMatchers.contains("SELECT r.id"), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", 1L, "attributes", "{}")));
+        fixture.service.setAutomationClaimJdbc(jdbc);
+        when(fixture.runRepository.findForUpdate(1L, 7L, run.getRequestId())).thenReturn(Optional.of(run));
+        when(fixture.runRepository.saveAndFlush(run)).thenReturn(run);
+        var first = new com.artverse.agent.AgentModelSpec("fixture", "https://provider.example.test/v1", "fixture-model", "hash", null,
+                new com.artverse.agent.AgentModelCapabilities(true, false, false, "v1"));
+        var request = new com.artverse.agent.AgentRunRequest("1", fixture.chapter.getStory().getId(), 7L,
+                com.artverse.agent.AgentTaskType.STORY_CHAT_WRITE, List.of(), Map.of("fencing_token", 1L, "execution_owner", "original-worker", "step_id", "story-chat:WRITE"), first,
+                "fixture-secret-must-not-be-persisted", run.getRequestId(), conversation.getConversationUuid());
+        fixture.service.bindModelCapabilities(request);
+        fixture.service.bindModelCapabilities(request);
+        assertThat(run.getRunAttributesJson()).contains("model_capability_bindings", "v1")
+                .doesNotContain("fixture-secret-must-not-be-persisted");
+        var changed = new com.artverse.agent.AgentModelSpec(first.provider(), first.baseUrl(), first.model(), first.apiKeyHash(), null,
+                new com.artverse.agent.AgentModelCapabilities(true, true, true, "v2"));
+        var resume = new com.artverse.agent.AgentRunRequest(request.userId(), request.storyId(), request.chapterId(), request.taskType(),
+                request.messages(), request.variables(), changed, request.llmApiKey(), request.requestId(), request.conversationId());
+        assertThatThrownBy(() -> fixture.service.bindModelCapabilities(resume)).hasMessageContaining("能力声明已变化");
+        verify(fixture.runRepository, times(1)).saveAndFlush(run);
+    }
 
     @Test
     void resumeStartKeepsOriginalInputAndClearsWaitingRequest() {
@@ -40,15 +122,137 @@ class MangaAgentRunServiceTest {
         existing.setStatus(MangaAgentRunStatus.WAITING_USER);
         existing.setUserInputRequestJson("{\"question\":\"选择方案\",\"options\":[],\"allowFreeText\":true,\"reason\":\"\"}");
 
-        when(fixture.runRepository.findByUserIdAndChapterIdAndRequestId(1L, 7L, requestId))
+        when(fixture.runRepository.findForUpdate(1L, 7L, requestId))
                 .thenReturn(Optional.of(existing));
-        when(fixture.runRepository.save(any(MangaAgentRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(fixture.runRepository.saveAndFlush(any(MangaAgentRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         MangaAgentRun result = fixture.service.startOrReuse(fixture.user, fixture.chapter, requestId, "恢复提示");
 
         assertThat(result.getStatus()).isEqualTo(MangaAgentRunStatus.RUNNING);
         assertThat(result.getInputMessage()).isEqualTo("原始任务");
         assertThat(result.getUserInputRequestJson()).isNull();
+    }
+
+    @Test
+    void answerContinuationKeepsOriginalRouteAndClaimsExactlyOnce() throws Exception {
+        Fixture fixture = fixture();
+        var leases = mock(AgentRunLeaseService.class);
+        var service = new MangaAgentRunService(fixture.runRepository, fixture.eventRepository,
+                fixture.objectMapper, null, null, leases);
+        var conversation = new com.artverse.domain.MangaAgentConversation(); conversation.setId(12L);
+        var run = run(fixture.user, fixture.chapter, UUID.randomUUID(), "原始审核任务");
+        run.setRunType(com.artverse.domain.AgentRunType.STORY_CHAT);
+        run.setRouteKey("REVIEW"); run.setStatus(MangaAgentRunStatus.WAITING_USER);
+        run.setUserInputRequestJson(fixture.objectMapper.writeValueAsString(new AgentUserInputRequest(
+                "说明关注范围", List.of(), true, "", "USER_QUESTION", "question-1", 1L)));
+        run.setRunAttributesJson(fixture.objectMapper.writeValueAsString(Map.of("external_questions",
+                Map.of("question-1", Map.of("pending_version", 1L, "status", "WAITING")))));
+        when(fixture.runRepository.findForUpdate(12L, run.getRequestId())).thenReturn(Optional.of(run));
+        when(fixture.runRepository.saveAndFlush(run)).thenReturn(run);
+        when(leases.claim(run)).thenReturn(run);
+        when(leases.hasActiveLease(run)).thenAnswer(ignored -> run.getStatus() == MangaAgentRunStatus.RUNNING);
+
+        var claimed = answer(service, conversation, run.getRequestId(), "question-1", 1L, "focus");
+        assertThat(claimed.run()).isSameAs(run);
+        assertThat(claimed.claimed()).isTrue();
+        assertThat(run.getRouteKey()).isEqualTo("REVIEW");
+        assertThat(run.getInputMessage()).isEqualTo("原始审核任务");
+        assertThat(run.getStatus()).isEqualTo(MangaAgentRunStatus.RUNNING);
+        assertThat(answer(service, conversation, run.getRequestId(), "question-1", 1L, "focus").claimed()).isFalse();
+        assertThatThrownBy(() -> answer(service, conversation, run.getRequestId(), "question-1", 1L, "changed"))
+                .hasMessageContaining("另一份答复");
+        verify(leases, times(1)).claim(run);
+    }
+
+    @Test
+    void sameLabelOptionsRemainDifferentAnswersAndInvalidBranchesDoNotClaim() throws Exception {
+        Fixture fixture = fixture();
+        var leases = mock(AgentRunLeaseService.class);
+        var service = new MangaAgentRunService(fixture.runRepository, fixture.eventRepository,
+                fixture.objectMapper, null, null, leases);
+        var conversation = new com.artverse.domain.MangaAgentConversation(); conversation.setId(12L);
+        var run = run(fixture.user, fixture.chapter, UUID.randomUUID(), "Choose");
+        run.setRunType(com.artverse.domain.AgentRunType.STORY_CHAT);
+        run.setStatus(MangaAgentRunStatus.WAITING_USER);
+        var pending = new AgentUserInputRequest("Choose", List.of(
+                new AgentUserInputRequest.Option("a", "Same label", "First", false),
+                new AgentUserInputRequest.Option("b", "Same label", "Second", true)),
+                false, "", "USER_QUESTION", "question-1", 1L);
+        run.setUserInputRequestJson(fixture.objectMapper.writeValueAsString(pending));
+        run.setRunAttributesJson(fixture.objectMapper.writeValueAsString(Map.of("external_questions",
+                Map.of("question-1", Map.of("pending_version", 1L, "status", "WAITING", "request", pending)))));
+        when(fixture.runRepository.findForUpdate(12L, run.getRequestId())).thenReturn(Optional.of(run));
+        when(fixture.runRepository.saveAndFlush(run)).thenReturn(run);
+        when(leases.claim(run)).thenReturn(run);
+        when(leases.hasActiveLease(run)).thenAnswer(ignored -> run.getStatus() == MangaAgentRunStatus.RUNNING);
+        assertThatThrownBy(() -> answer(service, conversation, run.getRequestId(), "question-1", 1L, "Same label", null))
+                .hasMessageContaining("仅接受原选项");
+        assertThatThrownBy(() -> answer(service, conversation, run.getRequestId(), "question-1", 1L, "", "b"))
+                .hasMessageContaining("一项选择");
+        verifyNoInteractions(leases);
+
+        var accepted = answer(service, conversation, run.getRequestId(), "question-1", 1L, null, "b");
+        assertThat(accepted.claimed()).isTrue();
+        assertThat(accepted.answer()).isEqualTo("Same label");
+        assertThat(answer(service, conversation, run.getRequestId(), "question-1", 1L, null, "b").claimed()).isFalse();
+        assertThatThrownBy(() -> answer(service, conversation, run.getRequestId(), "question-1", 1L, null, "a"))
+                .hasMessageContaining("另一份答复");
+        verify(leases, times(1)).claim(run);
+    }
+
+    @Test
+    void ordinaryAnswerCannotConsumeAReviewDecision() throws Exception {
+        Fixture fixture = fixture();
+        var leases = mock(AgentRunLeaseService.class);
+        var service = new MangaAgentRunService(fixture.runRepository, fixture.eventRepository,
+                fixture.objectMapper, null, null, leases);
+        var conversation = new com.artverse.domain.MangaAgentConversation(); conversation.setId(12L);
+        var run = run(fixture.user, fixture.chapter, UUID.randomUUID(), "润色正文");
+        run.setRunType(com.artverse.domain.AgentRunType.STORY_CHAT);
+        run.setStatus(MangaAgentRunStatus.WAITING_USER);
+        run.setUserInputRequestJson(fixture.objectMapper.writeValueAsString(new AgentUserInputRequest(
+                "审阅草稿", List.of(), false, "", "BUSINESS_CONFIRMATION")));
+        when(fixture.runRepository.findForUpdate(12L, run.getRequestId())).thenReturn(Optional.of(run));
+        assertThatThrownBy(() -> answer(service, conversation, run.getRequestId(), "question-1", 1L, "focus"))
+                .isInstanceOf(com.artverse.common.BusinessException.class);
+        assertThat(run.getStatus()).isEqualTo(MangaAgentRunStatus.WAITING_USER);
+        verifyNoInteractions(leases);
+    }
+
+    private MangaAgentRunService.AnswerContinuation answer(MangaAgentRunService service,
+            com.artverse.domain.MangaAgentConversation conversation, UUID requestId, String call, Long version, String text) {
+        return answer(service, conversation, requestId, call, version, text, null);
+    }
+
+    private MangaAgentRunService.AnswerContinuation answer(MangaAgentRunService service,
+            com.artverse.domain.MangaAgentConversation conversation, UUID requestId, String call, Long version, String text, String option) {
+        return service.claimAnswerDelivery(conversation, requestId,
+                service.acceptAnswer(conversation, requestId, call, version, text, option));
+    }
+
+    @Test
+    void repeatedStartCannotTakeOverAnAlreadyRunningTask() {
+        Fixture fixture = fixture();
+        var run = run(fixture.user, fixture.chapter, UUID.randomUUID(), "原始任务");
+        when(fixture.runRepository.findForUpdate(1L, 7L, run.getRequestId())).thenReturn(Optional.of(run));
+        assertThatThrownBy(() -> fixture.service.startOrReuse(fixture.user, fixture.chapter, run.getRequestId(), "重复请求"))
+                .hasMessageContaining("正在执行");
+        verify(fixture.runRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void originalExecutionBindingCannotBeReplacedWithAWriteRoute() throws Exception {
+        Fixture fixture = fixture();
+        var conversation = new com.artverse.domain.MangaAgentConversation(); conversation.setId(12L);
+        var run = run(fixture.user, fixture.chapter, UUID.randomUUID(), "读取正文");
+        run.setRunType(com.artverse.domain.AgentRunType.STORY_CHAT);
+        when(fixture.runRepository.findForUpdate(12L, run.getRequestId())).thenReturn(Optional.of(run));
+        fixture.service.bindStoryChatExecution(conversation, run.getRequestId(), Map.of("route", "READ"));
+        fixture.service.bindStoryChatExecution(conversation, run.getRequestId(), Map.of("route", "READ"));
+        assertThatThrownBy(() -> fixture.service.bindStoryChatExecution(conversation, run.getRequestId(), Map.of("route", "WRITE")))
+                .hasMessageContaining("已经固定");
+        assertThat(fixture.objectMapper.readTree(run.getRunAttributesJson()).path("story_chat_execution").path("route").asText())
+                .isEqualTo("READ");
     }
 
     @Test
@@ -234,8 +438,9 @@ class MangaAgentRunServiceTest {
 
         run.setUpdatedAt(OffsetDateTime.now());
         run.setLastProgressAt(staleBefore.minusSeconds(1));
-        when(fixture.runRepository.findByStatusAndLastProgressAtBefore(eq(MangaAgentRunStatus.RUNNING), eq(staleBefore)))
-                .thenReturn(List.of(run));
+        when(fixture.runRepository.findStalledCandidateIds(eq(MangaAgentRunStatus.RUNNING), eq(staleBefore)))
+                .thenReturn(List.of(42L));
+        when(fixture.runRepository.findForUpdateById(42L)).thenReturn(java.util.Optional.of(run));
         when(fixture.runRepository.save(any(MangaAgentRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         int interrupted = fixture.service.interruptStalledRunningRuns(staleBefore, staleBefore.minusMinutes(5));

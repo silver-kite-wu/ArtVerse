@@ -44,7 +44,10 @@ public class AgentScopeRuntimeContextFactory {
                     request.taskType(),
                     String.valueOf(request.variables().getOrDefault(
                             "step_id", request.taskType().sessionSuffix())),
-                    longValue(request.variables().get("fencing_token"))
+                    longValue(request.variables().get("fencing_token")),
+                    null,
+                    request.variables().get("execution_owner") instanceof String owner ? owner : null,
+                    automationClaim(request)
             ));
         }
         return builder.build();
@@ -79,6 +82,24 @@ public class AgentScopeRuntimeContextFactory {
             return Long.valueOf(String.valueOf(value));
         } catch (NumberFormatException error) {
             throw new BusinessException(400, "Invalid agent fencing token");
+        }
+    }
+
+    private static com.artverse.agent.AutomationExecutionClaim automationClaim(AgentRunRequest request) {
+        var values = request.variables();
+        boolean present = values.containsKey("automation_run_id") || values.containsKey("automation_execution_owner")
+                || values.containsKey("automation_fencing_token");
+        if (!present) return null;
+        try {
+            if (!(values.get("automation_run_id") instanceof String id)
+                    || !(values.get("automation_execution_owner") instanceof String owner)
+                    || !(values.get("automation_fencing_token") instanceof Number fence))
+                throw new IllegalArgumentException("Incomplete automation claim");
+            var claim = new com.artverse.agent.AutomationExecutionClaim(java.util.UUID.fromString(id), owner, fence.longValue());
+            if (!claim.valid()) throw new IllegalArgumentException("Invalid automation claim");
+            return claim;
+        } catch (IllegalArgumentException error) {
+            throw new BusinessException(403, "后台原执行凭证不完整或无效");
         }
     }
 

@@ -4,6 +4,10 @@ import { authFetch } from '../../api/auth';
 import { imageGenUrl } from '../../api/knowledgeAndImage';
 import { listAutomations, getAutomation, changeAutomation, runAutomationNow, listAutomationRuns, getAutomationRun, actOnAutomationRun, listAutomationNotifications, readAutomationNotification, automationStateLabel, automationRule, automationTime, type AutomationPlan, type AutomationRun, type AutomationRunDetail, type AutomationNotification } from '../../api/automations';
 import AutomationComposer from './AutomationComposer';
+import AutomationNovelReview from './AutomationNovelReview';
+import AutomationCommandProposals from './AutomationCommandProposals';
+import CreativeProposals from '../CreativeProposals';
+import AgentQuestion from '../AgentQuestion';
 import MarkdownRenderer from '../MarkdownRenderer';
 import { useToast } from '../../ui/toast/useToast';
 import { randomUUID } from '../../utils/browserSecurity';
@@ -32,8 +36,13 @@ export default function AutomationCenterPage({ automationId, runId }: Props) {
   const [notifications, setNotifications] = useState<AutomationNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [answer, setAnswer] = useState('');
+  const selectedRunRef = useRef(selectedRun);
+  useEffect(() => { selectedRunRef.current = selectedRun; }, [selectedRun]);
   const keys = useRef(new Map<string, string>());
-  const keyFor = (action: string) => { let key = keys.current.get(action); if (!key) { key = randomUUID(); keys.current.set(action, key); } return key; };
+  const actionBusyRef = useRef(false);
+  const keySlot = (action: string) => JSON.stringify([automationId, selectedRun, detail?.userInputRequest?.toolCallId,
+    detail?.userInputRequest?.pendingVersion, detail?.reviewReceipt?.artifact_id, action]);
+  const keyFor = (action: string) => { const slot = keySlot(action); let key = keys.current.get(slot); if (!key) { key = randomUUID(); keys.current.set(slot, key); } return key; };
 
   const refreshPlans = useCallback(async () => {
     const params = new URLSearchParams({ page: String(page), search, ...(filter === 'attention' ? { needsAttention: 'true' } : filter ? { status: filter } : {}) });
@@ -94,15 +103,17 @@ export default function AutomationCenterPage({ automationId, runId }: Props) {
   }, [selectedRun, refreshDetail]);
 
   async function act(name: string, operation: () => Promise<unknown>, refresh = true) {
+    if (actionBusyRef.current) return;
+    actionBusyRef.current = true;
+    const targetRun = selectedRun;
+    const slot = keySlot(name);
     setBusy(name); setError('');
-    try { await operation(); keys.current.delete(name); if (refresh) await Promise.all([refreshPlans(), refreshDetail(), listAutomationNotifications().then(value => setNotifications(value.items))]); if (selectedRun) setDetail(await getAutomationRun(selectedRun)); toast.success('已更新'); }
-    catch (e) { toast.error(e instanceof Error ? e.message : '操作失败'); }
-    finally { setBusy(''); }
+    try { await operation(); if (!['respond', 'reviewed'].includes(name)) keys.current.delete(slot); if (refresh) await Promise.all([refreshPlans(), refreshDetail(), listAutomationNotifications().then(value => setNotifications(value.items))]); if (targetRun) { const latest = await getAutomationRun(targetRun); if (selectedRunRef.current === targetRun) setDetail(latest); } toast.success('已更新'); }
+    catch (e) { toast.error(e instanceof Error ? e.message : '操作失败'); if (targetRun) { try { const latest = await getAutomationRun(targetRun); if (selectedRunRef.current === targetRun) setDetail(latest); } catch { /* Keep the submitted input available when refresh also fails. */ } } }
+    finally { actionBusyRef.current = false; setBusy(''); }
   }
   const run = detail?.run.id === selectedRun && detail.run.automationId === automationId ? detail.run : undefined;
-  const confirmationText = `${detail?.userInputRequest?.reason ?? ''}\n${detail?.userInputRequest?.question ?? ''}`;
-  const referencedDrafts = detail?.artifacts?.filter(artifact => artifact.kind === 'NOVEL_CONTENT_DRAFT' && artifact.state === 'VALIDATED' && confirmationText.includes(artifact.id)) ?? [];
-  const confirmationArtifactId = detail?.userInputRequest?.artifactId ?? (referencedDrafts.length === 1 ? referencedDrafts[0].id : undefined);
+  const pendingDraft = detail?.artifacts?.filter(artifact => artifact.kind === 'NOVEL_CONTENT_DRAFT' && artifact.state === 'VALIDATED' && artifact.review).at(-1);
   const unread = notifications.filter(n => !n.read).length;
 
   return <main className="flex min-h-0 flex-1 flex-col bg-bg-base pb-16 lg:pb-0">
@@ -110,6 +121,8 @@ export default function AutomationCenterPage({ automationId, runId }: Props) {
       {showNotifications && <div className="absolute right-0 top-12 z-20 max-h-96 w-[min(23rem,85vw)] overflow-y-auto rounded-2xl border border-border bg-bg-surface p-3 shadow-xl"><h2 className="px-2 py-2 text-sm font-semibold">任务通知</h2>{notifications.length === 0 && <p className="p-4 text-sm text-text-muted">暂无通知</p>}{notifications.map(item => <button key={item.id} onClick={() => { void act(`notification:${item.id}`, async () => { await readAutomationNotification(item.id); const info = await getAutomationRun(item.runId); navigate(info.run.automationId, item.runId); }); setShowNotifications(false); }} className="mb-1 block w-full rounded-xl p-3 text-left hover:bg-bg-base"><p className="text-sm font-medium">{!item.read && <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-accent" />}{item.name}</p><p className="mt-1 line-clamp-2 text-xs text-text-secondary">{item.summary}</p><time className="mt-1 block text-[0.625rem] text-text-muted">{automationTime(item.createdAt)}</time></button>)}</div>}
     </div></header>
     {error && <div role="alert" className="flex items-center gap-2 bg-warning/10 px-5 py-3 text-sm"><CircleAlert size={16} />{error}</div>}
+    {!automationId && <div className="max-h-[40vh] overflow-y-auto px-5 py-3"><AutomationCommandProposals refreshToken={String(plans.length)} /></div>}
+    {!automationId && <div className="max-h-[40vh] overflow-y-auto px-5 py-3"><CreativeProposals refreshToken={String(plans.length)} /></div>}
     <div className="flex min-h-0 flex-1">
       <aside className={`${automationId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-border md:w-80 xl:w-96`}>
         <div className="space-y-3 px-5 py-4"><label className="flex items-center gap-2 rounded-xl border border-border bg-bg-surface px-3 py-2.5"><Search size={16} className="text-text-muted" /><input aria-label="搜索定时任务" placeholder="搜索任务……" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label><div className="flex flex-wrap gap-1">{[['', '全部'], ['ACTIVE', '启用中'], ['PAUSED', '已暂停'], ['attention', '待处理'], ['ARCHIVED', '已归档']].map(([value, text]) => <button key={value} onClick={() => { setFilter(value); setPage(0); }} aria-pressed={filter === value} className={`rounded-full px-3 py-1.5 text-xs ${filter === value ? 'bg-accent/10 font-semibold text-accent' : 'text-text-secondary hover:bg-bg-surface'}`}>{text}</button>)}</div></div>
@@ -129,7 +142,35 @@ export default function AutomationCenterPage({ automationId, runId }: Props) {
             <dl className="my-4 grid grid-cols-2 gap-3 text-xs text-text-secondary sm:grid-cols-3"><div><dt className="text-text-muted">原定执行</dt><dd className="mt-1">{automationTime(run.scheduledFor, plan.definition.schedule.timezone)}</dd></div><div><dt className="text-text-muted">实际开始</dt><dd className="mt-1">{automationTime(run.startedAt, plan.definition.schedule.timezone)}</dd></div><div><dt className="text-text-muted">结束时间</dt><dd className="mt-1">{automationTime(run.completedAt, plan.definition.schedule.timezone)}</dd></div></dl>
             {run.summary && <div className="text-sm leading-7"><MarkdownRenderer content={run.summary} /></div>}
             {detail.artifacts && detail.artifacts.length > 0 && <div className="mt-5 grid gap-3 sm:grid-cols-2">{detail.artifacts.map(artifact => <div key={artifact.id} className="overflow-hidden rounded-xl border border-border">{artifact.url && <a href={imageGenUrl(artifact.url)} target="_blank" rel="noreferrer"><img src={imageGenUrl(artifact.url)} alt={artifact.title} className="max-h-80 w-full object-contain" loading="lazy" /></a>}<div className="p-3"><p className="text-xs font-medium">{artifact.title} {artifact.state && <span className="text-text-muted">· {automationStateLabel[artifact.state] ?? artifact.state}</span>}</p>{artifact.error && <p className="mt-2 text-xs text-warning">{artifact.error}</p>}{artifact.content && <details className="mt-2 text-xs"><summary className="cursor-pointer text-accent">查看产物内容</summary><div className="mt-3 whitespace-pre-wrap leading-6">{artifact.content}</div></details>}</div></div>)}</div>}
-            {run.state === 'WAITING_USER' && <div className="mt-5 grid gap-3 rounded-xl border border-warning/30 bg-warning/5 p-4"><p className="text-sm font-medium">{detail.userInputRequest?.question || '请检查本次运行的输入或供应商结果'}</p>{run.waitingReason === 'AGENT_INPUT' && <><textarea aria-label="回复 Agent" className="rounded-xl border border-border bg-bg-surface p-3 text-sm" rows={3} value={answer} onChange={e => setAnswer(e.target.value)} placeholder="输入补充说明或按问题选项回复……" />{detail.userInputRequest?.options?.map(option => { const label = typeof option === 'string' ? option : option.label; return <button key={typeof option === 'string' ? option : option.id} className={`${button} text-left`} onClick={() => setAnswer(label)}>{label}</button>; })}<div className="flex flex-wrap gap-2"><button className={`${button} bg-accent text-white`} disabled={!!busy || !answer.trim()} onClick={() => { void act('respond', () => actOnAutomationRun(run.id, 'respond', keyFor('respond'), { answer, decision: run.definition.executorKey === 'STORY_CHAT' ? 'answer' : 'confirm' })); }}>提交回复</button>{run.definition.executorKey === 'STORY_CHAT' && confirmationArtifactId && <button className={button} disabled={!!busy} onClick={() => { void act('confirm-draft', () => actOnAutomationRun(run.id, 'respond', keyFor('confirm-draft'), { decision: 'confirm', artifactId: confirmationArtifactId })); }}>确认写入这份草稿</button>}{run.definition.executorKey === 'STORY_CHAT' && <button className={button} disabled={!!busy} onClick={() => { void act('discard', () => actOnAutomationRun(run.id, 'respond', keyFor('discard'), { decision: 'discard', artifactId: confirmationArtifactId })); }}>放弃草稿</button>}</div></>}{['INPUT_CHANGED', 'CONFIGURATION'].includes(run.waitingReason ?? '') && <button className={button} disabled={!!busy} onClick={() => { void act('refresh-input', () => actOnAutomationRun(run.id, 'respond', keyFor('refresh-input'), { action: 'refresh-input' })); }}>已检查，重新校验本次输入</button>}<button className="text-left text-xs text-text-muted" disabled={!!busy} onClick={() => { void act('close', () => actOnAutomationRun(run.id, 'respond', keyFor('close'), { action: 'close' })); }}>关闭本次待处理运行</button></div>}
+            {run.state === 'WAITING_USER' && run.definition.executorKey === 'STORY_CHAT' && pendingDraft && !detail.reviewReceipt && <AutomationNovelReview key={pendingDraft.id} runId={run.id} artifact={pendingDraft} onUpdated={async () => setDetail(await getAutomationRun(run.id))} />}
+            {run.state === 'WAITING_USER' && run.definition.executorKey === 'STORY_CHAT' && detail.reviewReceipt && <section className="mt-5 rounded-xl border border-border p-4"><p>审阅结果已保存，可以继续生成总结。</p><button type="button" className={button} disabled={!!busy} onClick={() => { void act('reviewed', () => actOnAutomationRun(run.id, 'respond', keyFor('reviewed'), { decision: 'reviewed', artifactId: detail.reviewReceipt!.artifact_id })); }}>继续生成总结</button></section>}
+            {run.state === 'WAITING_USER' && <div className="mt-5 grid gap-3 rounded-xl border border-warning/30 bg-warning/5 p-4">
+              {run.waitingReason === 'AGENT_INPUT' && !(run.definition.executorKey === 'STORY_CHAT' && (pendingDraft || detail.reviewReceipt)) && (
+                run.definition.executorKey === 'STORY_CHAT' || detail.userInputRequest?.purpose === 'USER_QUESTION'
+                  ? detail.userInputRequest ? <AgentQuestion
+                    key={`${run.id}:${detail.userInputRequest.toolCallId}:${detail.userInputRequest.pendingVersion}`}
+                    request={detail.userInputRequest} busy={!!busy} onAnswer={response => {
+                      const pending = detail.userInputRequest!;
+                      if (!pending.toolCallId || !pending.pendingVersion) return;
+                      void act('respond', () => actOnAutomationRun(run.id, 'respond', keyFor('respond'), {
+                        decision: 'answer', toolCallId: pending.toolCallId, pendingVersion: pending.pendingVersion, ...response,
+                      }));
+                    }} /> : <p role="status" className="text-sm">提问详情暂不可用，请刷新后处理。</p>
+                  : <>
+                    <p className="text-sm font-medium">{detail.userInputRequest?.question || '请检查本次运行的输入'}</p>
+                    <textarea aria-label="回复 Agent" className="rounded-xl border border-border bg-bg-surface p-3 text-sm" rows={3}
+                      maxLength={4000} value={answer} onChange={e => setAnswer(e.target.value)} placeholder="输入补充说明……" />
+                    {detail.userInputRequest?.options.map(option => <button key={option.id} className={`${button} text-left`}
+                      disabled={!!busy} onClick={() => setAnswer(option.label)}>{option.label}</button>)}
+                    <button className={`${button} bg-accent text-white`} disabled={!!busy || !answer.trim()} onClick={() => {
+                      void act('respond', () => actOnAutomationRun(run.id, 'respond', keyFor('respond'), { answer, decision: 'confirm' }));
+                    }}>提交回复</button>
+                  </>
+              )}
+              {run.waitingReason !== 'AGENT_INPUT' && <p className="text-sm font-medium">{detail.userInputRequest?.question || '请检查本次运行的输入或供应商结果'}</p>}
+              {['INPUT_CHANGED', 'CONFIGURATION'].includes(run.waitingReason ?? '') && <button className={button} disabled={!!busy} onClick={() => { void act('refresh-input', () => actOnAutomationRun(run.id, 'respond', keyFor('refresh-input'), { action: 'refresh-input' })); }}>已检查，重新校验本次输入</button>}
+              <button className="text-left text-xs text-text-muted" disabled={!!busy} onClick={() => { void act('close', () => actOnAutomationRun(run.id, 'respond', keyFor('close'), { action: 'close' })); }}>关闭本次待处理运行</button>
+            </div>}
             <details className="mt-5 border-t border-border pt-4"><summary className="cursor-pointer text-xs text-text-secondary">运行过程</summary><ol className="mt-3 space-y-3">{detail.events.map(event => <li key={event.id} className="flex gap-3 text-xs"><time className="shrink-0 text-text-muted">{automationTime(event.createdAt, plan.definition.schedule.timezone)}</time><span className="text-text-secondary">{event.payload.summary || automationStateLabel[event.type] || event.type}</span></li>)}</ol><p className="mt-4 break-all text-[0.625rem] text-text-muted">运行 ID：{run.id} · 计划版本 {run.automationVersion}</p></details>
           </article>}
         </div>}

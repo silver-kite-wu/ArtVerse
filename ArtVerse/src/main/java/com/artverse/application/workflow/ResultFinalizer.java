@@ -2,6 +2,7 @@ package com.artverse.application.workflow;
 
 import com.artverse.application.MangaAgentConversationService;
 import com.artverse.application.MangaAgentRunService;
+import com.artverse.application.AgentUserInputRequest;
 import com.artverse.domain.MangaAgentConversation;
 import com.artverse.domain.MessageRole;
 import org.springframework.stereotype.Service;
@@ -32,8 +33,10 @@ public class ResultFinalizer {
 
     @Transactional
     public MangaWorkflowResult finalizeResult(MangaAgentConversation conversation, UUID requestId,
-                                               MangaWorkflowRoute route, MangaWorkflowResult candidate) {
-        runService.requireFinalizable(conversation, requestId);
+                                               MangaWorkflowRoute route, MangaWorkflowResult candidate,
+                                               MangaWorkflowExecutionContext.ExecutionClaim claim) {
+        runService.lockAutomationExecution(conversation, requestId, claim);
+        runService.requireFinalizable(conversation, requestId, claim);
         ExecutionFactVerifier.VerifiedFacts verified = factVerifier.verify(conversation, requestId, route, candidate);
         Map<String, Object> attributes = new LinkedHashMap<>(candidate.attributes());
         attributes.put("result_verification_status", "PASSED");
@@ -43,7 +46,24 @@ public class ResultFinalizer {
 
         conversationService.saveMessage(conversation, MessageRole.ASSISTANT, result.reply(), requestId);
         runService.completeVerified(conversation, requestId, result.reply(), result.degraded(),
-                verified.resultSchema(), verified.facts());
+                verified.resultSchema(), verified.facts(), claim);
         return result;
+    }
+
+    @Transactional
+    public void finalizeFailure(MangaAgentConversation conversation, UUID requestId, String error,
+                                MangaWorkflowExecutionContext.ExecutionClaim claim) {
+        runService.lockAutomationExecution(conversation, requestId, claim);
+        runService.requireExecutionClaim(conversation, requestId, claim);
+        conversationService.saveFailureMessage(conversation, error, requestId);
+        runService.markFailed(conversation, requestId, error, claim);
+    }
+
+    @Transactional
+    public void finalizeWaitingDecision(MangaAgentConversation conversation, UUID requestId,
+                                         AgentUserInputRequest expected, String reply) {
+        runService.requireWaitingDecision(conversation, requestId, expected);
+        conversationService.saveMessage(conversation, MessageRole.ASSISTANT, reply, requestId);
+        runService.markSucceeded(conversation, requestId, reply);
     }
 }

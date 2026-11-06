@@ -199,7 +199,7 @@ public class MangaAgentController {
                                              @RequestBody MangaAgentDtos.ResumeRequest body) {
         User user = currentUserService.requireCurrentUser();
         MangaAgentService.RunResult result = mangaAgentService.resume(
-                chapterId, requestId, body.answer(), user, requireLlmConfig(user, body)
+                chapterId, requestId, body.answer(), body.toolCallId(), body.pendingVersion(), body.selectedOptionId(), user, requireLlmConfig(user, body)
         );
         return new MangaAgentDtos.RunResponse(result.reply(), result.requestId());
     }
@@ -211,7 +211,7 @@ public class MangaAgentController {
                                  @RequestBody MangaAgentDtos.ResumeRequest body) {
         User user = currentUserService.requireCurrentUser();
         return mangaAgentService.resumeAgUiStream(
-                chapterId, requestId, body.answer(), user, requireLlmConfig(user, body)
+                chapterId, requestId, body.answer(), body.toolCallId(), body.pendingVersion(), body.selectedOptionId(), user, requireLlmConfig(user, body)
         );
     }
 
@@ -223,7 +223,7 @@ public class MangaAgentController {
                                             @RequestBody MangaAgentDtos.ResumeRequest body) {
         User user = currentUserService.requireCurrentUser();
         return mangaAgentService.resumeAgUiStream(
-                chapterId, conversationId, requestId, body.answer(), user,
+                chapterId, conversationId, requestId, body.answer(), body.toolCallId(), body.pendingVersion(), body.selectedOptionId(), user,
                 requireLlmConfig(user, body)
         );
     }

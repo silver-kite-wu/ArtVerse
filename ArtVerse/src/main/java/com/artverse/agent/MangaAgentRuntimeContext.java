@@ -14,8 +14,22 @@ public record MangaAgentRuntimeContext(
         AgentTaskType taskType,
         String stepId,
         Long fencingToken,
-        UUID tenantId
+        UUID tenantId,
+        String executionOwner,
+        AutomationExecutionClaim automationClaim
 ) {
+    public MangaAgentRuntimeContext(Long userId, Long storyId, Long chapterId,
+                                    UUID conversationId, UUID requestId, UserProviderConfig workflowConfig,
+                                    AgentTaskType taskType, String stepId, Long fencingToken, UUID tenantId, String executionOwner) {
+        this(userId, storyId, chapterId, conversationId, requestId, workflowConfig,
+                taskType, stepId, fencingToken, tenantId, executionOwner, null);
+    }
+    public MangaAgentRuntimeContext(Long userId, Long storyId, Long chapterId,
+                                    UUID conversationId, UUID requestId, UserProviderConfig workflowConfig,
+                                    AgentTaskType taskType, String stepId, Long fencingToken, UUID tenantId) {
+        this(userId, storyId, chapterId, conversationId, requestId, workflowConfig,
+                taskType, stepId, fencingToken, tenantId, null);
+    }
     public MangaAgentRuntimeContext(Long userId, Long storyId, Long chapterId,
                                     UUID conversationId, UUID requestId, UserProviderConfig workflowConfig) {
         this(userId, storyId, chapterId, conversationId, requestId, workflowConfig,

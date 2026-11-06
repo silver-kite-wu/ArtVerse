@@ -173,26 +173,36 @@ artverse:
   agent:
     first-event-timeout-seconds: 90
     model-idle-timeout-seconds: 180
+    model-activity-budget-seconds: 900
     tool-idle-timeout-seconds: 600
     run-watchdog-interval-ms: 30000
     max-concurrent-runs: 32
     max-concurrent-runs-per-user: 2
-    budget-ttl-seconds: 86400
     router-max-model-calls: 2
     conversation-max-model-calls: 4
     conversation-max-tool-calls: 4
     storyboard-max-model-calls: 8
-    storyboard-max-tool-calls: 6
-    review-max-model-calls: 13
-    review-max-tool-calls: 4
+    storyboard-max-tool-calls: 12
+    review-max-model-calls: 20
+    review-max-tool-calls: 24
     director-max-model-calls: 12
-    max-input-tokens: 60000
-    max-output-tokens: 20000
-    max-output-bytes: 160000
+    director-max-tool-calls: 4
+    director-root-max-model-calls: 48
+    director-root-max-tool-calls: 64
+    text-max-model-calls: 4
+    text-max-tool-calls: 2
+    story-chat-read-max-model-calls: 4
+    story-chat-read-max-tool-calls: 8
+    story-chat-write-max-model-calls: 8
+    story-chat-write-max-tool-calls: 12
+    # 256K total context: max-input-tokens + max-output-tokens.
+    max-input-tokens: 224000
+    max-input-bytes: 896000
+    max-output-tokens: 32000
+    max-output-bytes: 256000
     max-subagents: 4
     rag-injection-enabled: true
     business-skills-enabled: true
-    storyboard-two-phase-enabled: true
     multi-instance-event-bus-enabled: true
     outbox-worker-enabled: true
     outbox-batch-size: 8
@@ -200,16 +210,19 @@ artverse:
     outbox-max-attempts: 5
     provider-allow-http: false
     provider-allowed-private-cidrs: []
+    # Exact server-owned provider/base-url/model declarations; unknown capabilities default to false.
+    model-capabilities:
+      - provider: deepseek
+        base-url: https://api.deepseek.com
+        model: deepseek-flash
+        tool-calling: true
+        native-structured-output: false
+        native-structured-output-with-tools: false
+        declaration-version: deepseek-flash-tools-v1
     auto-routing-enabled: true
     routing-shadow-mode: false
     routing-direct-threshold: 0.80
     routing-read-only-threshold: 0.55
-    agent-cache-max-size: 256
-    agent-cache-expire-after-minutes: 30
-    max-retries: 2
-    retry-min-backoff-ms: 1000
-    retry-max-backoff-ms: 10000
-    retry-multiplier: 2.0
     circuit-breaker-failure-threshold: 5
     circuit-breaker-wait-seconds: 30
     circuit-breaker-sliding-window-size: 20

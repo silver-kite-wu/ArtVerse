@@ -63,7 +63,7 @@ public class MangaAgentRunSnapshotReader {
         List<RunArtifactSnapshot> artifacts = artifactRepository == null ? List.of()
                 : artifactRepository.findByRunIdOrderByCreatedAtAsc(run.getId()).stream()
                 .map(artifact -> new RunArtifactSnapshot(artifact.getArtifactUuid(), artifact.getArtifactType(),
-                        artifact.getStatus(), artifact.getSchemaVersion(), readMap(artifact.getEvaluation()),
+                        artifact.getStatus(), artifact.getSchemaVersion(), publicEvaluation(artifact),
                         artifact.getChecksum()))
                 .toList();
         MangaWorkflowRoute route = run.getRoute() == null ? MangaWorkflowRoute.DIRECTOR : run.getRoute();
@@ -77,6 +77,12 @@ public class MangaAgentRunSnapshotReader {
                 run.getRouterVersion(), run.getWorkflowVersion(), run.getTraceId(), readMap(run.getSkillVersionsJson()),
                 run.getModelConfigId(), run.getKnowledgeSnapshotId(), readMap(run.getBudgetUsageJson()),
                 readMap(run.getRunAttributesJson()), readContextSnapshot(run.getContextSnapshotJson()), steps, artifacts);
+    }
+
+    private Map<String,Object> publicEvaluation(com.artverse.domain.MangaAgentRunArtifact artifact) {
+        var evaluation=new java.util.LinkedHashMap<>(readMap(artifact.getEvaluation()));
+        if(CreativeProposalArtifacts.TYPES.contains(artifact.getArtifactType()))evaluation.remove("commands");
+        return evaluation;
     }
 
     /** Reads replay data from the durable log; Redis remains only the live notification path. */

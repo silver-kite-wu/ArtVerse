@@ -3,7 +3,6 @@ package com.artverse.application.tools;
 import com.artverse.agent.MangaAgentRuntimeContext;
 import com.artverse.application.AgentRunToolStatus;
 import com.artverse.application.AgentUserInputRequest;
-import com.artverse.application.AgentUserInputRequiredException;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.Chapter;
 import io.agentscope.core.agent.RuntimeContext;
@@ -37,29 +36,6 @@ public class MangaToolSupport {
             agentRunToolStatus.requestUserInput(
                     context.userId(), context.chapterId(), context.requestId(), request);
         }
-    }
-
-    public void requireDestructiveWriteConfirmation(MangaAgentRuntimeContext context, Chapter chapter,
-                                                     String operation) {
-        if (chapter == null || chapter.getScenesText() == null || chapter.getScenesText().isBlank()) {
-            return;
-        }
-        if (agentRunToolStatus.isMutationAuthorized(
-                context.userId(), context.chapterId(), context.requestId())) {
-            return;
-        }
-        AgentUserInputRequest request = new AgentUserInputRequest(
-                "当前章节已经存在分镜，继续操作会覆盖现有内容。是否确认继续？",
-                List.of(
-                        new AgentUserInputRequest.Option("confirm", "确认覆盖", "保存新的分镜并覆盖当前内容", true),
-                        new AgentUserInputRequest.Option("cancel", "取消操作", "保留当前分镜，不进行修改", false)
-                ),
-                false,
-                operation,
-                "MUTATION_CONFIRMATION"
-        );
-        requestUserInput(context, request);
-        throw new AgentUserInputRequiredException(request);
     }
 
     public String chapterDisplayName(Chapter chapter) {

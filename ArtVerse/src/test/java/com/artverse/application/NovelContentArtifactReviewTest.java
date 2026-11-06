@@ -30,13 +30,15 @@ class NovelContentArtifactReviewTest {
 
     @BeforeEach
     void setup() throws Exception {
-        run.setId(8L); run.setRequestId(requestId);
+        run.setId(8L); run.setRequestId(requestId); run.setStatus(MangaAgentRunStatus.WAITING_USER);
+        when(runs.findForUpdate(3L, 1L, requestId)).thenReturn(Optional.of(run));
         artifact.setId(11L); artifact.setArtifactUuid(artifactId); artifact.setRun(run);
         artifact.setArtifactType(NovelContentArtifactService.ARTIFACT_TYPE); artifact.setStatus("VALIDATED");
         artifact.setPayload(mapper.writeValueAsString(Map.of("content", "AI修改", "content_hash", hash, "base_version", 6L, "base_content", "原文")));
         chapter.setId(1L); chapter.setVersion(6L); chapter.setNovelContent("原文");
         Story story = new Story(); story.setId(2L); chapter.setStory(story);
         when(artifacts.findForCommit(artifactId, 3L, 1L)).thenReturn(Optional.of(artifact));
+        when(artifacts.findByArtifactUuidAndRunUserIdAndRunChapterId(artifactId, 3L, 1L)).thenReturn(Optional.of(artifact));
         when(chapters.findByIdAndUserIdForUpdate(1L, 3L)).thenReturn(Optional.of(chapter));
         when(artifacts.findByRunIdOrderByCreatedAtAsc(8L)).thenReturn(List.of(artifact));
         when(artifacts.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -61,9 +63,11 @@ class NovelContentArtifactReviewTest {
     void repeatedConfirmationDoesNotCreateAnotherRevisionButRejectsDifferentContent() throws Exception {
         artifact.setStatus("COMMITTED");
         artifact.setPayload(mapper.writeValueAsString(Map.of("content", "AI修改", "content_hash", hash,
-                "base_version", 6L, "reviewed_content_hash", ToolIdempotencyService.sha256("作者正文"))));
-        chapter.setVersion(7L);
-        assertThat(service.review(3L, 1L, requestId, artifactId, "confirm", "作者正文", 6L, hash).changed()).isFalse();
+                "base_version", 6L, "reviewed_chapter_version", 7L, "reviewed_content_hash", ToolIdempotencyService.sha256("作者正文"))));
+        chapter.setVersion(12L);
+        var replay = service.review(3L, 1L, requestId, artifactId, "confirm", "作者正文", 6L, hash);
+        assertThat(replay.changed()).isFalse();
+        assertThat(replay.chapterVersion()).isEqualTo(7L);
         assertThatThrownBy(() -> service.review(3L, 1L, requestId, artifactId, "confirm", "其他正文", 6L, hash))
                 .hasMessageContaining("已经保存");
         verifyNoInteractions(contents);
@@ -83,7 +87,33 @@ class NovelContentArtifactReviewTest {
     void discardWorksEvenIfChapterChangedAndIsIdempotent() {
         chapter.setVersion(8L);
         assertThat(service.review(3L, 1L, requestId, artifactId, "discard", null, 6L, hash).status()).isEqualTo("REJECTED");
-        assertThat(service.review(3L, 1L, requestId, artifactId, "discard", null, 6L, hash).status()).isEqualTo("REJECTED");
+        chapter.setVersion(12L);
+        assertThat(service.review(3L, 1L, requestId, artifactId, "discard", null, 6L, hash).chapterVersion()).isEqualTo(8L);
+        verifyNoInteractions(contents);
+    }
+
+    @Test
+    void originalReviewedContentDoesNotFollowLaterCanonicalEditsAndMissingHashIsABusinessError() throws Exception {
+        when(contents.save(1L, 3L, "作者最终稿", 6L, NovelContentRevisionSource.AI, null, artifact))
+                .thenReturn(new NovelContentService.SaveResult(chapter, null, false));
+        service.review(3L, 1L, requestId, artifactId, "confirm", "作者最终稿", 6L, hash);
+        chapter.setNovelContent("后来的人工版本"); chapter.setVersion(10L);
+        assertThat(service.reviewedContent(3L, 1L, requestId, artifactId, ToolIdempotencyService.sha256("作者最终稿")))
+                .isEqualTo("作者最终稿");
+        assertThat(service.reviewReceipt(3L, 1L, requestId, artifactId))
+                .containsEntry("chapter_version", 6L).containsEntry("changed", false).doesNotContainKey("revision_id");
+        assertThatThrownBy(() -> service.reviewedContent(3L, 1L, requestId, artifactId, null))
+                .isInstanceOf(com.artverse.common.BusinessException.class).hasMessageContaining("哈希不能为空");
+    }
+
+    @Test
+    void incompleteLegacyReceiptCannotBorrowTodaysChapterVersion() throws Exception {
+        artifact.setStatus("COMMITTED");
+        artifact.setPayload(mapper.writeValueAsString(Map.of("content", "AI修改", "content_hash", hash,
+                "base_version", 6L, "reviewed_content_hash", ToolIdempotencyService.sha256("作者正文"))));
+        chapter.setVersion(12L);
+        assertThatThrownBy(() -> service.review(3L, 1L, requestId, artifactId, "confirm", "作者正文", 6L, hash))
+                .isInstanceOf(com.artverse.common.BusinessException.class).hasMessageContaining("证据不完整");
         verifyNoInteractions(contents);
     }
 

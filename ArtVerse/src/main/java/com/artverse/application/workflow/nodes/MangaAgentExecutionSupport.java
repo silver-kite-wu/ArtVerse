@@ -134,6 +134,8 @@ public class MangaAgentExecutionSupport {
     }
 
     public List<AgentMessage> prepareAgentMessages(MangaWorkflowExecutionContext context) {
+        if (context.answerResume() != null && (context.stepId() == null
+                || context.stepId().equals(context.answerResume().stepId()))) return List.of();
         if (context.persistConversationMessages()) {
             saveUserMessage(context);
         }
@@ -231,6 +233,7 @@ public class MangaAgentExecutionSupport {
     }
 
     public void saveUserMessage(MangaWorkflowExecutionContext context) {
+        if (context.answerResume() != null) return;
         conversationService.saveMessage(
                 context.conversation(), MessageRole.USER, context.message(), context.requestId());
     }
@@ -241,6 +244,10 @@ public class MangaAgentExecutionSupport {
 
     public AgentRunRequest buildRunRequest(MangaWorkflowExecutionContext context, List<AgentMessage> messages,
                                            AgentTaskType taskType) {
+        if (context == null || context.executionClaim() == null || !context.executionClaim().valid() || runService == null)
+            throw new BusinessException(409, "RUN_NOT_ACTIVE: workflow is missing its original execution claim");
+        runService.requireWorkflowExecutionClaim(context);
+        runService.bindMangaExecution(context, taskType);
         User user = context.user();
         Chapter chapter = context.chapter();
         Map<String, Object> variables = new LinkedHashMap<>();
@@ -249,11 +256,12 @@ public class MangaAgentExecutionSupport {
         variables.put("step_id", context.stepId() == null || context.stepId().isBlank()
                 ? taskType.sessionSuffix()
                 : context.stepId());
-        if (runService != null) {
-            runService.findRun(user.getId(), chapter.getId(), context.requestId())
-                    .map(com.artverse.domain.MangaAgentRun::getFencingToken)
-                    .ifPresent(token -> variables.put("fencing_token", token));
-        }
+        variables.put("execution_owner", context.executionClaim().owner());
+        variables.put("fencing_token", context.executionClaim().fencingToken());
+        var automationVariables = runService.automationExecutionVariables(context.conversation(), context.requestId(), context.executionClaim());
+        if (automationVariables != null) variables.putAll(automationVariables);
+        if (context.answerResume() != null && context.answerResume().matches(taskType, String.valueOf(variables.get("step_id"))))
+            variables.put("answer_delivery", context.answerResume().delivery());
         return new AgentRunRequest(
                 String.valueOf(user.getId()),
                 chapter.getStory().getId(),
@@ -325,7 +333,9 @@ public class MangaAgentExecutionSupport {
         }
         String reply;
         try {
-            reply = harnessAgentGateway.generateText(request).block();
+            reply = context.answerResume() != null && context.answerResume().matches(request.taskType(), String.valueOf(request.variables().get("step_id")))
+                    ? eventsFor(context, request).ofType(AgentResultEvent.class).map(event -> event.getResult().getTextContent()).last("").block()
+                    : harnessAgentGateway.generateText(request).block();
             throwIfWaitingForUser(context);
         } catch (AgentUserInputRequiredException e) {
             throw e;
@@ -349,7 +359,7 @@ public class MangaAgentExecutionSupport {
         AtomicReference<String> finalReply = new AtomicReference<>();
         MangaReviewSubagentTracker tracker = new MangaReviewSubagentTracker();
         try {
-            harnessAgentGateway.streamEvents(request)
+            eventsFor(context, request)
                     .doOnNext(event -> {
                         tracker.observe(event);
                         if (event instanceof TextBlockDeltaEvent text && !tracker.isSubagentEvent(event)
@@ -379,12 +389,6 @@ public class MangaAgentExecutionSupport {
         MangaWorkflowResult result = completeRequest(context,
                 firstNonBlank(finalReply.get(), reply.toString()), false);
         return applyReviewAudit(result, tracker.finish(reviewMetrics), null);
-    }
-
-    public void saveFailureMessage(MangaWorkflowExecutionContext context, String error) {
-        if (context.persistConversationMessages()) {
-            conversationService.saveFailureMessage(context.conversation(), error, context.requestId());
-        }
     }
 
     public Optional<AgentRunEvent> mapAgentScopeEvent(AgentEvent event) {
@@ -507,7 +511,7 @@ public class MangaAgentExecutionSupport {
                 ? new MangaReviewSubagentTracker()
                 : null;
         try {
-            harnessAgentGateway.streamEvents(request)
+            eventsFor(context, request)
                     .doOnNext(event -> {
                         if (reviewTracker != null) {
                             reviewTracker.observe(event);
@@ -600,6 +604,13 @@ public class MangaAgentExecutionSupport {
                 : result.degradedWithAttributes(attributes);
     }
 
+    private reactor.core.publisher.Flux<AgentEvent> eventsFor(MangaWorkflowExecutionContext context, AgentRunRequest request) {
+        var resume = context.answerResume();
+        if (resume != null && resume.matches(request.taskType(), String.valueOf(request.variables().get("step_id"))))
+            return harnessAgentGateway.streamEvents(request, List.of(resume.delivery().toolResult()), resume.turn());
+        return harnessAgentGateway.streamEvents(request);
+    }
+
     private Map<String, Object> eventData(AgentEvent event, Map<String, Object> values) {
         java.util.LinkedHashMap<String, Object> data = new java.util.LinkedHashMap<>(values);
         if (event.getSource() != null && !event.getSource().isBlank()) {
@@ -636,7 +647,6 @@ public class MangaAgentExecutionSupport {
         if (supportsDegradedFallback && context.toolState().hasSuccessfulMutatingTool()) {
             return fallbackAfterToolSuccess(context, error);
         }
-        saveFailureMessage(context, error);
         throw failure;
     }
 

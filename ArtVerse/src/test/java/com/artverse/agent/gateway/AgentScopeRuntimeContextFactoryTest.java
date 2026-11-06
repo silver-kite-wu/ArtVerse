@@ -59,6 +59,28 @@ class AgentScopeRuntimeContextFactoryTest {
     }
 
     @Test
+    void runtimeCarriesTheOriginalOwnerAndFenceWithoutDerivingANewClaim() {
+        var request = new AgentRunRequest("9", 1L, 2L, AgentTaskType.MANGA_STORYBOARD,
+                List.of(), Map.of("execution_owner", "original-worker", "fencing_token", 41L), null, null, null, null);
+        var runtime = factory.create(request).get(MangaAgentRuntimeContext.class);
+        assertThat(runtime.executionOwner()).isEqualTo("original-worker");
+        assertThat(runtime.fencingToken()).isEqualTo(41L);
+        assertThat(factory.create(new AgentRunRequest("9", 1L, 2L, AgentTaskType.MANGA_STORYBOARD,
+                List.of(), Map.of(), null, null, null, null)).get(MangaAgentRuntimeContext.class).executionOwner()).isNull();
+    }
+
+    @Test
+    void backgroundClaimIsTypedAndPartialClaimsAreRejected() {
+        var parent = new com.artverse.agent.AutomationExecutionClaim(java.util.UUID.randomUUID(), "parent-original", 17L);
+        var request = new AgentRunRequest("9", 1L, 2L, AgentTaskType.MANGA_STORYBOARD,
+                List.of(), parent.variables(), null, null, null, null);
+        assertThat(factory.create(request).get(MangaAgentRuntimeContext.class).automationClaim()).isEqualTo(parent);
+        var partial = new AgentRunRequest("9", 1L, 2L, AgentTaskType.MANGA_STORYBOARD,
+                List.of(), Map.of("automation_run_id", parent.runId().toString()), null, null, null, null);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> factory.create(partial)).hasMessageContaining("凭证不完整");
+    }
+
+    @Test
     void novelWriteCarriesServerOwnedChapterVersionForStaleDraftRejection() {
         AgentRunRequest request = new AgentRunRequest("9", 1L, 2L, AgentTaskType.STORY_CHAT_WRITE,
                 List.of(), Map.of("chapter_version", 6L), null, null, null, null);

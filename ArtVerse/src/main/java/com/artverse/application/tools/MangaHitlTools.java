@@ -1,92 +1,56 @@
 package com.artverse.application.tools;
 
 import com.artverse.agent.MangaAgentRuntimeContext;
+import com.artverse.agent.AgentToolAttempt;
 import com.artverse.application.AgentToolAuditService;
 import com.artverse.application.AgentUserInputRequest;
-import io.agentscope.core.message.TextBlock;
+import com.artverse.application.MangaAgentRunService;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.message.ToolResultBlock;
-import io.agentscope.core.message.ToolResultState;
-import io.agentscope.core.tool.ToolBase;
-import io.agentscope.core.tool.ToolCallParam;
-import reactor.core.publisher.Mono;
-
+import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.ToolParam;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * HITL tool implemented as an AgentScope v2 external tool.
- *
- * <p>When the agent calls this tool, the framework automatically emits
- * {@link io.agentscope.core.event.RequireExternalExecutionEvent} and pauses.
- * The calling code (node layer) detects the pending user input via
- * {@link com.artverse.application.AgentRunToolStatus}, waits for user response,
- * then resumes the agent by feeding the user's choice back as a message.</p>
- *
- * <p>This replaces the previous {@code @Tool} + {@code ToolSuspendException}
- * pattern with the official v2 external tool mechanism.</p>
+ * Native external tool declaration. AgentScope generates the schema and pauses before invocation;
+ * only the verified external event bridge persists the product's pending question.
  */
 @Component
-public class MangaHitlTools extends ToolBase {
+@RequiredArgsConstructor
+public class MangaHitlTools {
 
     private final AgentToolAuditService agentToolAuditService;
     private final MangaToolSupport support;
+    private final MangaAgentRunService runs;
 
-    public MangaHitlTools(AgentToolAuditService agentToolAuditService, MangaToolSupport support) {
-        super(ToolBase.builder()
-                .name("ask_user")
-                .description("Pause the manga agent and ask the user to choose between options before continuing. Use this when a creative or workflow decision cannot be made safely.")
-                .inputSchema(Map.of(
-                        "type", "object",
-                        "properties", Map.of(
-                                "question", Map.of("type", "string", "description", "Question to show to the user"),
-                                "options", Map.of("type", "array", "description", "Options as a list of strings or objects with label/description/recommended"),
-                                "allow_free_text", Map.of("type", "boolean", "description", "Whether the user may type a custom answer"),
-                                "reason", Map.of("type", "string", "description", "Short reason why user input is needed")
-                        ),
-                        "required", List.of("question", "options")
-                ))
-                .readOnly(true)
-                .concurrencySafe(false)
-                .externalTool(true));
-        this.agentToolAuditService = agentToolAuditService;
-        this.support = support;
-    }
-
-    @Override
-    public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
-        Map<String, Object> input = param.getInput();
-        String question = (String) input.get("question");
-        Object rawOptions = input.get("options");
-        Boolean allowFreeText = (Boolean) input.get("allow_free_text");
-        String reason = (String) input.get("reason");
-
-        var runtimeContext = param.getRuntimeContext();
-        MangaAgentRuntimeContext ctx = support.resolveContext(runtimeContext);
-
-        return Mono.fromCallable(() -> {
-            AgentUserInputRequest request = buildUserInputRequest(question, rawOptions, allowFreeText, reason);
-            support.requestUserInput(ctx, request);
-            agentToolAuditService.around(getName(), ctx.userId(), ctx.chapterId(), runtimeContext, () -> Map.of());
-            String toolId = param.getToolUseBlock().getId();
-            return ToolResultBlock.builder()
-                    .id(toolId)
-                    .name(getName())
-                    .output(List.of(TextBlock.builder().text("Waiting for user input").build()))
-                    .state(ToolResultState.RUNNING)
-                    .build();
-        });
+    @Tool(name = "ask_user", externalTool = true, readOnly = false, concurrencySafe = false,
+            description = "Pause and ask the author a question. An answer does not itself authorize changes; use the product's review decision for drafts.")
+    public ToolResultBlock askUser(
+            @ToolParam(name = "question", description = "Question for the author, 1 to 4000 characters") String question,
+            @ToolParam(name = "options", description = "One to ten answer choices, each 1 to 1000 characters") List<String> options,
+            @ToolParam(name = "allow_free_text", required = false, description = "Allow a custom answer") Boolean allowFreeText,
+            @ToolParam(name = "reason", required = false, description = "Context for the question; never an authorization") String reason) {
+        throw new IllegalStateException("External questions must be handled through AgentScope's pending call event");
     }
 
     /** External tools pause before callAsync; bridge that event to the product's durable waiting state. */
-    public void captureExternalInput(Map<String,Object> input, io.agentscope.core.agent.RuntimeContext runtimeContext) {
+    public void captureExternalInput(ToolUseBlock call, io.agentscope.core.agent.RuntimeContext runtimeContext) {
+        Map<String, Object> input = call.getInput();
         MangaAgentRuntimeContext ctx=support.resolveContext(runtimeContext);
         AgentUserInputRequest request=buildUserInputRequest(
                 (String)input.get("question"),input.get("options"),
                 Boolean.TRUE.equals(input.get("allow_free_text")),(String)input.get("reason"));
-        support.requestUserInput(ctx,request);
-        agentToolAuditService.around(getName(),ctx.userId(),ctx.chapterId(),runtimeContext,()->Map.of());
+        var registered = runs.recordExternalQuestion(ctx, call.getId(), request);
+        support.requestUserInput(ctx,registered.request());
+        if (registered.created()) {
+            var auditContext = io.agentscope.core.agent.RuntimeContext.builder(runtimeContext)
+                    .put(AgentToolAttempt.class, AgentToolAttempt.capture(call, runtimeContext)).build();
+            agentToolAuditService.around("ask_user",ctx.userId(),ctx.chapterId(),auditContext,()->Map.of());
+        }
     }
 
     private AgentUserInputRequest buildUserInputRequest(String question, Object rawOptions,
@@ -103,14 +67,7 @@ public class MangaHitlTools extends ToolBase {
                 options,
                 Boolean.TRUE.equals(allowFreeText),
                 reason == null ? "" : reason.trim(),
-                inferPurpose(reason)
+                "USER_QUESTION" // A model-supplied reason can never confer business authorization.
         );
-    }
-
-    private String inferPurpose(String reason) {
-        if (reason != null && reason.toLowerCase().contains("artifact")) {
-            return "BUSINESS_CONFIRMATION";
-        }
-        return null;
     }
 }

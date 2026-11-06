@@ -1,5 +1,6 @@
 import { authFetch, readApiData, parseApiError } from './auth';
 import { randomUUID } from '../utils/browserSecurity';
+import type { AgentUserInputRequest } from './agentRuns';
 
 export type AutomationExecutorKey = 'MANGA_AGENT' | 'STORY_CHAT' | 'MANGA_IMAGE' | 'IMAGE_GEN';
 export interface AutomationSchedule {
@@ -40,6 +41,14 @@ export interface AutomationPlan {
   id: string; status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED'; version: number;
   nextRunAt: string | null; definition: AutomationDefinition; createdAt: string; updatedAt: string;
 }
+export interface AutomationCommandProposal {
+  artifactId: string; requestId: string; chapterId: number; conversationId: string;
+  status: 'AWAITING_REVIEW' | 'COMMITTED' | 'REJECTED'; commandHash: string;
+  action: 'create' | 'edit' | 'pause' | 'resume' | 'archive'; automationId: string | null;
+  expectedVersion: number | null; definition: AutomationDefinition; result: AutomationPlan | null;
+  applied: boolean; expiresAt: string; reviewUrl: string;
+}
+export interface AutomationCommandPage { items: AutomationCommandProposal[]; nextCursor: string | null; hasMore: boolean }
 export interface AutomationRun {
   id: string; automationId: string; automationVersion: number; triggerKind: 'SCHEDULED' | 'MANUAL';
   scheduledFor: string; definition: AutomationDefinition;
@@ -53,8 +62,8 @@ export interface AutomationExecution {
   conversationId: string | null; requestId: string | null;
 }
 export interface AutomationEvent { id: number; type: string; payload: { summary?: string; code?: string }; createdAt: string }
-export interface AutomationRunDetail { run: AutomationRun; executions: AutomationExecution[]; events: AutomationEvent[]; artifacts?: AutomationArtifact[]; userInputRequest?: { artifactId?: string; question: string; options?: (string | { id: string; label: string; description?: string; recommended?: boolean })[]; reason?: string; purpose?: string } }
-export interface AutomationArtifact { kind: string; id: string; title: string; url?: string; content?: string; state?: string; imageNumber?: number; error?: string }
+export interface AutomationRunDetail { run: AutomationRun; executions: AutomationExecution[]; events: AutomationEvent[]; artifacts?: AutomationArtifact[]; reviewReceipt?: { artifact_id: string; status: 'COMMITTED' | 'REJECTED' }; userInputRequest?: AgentUserInputRequest & { artifactId?: string } }
+export interface AutomationArtifact { kind: string; id: string; title: string; url?: string; content?: string; state?: string; imageNumber?: number; error?: string; review?: { chapterId: number; conversationId: string; requestId: string; baseVersion: number; currentVersion: number; contentHash: string; originalContent: string } }
 export interface AutomationNotification { id: number; runId: string; name: string; kind: string; summary: string; read: boolean; createdAt: string }
 export interface AutomationSeed { executorKey?: AutomationExecutorKey; storyId?: number; chapterId?: number; instruction?: string; modelConfigId?: number; model?: string; size?: string; conversationId?: string; referenceFiles?: File[]; origin?: string }
 
@@ -67,6 +76,17 @@ async function request<T>(path: string, method = 'GET', body?: unknown, key?: st
   return readApiData<T>(res);
 }
 export const listAutomations = (params: URLSearchParams) => request<{ items: AutomationPlan[]; hasMore: boolean }>(`automations?${params}`);
+export const listAutomationCommands = (chapterId?: number, conversationId?: string, before?: string) => {
+  const params = new URLSearchParams();
+  if (chapterId !== undefined) params.set('chapterId', String(chapterId));
+  if (conversationId !== undefined) params.set('conversationId', conversationId);
+  if (before) params.set('before', before);
+  return request<AutomationCommandPage>(`automation-command-proposals?${params}`);
+};
+export const decideAutomationCommand = (proposal: AutomationCommandProposal, decision: 'confirm' | 'discard') =>
+  request<AutomationCommandProposal>(`automation-command-proposals/${proposal.artifactId}/decision`, 'POST', {
+    decision, commandHash: proposal.commandHash, expectedVersion: proposal.expectedVersion,
+  });
 export const getAutomation = (id: string) => request<AutomationPlan>(`automations/${id}`);
 export const saveAutomation = (definition: AutomationDefinition, id?: string, key = randomUUID()) => request<AutomationPlan>(id ? `automations/${id}` : 'automations', id ? 'PATCH' : 'POST', definition, key);
 export const previewAutomation = (schedule: AutomationSchedule) => request<{ occurrences: { instant: string; localTime: string }[] }>('automations/schedule-preview', 'POST', { schedule });

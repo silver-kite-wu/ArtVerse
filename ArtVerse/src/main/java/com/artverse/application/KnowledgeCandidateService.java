@@ -16,6 +16,8 @@ import com.artverse.application.knowledge.KnowledgeSchema;
 import com.artverse.application.knowledge.KnowledgeFactService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -28,10 +30,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.Objects;
+import java.util.ArrayList;
 
 @Service
 @RequiredArgsConstructor
 public class KnowledgeCandidateService {
+
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private AgentToolEffectService toolEffects;
 
     private final KnowledgeCandidateRepository candidateRepository;
     private final ChapterRepository chapterRepository;
@@ -94,15 +100,85 @@ public class KnowledgeCandidateService {
     }
 
     @Transactional
-    public List<CandidateView> replaceChapterExtraction(
-            Long chapterId,
-            Long userId,
-            List<ExtractedCandidate> extractedCandidates) {
-        Chapter chapter = chapterRepository.findByIdForIdempotencyAndUserId(chapterId, userId)
+    public CandidateView proposeStorySettings(Story story,Long user,String action) {
+        var snapshot=SettingsProposalService.storySnapshot(story);
+        var result=propose(userRepository.getReferenceById(user),story,"STORY_SETTINGS",action,KnowledgeUnitType.WORLDVIEW,
+                story.getTitle(),schema.write(snapshot),"作品设定变更，待审核",Map.of("subtype","RULE"),3,null,null);
+        var candidate=candidateRepository.findById(result.id()).orElseThrow();
+        candidate.setSourceSnapshot(schema.write(snapshot));candidate.setSourceHash(schema.hash(snapshot));candidateRepository.flush();return toView(candidate);
+    }
+
+    /** Independent conversation proposal: source ID includes this exact action, never an extraction batch. */
+    @Transactional
+    public CandidateView appendAiProposal(Long storyId,Long chapterId,Long userId,String action,
+            KnowledgeService.UnitInput input,Long target,Integer baseVersion,String expectedSourceHash,String evidence) {
+        Story story=requireStory(storyId,userId);
+        var locked=chapterRepository.findByIdAndUserIdForUpdate(chapterId,userId).orElseThrow(()->new BusinessException(404,"章节不存在"));
+        if(!locked.getStory().getId().equals(storyId))throw new BusinessException(403,"候选来源不属于当前作品");
+        var source=chapterSnapshot(locked);
+        if(!schema.hash(source).equals(expectedSourceHash))throw new BusinessException(409,"章节来源已变化，请重新读取");
+        if(evidence==null||evidence.isBlank()||evidence.length()>4000)throw new BusinessException(400,"需要不超过 4000 字符的来源证据");
+        var type=parseKnowledgeType(input.type());var data=schema.normalize(type,input.structuredData());data.put("source_evidence",evidence);
+        schema.requireValid(type,input.title(),input.body(),data);facts.validateReferences(storyId,data);
+        if(input.title().length()>255||input.body().length()>12000||Objects.toString(input.summary(),"").length()>1000||schema.write(data).length()>16000)throw new BusinessException(400,"候选内容过长");
+        if(input.importance()!=null&&(input.importance()<1||input.importance()>5))throw new BusinessException(400,"重要度应为 1 到 5");
+        if(input.effectiveFromChapter()!=null&&input.effectiveToChapter()!=null&&input.effectiveFromChapter()>input.effectiveToChapter())throw new BusinessException(400,"章节范围无效");
+        if(target==null&&baseVersion!=null)throw new BusinessException(400,"新建候选不能携带目标版本");
+        if(target!=null) {
+            var targets=jdbcTemplate.queryForList("SELECT type,version FROM knowledge_units WHERE id=? AND story_id=? FOR UPDATE",target,storyId);
+            if(targets.size()!=1||!type.name().equals(targets.getFirst().get("type")))throw new BusinessException(400,"目标不属于当前作品同类知识");
+            if(baseVersion==null||((Number)targets.getFirst().get("version")).intValue()!=baseVersion)throw new BusinessException(409,"正式知识基准已变化");
+        }
+        var result=propose(userRepository.getReferenceById(userId),story,"AI_PROPOSAL",action,type,input.title(),input.body(),input.summary(),data,input.importance()==null?3:input.importance(),input.effectiveFromChapter(),input.effectiveToChapter());
+        var candidate=candidateRepository.findById(result.id()).orElseThrow();candidate.setChapter(locked);candidate.setTargetUnitId(target);candidate.setBaseVersion(baseVersion);
+        candidate.setSourceSnapshot(schema.write(source));candidate.setSourceHash(schema.hash(source));candidateRepository.flush();return toView(candidate);
+    }
+
+    /** Freeze the exact model material on the durable action before calling the provider. */
+    @Transactional
+    public ExtractionBatch beginChapterExtraction(Long chapterId, Long userId, AgentOutboxService.OutboxEvent event) {
+        ObjectNode payload = lockExtractionEvent(event, chapterId, userId);
+        Chapter chapter = chapterRepository.findByIdAndUserIdForUpdate(chapterId, userId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+        if (payload.path("story_id").asLong(-1) != chapter.getStory().getId())
+            throw new BusinessException(403, "提取动作与作品归属不一致");
+        JsonNode previous = payload.get("knowledge_extraction");
+        if (previous != null) {
+            ExtractionBatch batch = readBatch(event.id(), previous);
+            if (!Objects.equals(batch.source().chapterId(), chapterId) || !Objects.equals(batch.source().userId(), userId)
+                    || !Objects.equals(batch.source().storyId(), chapter.getStory().getId()))
+                throw new BusinessException(403, "提取动作与输入快照归属不一致");
+            if (!batch.completed()) requireCurrentSource(chapter, batch.source(), batch.sourceHash());
+            return batch;
+        }
+        ExtractionSource source = ExtractionSource.from(chapter);
+        source.material(); // Reject oversized input before replacing candidates or charging a model request.
+        String sourceHash = schema.hash(source.snapshot());
+        ObjectNode frozen = objectMapper.createObjectNode();
+        frozen.set("source", objectMapper.valueToTree(source));
+        frozen.put("source_hash", sourceHash).put("status", "PREPARED");
+        payload.set("knowledge_extraction", frozen);
+        saveExtractionPayload(event, payload);
+        return new ExtractionBatch(event.id(), source, sourceHash, false, List.of());
+    }
+
+    @Transactional
+    public List<CandidateView> replaceChapterExtraction(
+            AgentOutboxService.OutboxEvent event, ExtractionBatch batch, List<ExtractedCandidate> extractedCandidates) {
+        ExtractionSource source = batch.source();
+        ObjectNode payload = lockExtractionEvent(event, source.chapterId(), source.userId());
+        ExtractionBatch frozen = readBatch(event.id(), payload.path("knowledge_extraction"));
+        if (batch.eventId() != event.id() || !frozen.source().equals(source)
+                || !frozen.sourceHash().equals(batch.sourceHash()))
+            throw new BusinessException(409, "提取动作的输入快照已变化");
+        if (frozen.completed()) return extractionResults(frozen);
+        Chapter chapter = chapterRepository.findByIdAndUserIdForUpdate(source.chapterId(), source.userId())
+                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+        requireCurrentSource(chapter, source, batch.sourceHash());
+        Long userId = source.userId();
         Story story = chapter.getStory();
         User user = story.getUser();
-        String sourcePrefix = chapterId + ":";
+        String sourcePrefix = source.chapterId() + ":";
         candidateRepository.findByStoryIdAndUserIdAndStatusOrderByCreatedAtDesc(
                         story.getId(), userId, KnowledgeCandidateStatus.PENDING)
                 .stream()
@@ -110,6 +186,7 @@ public class KnowledgeCandidateService {
                 .filter(candidate -> candidate.getSourceId() != null
                         && candidate.getSourceId().startsWith(sourcePrefix))
                 .forEach(candidate -> candidate.setStatus(KnowledgeCandidateStatus.SUPERSEDED));
+        candidateRepository.flush();
 
         List<ExtractedCandidate> safeCandidates = extractedCandidates == null
                 ? List.of()
@@ -127,7 +204,7 @@ public class KnowledgeCandidateService {
                     ? clip(body, 300)
                     : clip(input.summary().trim(), 500);
             CandidateView created = propose(user, story, "CHAPTER_EXTRACTION",
-                    sourcePrefix + index, type, clip(input.title().trim(), 255), body, summary,
+                    sourcePrefix + event.id() + ":" + index, type, clip(input.title().trim(), 255), body, summary,
                     input.structuredData() == null ? Map.of() : input.structuredData(),
                     Math.max(1, Math.min(5, input.importance() == null ? 3 : input.importance())),
                     input.effectiveFromChapter() == null
@@ -135,13 +212,97 @@ public class KnowledgeCandidateService {
                             : input.effectiveFromChapter(),
                     input.effectiveToChapter());
             KnowledgeCandidate candidate=candidateRepository.findById(created.id()).orElseThrow();candidate.setChapter(chapter);
-            Map<String,Object> snapshot=chapterSnapshot(chapter);
-            candidate.setSourceSnapshot(schema.write(snapshot));candidate.setSourceHash(schema.hash(snapshot));
+            candidate.setSourceSnapshot(schema.write(source.snapshot()));candidate.setSourceHash(batch.sourceHash());
             Map<String,Object> structured=new LinkedHashMap<>(readMap(candidate.getStructuredData()));
             structured.put("reveal_chapter_id",chapter.getId());candidate.setStructuredData(schema.write(structured));
             candidateRepository.flush();results.add(toView(candidate));
         }
+        ObjectNode receipt = (ObjectNode) payload.get("knowledge_extraction");
+        receipt.put("status", "COMPLETED");
+        receipt.set("candidate_ids", objectMapper.valueToTree(results.stream().map(CandidateView::id).toList()));
+        saveExtractionPayload(event, payload);
         return List.copyOf(results);
+    }
+
+    private void saveExtractionPayload(AgentOutboxService.OutboxEvent event, ObjectNode payload) {
+        int updated = jdbcTemplate.update("""
+                UPDATE agent_outbox_events SET payload=?::jsonb WHERE id=? AND status='PROCESSING'
+                  AND fencing_token=? AND owner_instance_id IS NOT NULL AND lease_until>clock_timestamp()
+                """, schema.write(payload), event.id(), event.fencingToken());
+        if (updated != 1) throw new BusinessException(409, "提取动作已失去执行权");
+    }
+
+    @Transactional(readOnly = true)
+    public List<CandidateView> extractionResults(ExtractionBatch batch) {
+        if (!batch.completed()) throw new BusinessException(409, "提取动作尚未完成");
+        List<CandidateView> results = new ArrayList<>();
+        for (Long id : batch.candidateIds()) results.add(candidateRepository.findByIdAndStoryIdAndUserId(
+                id, batch.source().storyId(), batch.source().userId()).map(this::toView)
+                .orElseThrow(() -> new BusinessException(409, "提取结果回执对应的候选已删除")));
+        return List.copyOf(results);
+    }
+
+    private ObjectNode lockExtractionEvent(AgentOutboxService.OutboxEvent event, Long chapterId, Long userId) {
+        var rows = jdbcTemplate.queryForList("""
+                SELECT payload::text FROM agent_outbox_events
+                WHERE id=? AND aggregate_type='CHAPTER' AND aggregate_id=?
+                  AND event_type IN ('CHAPTER_CONTENT_CHANGED','STORYBOARD_CHANGED')
+                  AND status='PROCESSING' AND owner_instance_id IS NOT NULL
+                  AND fencing_token=? AND lease_until>clock_timestamp() FOR UPDATE
+                """, event.id(), chapterId.toString(), event.fencingToken());
+        if (rows.size() != 1) throw new BusinessException(409, "提取动作已失去执行权");
+        try {
+            ObjectNode payload = (ObjectNode) objectMapper.readTree(rows.getFirst().get("payload").toString());
+            if (payload.path("user_id").asLong(-1) != userId || payload.path("chapter_id").asLong(-1) != chapterId)
+                throw new BusinessException(403, "提取动作与章节归属不一致");
+            return payload;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            throw new BusinessException(409, "提取动作数据损坏");
+        }
+    }
+
+    private ExtractionBatch readBatch(long eventId, JsonNode node) {
+        try {
+            ExtractionSource source = objectMapper.treeToValue(node.path("source"), ExtractionSource.class);
+            String hash = node.path("source_hash").asText();
+            if (source == null || !schema.hash(source.snapshot()).equals(hash)
+                    || !("PREPARED".equals(node.path("status").asText()) || "COMPLETED".equals(node.path("status").asText())))
+                throw new BusinessException(409, "提取动作的来源快照损坏");
+            List<Long> ids = new ArrayList<>();
+            node.path("candidate_ids").forEach(id -> ids.add(id.longValue()));
+            return new ExtractionBatch(eventId, source, hash, "COMPLETED".equals(node.path("status").asText()), ids);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            throw new BusinessException(409, "提取动作的来源快照损坏");
+        }
+    }
+
+    private void requireCurrentSource(Chapter chapter, ExtractionSource source, String sourceHash) {
+        if (!ExtractionSource.from(chapter).equals(source) || !schema.hash(source.snapshot()).equals(sourceHash))
+            throw new BusinessException(409, "提取期间章节来源已变化，保留原待审批次，请使用最新章节重新提取");
+    }
+
+    public record ExtractionBatch(long eventId, ExtractionSource source, String sourceHash,
+                                  boolean completed, List<Long> candidateIds) {
+        public ExtractionBatch { candidateIds = List.copyOf(candidateIds); }
+    }
+
+    public record ExtractionSource(Long chapterId, Long userId, Long storyId, Integer chapterNumber,
+                                   Long chapterVersion, String novel, String storyboard) {
+        static ExtractionSource from(Chapter chapter) {
+            return new ExtractionSource(chapter.getId(), chapter.getStory().getUser().getId(),
+                    chapter.getStory().getId(), chapter.getChapterNumber(), chapter.getVersion(),
+                    Objects.toString(chapter.getNovelContent(), ""), Objects.toString(chapter.getScenesText(), ""));
+        }
+        public Map<String,Object> snapshot() {
+            return Map.of("chapter_id", chapterId, "chapter_number", chapterNumber, "chapter_version", chapterVersion,
+                    "novel", novel, "storyboard", storyboard, "complete", true);
+        }
+        public String material() {
+            if (novel.isBlank() && storyboard.isBlank()) return "";
+            String material = "NOVEL_CONTENT:\n" + novel + "\n\nSTORYBOARD:\n" + storyboard;
+            if (material.length() > 48_000) throw new BusinessException(413, "章节来源超过 48000 字符，保留原待审批次，请缩小材料后重新提取");
+            return material;
+        }
     }
 
     @Transactional
@@ -174,8 +335,9 @@ public class KnowledgeCandidateService {
         candidate.setReviewedBy(userId);
         candidate.setReviewedAt(OffsetDateTime.now());
         candidate.setRejectionReason(null);
+        candidateRepository.saveAndFlush(candidate);
         publishDecision(candidate, "KNOWLEDGE_CANDIDATE_APPROVED");
-        return toView(candidateRepository.saveAndFlush(candidate));
+        return toView(candidate);
     }
 
     @Transactional(readOnly=true)
@@ -218,15 +380,26 @@ public class KnowledgeCandidateService {
         if(expected!=null&&!expected.equals(candidate.getVersion())) throw new BusinessException(409,"候选已更新，请重新查看后确认");
     }
     private Map<String,Object> chapterSnapshot(Chapter chapter) {
-        return Map.of("chapter_id",chapter.getId(),"novel",Objects.toString(chapter.getNovelContent(),""),"storyboard",Objects.toString(chapter.getScenesText(),""));
+        return ExtractionSource.from(chapter).snapshot();
     }
     private void checkSource(KnowledgeCandidate candidate,Long userId) {
         if(candidate.getSourceHash()==null) throw new BusinessException(409,"旧候选缺少来源快照，请重新提取或核对来源后另存为正式知识");
+        if(candidate.getChapter()!=null) jdbcTemplate.queryForList("SELECT id FROM chapters WHERE id=? AND story_id=? FOR UPDATE",candidate.getChapter().getId(),candidate.getStory().getId());
+        else if("CHARACTER_PROFILE".equals(candidate.getSourceType()))jdbcTemplate.queryForList("SELECT id FROM character_profiles WHERE id=? AND story_id=? FOR UPDATE",Long.valueOf(candidate.getSourceId()),candidate.getStory().getId());
+        else if("STORY_SETTINGS".equals(candidate.getSourceType()))jdbcTemplate.queryForList("SELECT id FROM stories WHERE id=? AND user_id=? FOR UPDATE",candidate.getStory().getId(),userId);
         Map<String,Object> current=currentSource(candidate);
         if(!schema.hash(current).equals(candidate.getSourceHash())) throw new BusinessException(409,"来源内容已变更，请重新提取并比较，不能直接批准旧快照");
     }
     private Map<String,Object> currentSource(KnowledgeCandidate candidate) {
-        if(candidate.getChapter()!=null) return chapterSnapshot(candidate.getChapter());
+        if(candidate.getChapter()!=null) {
+            var rows=jdbcTemplate.queryForList("SELECT chapter_number,version,novel_content,scenes_text FROM chapters WHERE id=? AND story_id=?",candidate.getChapter().getId(),candidate.getStory().getId());
+            if(rows.isEmpty())throw new BusinessException(409,"章节来源已删除");var current=rows.getFirst();
+            return Map.of("chapter_id",candidate.getChapter().getId(),"chapter_number",current.get("chapter_number"),"chapter_version",current.get("version"),"novel",Objects.toString(current.get("novel_content"),""),"storyboard",Objects.toString(current.get("scenes_text"),""),"complete",true);
+        }
+        else if("STORY_SETTINGS".equals(candidate.getSourceType())) {
+            var rows=jdbcTemplate.queryForList("SELECT title,coalesce(description,'') AS description,manga_style FROM stories WHERE id=?",candidate.getStory().getId());
+            if(rows.isEmpty())throw new BusinessException(409,"作品来源已删除");return rows.getFirst();
+        }
         else if("CHARACTER_PROFILE".equals(candidate.getSourceType())) {
             var profiles=jdbcTemplate.queryForList("SELECT name,description FROM character_profiles WHERE id=? AND story_id=?",Long.valueOf(candidate.getSourceId()),candidate.getStory().getId());
             if(profiles.isEmpty()) throw new BusinessException(409,"人物来源已删除");
@@ -241,8 +414,9 @@ public class KnowledgeCandidateService {
         candidate.setReviewedBy(userId);
         candidate.setReviewedAt(OffsetDateTime.now());
         candidate.setRejectionReason(reason == null || reason.isBlank() ? null : clip(reason, 500));
+        candidateRepository.saveAndFlush(candidate);
         publishDecision(candidate, "KNOWLEDGE_CANDIDATE_REJECTED");
-        return toView(candidateRepository.save(candidate));
+        return toView(candidate);
     }
 
     private CandidateView propose(User user, Story story, String sourceType, String sourceId,
@@ -305,6 +479,13 @@ public class KnowledgeCandidateService {
                 "candidate_id", candidate.getId(),
                 "story_id", candidate.getStory().getId(),
                 "status", candidate.getStatus().name())));
+        if("AI_PROPOSAL".equals(candidate.getSourceType()) && java.util.Set.of(KnowledgeCandidateStatus.APPROVED,KnowledgeCandidateStatus.REJECTED).contains(candidate.getStatus())) {
+            var rows=jdbcTemplate.queryForList("SELECT request_id FROM agent_usage_ledger WHERE user_id=? AND usage_kind='TOOL_CALL' AND metadata->'domain_effect'->>'artifact_id'=?",candidate.getUser().getId(),candidate.getSourceId());
+            if(!rows.isEmpty()) {
+                if(toolEffects==null)throw new BusinessException(409,"缺少候选领域回执服务");
+                toolEffects.recordAuthorReview(candidate.getUser().getId(),candidate.getChapter().getId(),(java.util.UUID)rows.getFirst().get("request_id"),java.util.UUID.fromString(candidate.getSourceId()),Map.of("artifact_id",candidate.getSourceId(),"status",candidate.getStatus()==KnowledgeCandidateStatus.APPROVED?"COMMITTED":"REJECTED","candidate_id",candidate.getId().toString(),"candidate_version",candidate.getVersion().toString()));
+            }
+        }
     }
 
     private CandidateView toView(KnowledgeCandidate candidate) {

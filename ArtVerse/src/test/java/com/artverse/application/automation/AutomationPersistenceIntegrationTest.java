@@ -25,7 +25,7 @@ class AutomationPersistenceIntegrationTest {
         store=new AutomationStore(jdbc,mapper);
         var inputs=mock(AutomationInputService.class);
         when(inputs.validateAndNormalize(anyLong(),any())).thenAnswer(invocation->invocation.getArgument(1));
-        service=new AutomationService(store,new AutomationScheduleCalculator(),inputs);
+        service=new AutomationService(store,new AutomationScheduleCalculator(),inputs,mock(com.artverse.application.NovelDraftReviewService.class),mock(com.artverse.application.MangaAgentRunService.class));
         ReflectionTestUtils.setField(service,"maxActivePlans",10);
         String name="automation_it_"+UUID.randomUUID().toString().replace("-","");
         user=Objects.requireNonNull(jdbc.queryForObject("INSERT INTO users(username,email,password_hash,role,created_at) VALUES (?,?,?,'USER',now()) RETURNING id",Long.class,name,name+"@example.test","integration-fixture-only"));

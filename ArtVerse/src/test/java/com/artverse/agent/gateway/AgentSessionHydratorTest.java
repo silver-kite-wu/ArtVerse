@@ -11,11 +11,72 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class AgentSessionHydratorTest {
+
+    @Test
+    void exactSuccessfulAnswerIsRequiredEvenWhenPendingDisappears() {
+        var store = new io.agentscope.core.state.InMemoryAgentStateStore();
+        var request = request(List.of());
+        var delivery = new com.artverse.agent.AgentAnswerDelivery(UUID.randomUUID(), "question", 1L,
+                "answer-hash", "{\"status\":\"ANSWERED\",\"answer\":\"accepted\"}", 1L);
+        var call = new io.agentscope.core.message.ToolUseBlock("question", "ask_user", Map.of(), "{}", Map.of());
+        var assistant = io.agentscope.core.message.Msg.builder().role(io.agentscope.core.message.MsgRole.ASSISTANT)
+                .name("artverse-" + request.taskType().sessionSuffix()).content(call).build();
+        var hydrator = new AgentSessionHydrator(store);
+        String session = AgentScopeRuntimeContextFactory.createSessionId(request);
+        store.save(request.userId(), session, "agent_state", io.agentscope.core.state.AgentState.builder().context(List.of(assistant)).build());
+        assertThat(hydrator.answerState(request, delivery).pending()).isTrue();
+        for (var result : List.of(
+                io.agentscope.core.message.ToolResultBlock.builder().id("question").name("ask_user")
+                        .state(io.agentscope.core.message.ToolResultState.ERROR)
+                        .output(delivery.toolResult().getOutput()).build(),
+                io.agentscope.core.message.ToolResultBlock.builder().id("question").name("ask_user")
+                        .state(io.agentscope.core.message.ToolResultState.SUCCESS)
+                        .output(List.of(io.agentscope.core.message.TextBlock.builder().text("different answer").build())).build())) {
+            store.save(request.userId(), session, "agent_state", io.agentscope.core.state.AgentState.builder().context(List.of(
+                    assistant, io.agentscope.core.message.Msg.builder().role(io.agentscope.core.message.MsgRole.TOOL).content(result).build())).build());
+            assertThatThrownBy(() -> hydrator.answerState(request, delivery)).hasMessageContaining("不一致或证据缺失");
+        }
+        store.save(request.userId(), session, "agent_state", io.agentscope.core.state.AgentState.builder().context(List.of(
+                assistant, io.agentscope.core.message.Msg.builder().role(io.agentscope.core.message.MsgRole.TOOL)
+                        .content(delivery.toolResult()).build())).build());
+        assertThat(hydrator.answerState(request, delivery).pending()).isFalse();
+        assertThat(hydrator.answerState(request, delivery).version()).isPositive();
+    }
+
+    @Test
+    void externalResumeCannotHydrateMissingStateAsAFreshWritingSession() {
+        var hydrator = new AgentSessionHydrator(new io.agentscope.core.state.InMemoryAgentStateStore());
+        var result = io.agentscope.core.message.ToolResultBlock.builder().id("original-question").name("ask_user").build();
+        assertThatThrownBy(() -> hydrator.requirePendingResults(request(List.of()), List.of(result)))
+                .isInstanceOf(com.artverse.common.BusinessException.class).hasMessageContaining("状态缺失");
+    }
+
+    @Test
+    void externalResumeChecksTheActualPendingCallRatherThanOnlySessionExistence() {
+        var store = new io.agentscope.core.state.InMemoryAgentStateStore();
+        var request = request(List.of());
+        var call = new io.agentscope.core.message.ToolUseBlock("question-2", "ask_user", Map.of(), "{}", Map.of());
+        store.save(request.userId(), AgentScopeRuntimeContextFactory.createSessionId(request), "agent_state",
+                io.agentscope.core.state.AgentState.builder().context(List.of(io.agentscope.core.message.Msg.builder()
+                        .name("artverse-" + request.taskType().sessionSuffix()).role(io.agentscope.core.message.MsgRole.ASSISTANT)
+                        .content(call).build())).build());
+        var hydrator = new AgentSessionHydrator(store);
+        assertThatThrownBy(() -> hydrator.requireNoPending(request))
+                .hasMessageContaining("仍待结果");
+        var stale = io.agentscope.core.message.ToolResultBlock.builder().id("question-1").name("ask_user").build();
+        assertThatThrownBy(() -> hydrator.requirePendingResults(request, List.of(stale)))
+                .isInstanceOf(com.artverse.common.BusinessException.class);
+        var current = io.agentscope.core.message.ToolResultBlock.builder().id("question-2").name("ask_user").build();
+        hydrator.requirePendingResults(request, List.of(current));
+        assertThatThrownBy(() -> hydrator.requirePendingResults(request, List.of(current, current)))
+                .isInstanceOf(com.artverse.common.BusinessException.class);
+    }
 
     @Test
     void healthyStateSendsOnlySystemDataAndCurrentUserMessage() {

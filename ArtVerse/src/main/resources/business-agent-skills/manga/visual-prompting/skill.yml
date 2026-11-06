@@ -12,9 +12,9 @@ capabilities:
   - STORYBOARD_READ
   - STORYBOARD_WRITE
 allowedToolGroups:
-  - context-tools
-  - storyboard-tools
-  - hitl-tools
+  - story-context
+  - storyboard-draft
+  - hitl
 hitlPolicy: NONE
 content: content.md
 references:

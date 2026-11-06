@@ -1,7 +1,11 @@
 package com.artverse.config;
 
 import io.agentscope.core.state.AgentStateStore;
+import com.artverse.agent.gateway.StrictAgentStateStore;
+import com.artverse.agent.gateway.AgentTurnStateStores;
 import io.agentscope.extensions.redis.state.RedisAgentStateStore;
+import io.agentscope.extensions.redis.state.RedisClientAdapter;
+import io.agentscope.extensions.redis.state.lettuce.LettuceClientAdapter;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.cluster.RedisClusterClient;
@@ -9,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import java.time.Duration;
 import java.util.List;
@@ -36,13 +41,26 @@ public class RedisAgentStateStoreConfig {
         return AgentScopeRedisBackend.standalone(RedisClient.create(uri));
     }
 
+    @Bean(destroyMethod = "")
+    public RedisClientAdapter agentScopeStateClient(AgentScopeRedisBackend backend) {
+        return backend.adapter;
+    }
+
+    @Bean(destroyMethod = "")
+    public RedisAgentStateStore nativeRedisAgentStateStore(RedisClientAdapter agentScopeStateClient) {
+        return RedisAgentStateStore.builder().keyPrefix(AgentTurnStateStores.KEY_PREFIX)
+                .clientAdapter(agentScopeStateClient).build();
+    }
+
     @Bean
-    public AgentStateStore redisAgentStateStore(AgentScopeRedisBackend backend) {
-        RedisAgentStateStore.Builder builder = RedisAgentStateStore.builder()
-                .keyPrefix("artverse:agent:");
-        return backend.clusterClient == null
-                ? builder.lettuceClient(backend.client).build()
-                : builder.lettuceClusterClient(backend.clusterClient).build();
+    public AgentTurnStateStores agentTurnStateStores(AgentScopeRedisBackend backend) {
+        return new AgentTurnStateStores(backend.adapter, backend.clusterClient != null);
+    }
+
+    @Bean
+    @Primary
+    public AgentStateStore redisAgentStateStore(RedisAgentStateStore nativeRedisAgentStateStore) {
+        return StrictAgentStateStore.readOnly(nativeRedisAgentStateStore);
     }
 
     private RedisURI standaloneUri(RedisProperties properties) {
@@ -107,10 +125,12 @@ public class RedisAgentStateStoreConfig {
     public static final class AgentScopeRedisBackend implements AutoCloseable {
         private final RedisClient client;
         private final RedisClusterClient clusterClient;
+        private final RedisClientAdapter adapter;
 
         private AgentScopeRedisBackend(RedisClient client, RedisClusterClient clusterClient) {
             this.client = client;
             this.clusterClient = clusterClient;
+            this.adapter = clusterClient == null ? LettuceClientAdapter.of(client) : LettuceClientAdapter.of(clusterClient);
         }
 
         static AgentScopeRedisBackend standalone(RedisClient client) {
@@ -123,8 +143,7 @@ public class RedisAgentStateStoreConfig {
 
         @Override
         public void close() {
-            if (client != null) client.shutdown();
-            if (clusterClient != null) clusterClient.shutdown();
+            adapter.close();
         }
     }
 }

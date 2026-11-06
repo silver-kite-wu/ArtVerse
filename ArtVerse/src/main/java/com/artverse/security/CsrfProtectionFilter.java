@@ -41,16 +41,20 @@ public class CsrfProtectionFilter extends OncePerRequestFilter {
         String origin = request.getHeader("Origin");
         String expectedHeaderName = properties.getAuth().getCsrf().getHeaderName();
         String expectedHeaderValue = properties.getAuth().getCsrf().getHeaderValue();
+        String clientHeader = request.getHeader(expectedHeaderName);
         boolean validOrigin = origin != null && properties.getCorsOrigins().contains(origin);
-        boolean validHeader = expectedHeaderValue.equals(request.getHeader(expectedHeaderName));
+        boolean validHeader = expectedHeaderValue.equals(clientHeader);
         if (validOrigin && validHeader) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        if (properties.getAuth().getCsrf().getMode() == ArtVerseProperties.EnforcementMode.REPORT) {
-            log.warn("CSRF report-only mismatch: method={}, uri={}, originPresent={}, headerPresent={}",
-                    request.getMethod(), request.getRequestURI(), origin != null, request.getHeader(expectedHeaderName) != null);
+        boolean reportOnly = properties.getAuth().getCsrf().getMode() == ArtVerseProperties.EnforcementMode.REPORT;
+        log.warn("CSRF mismatch: mode={}, method={}, uri={}, originReason={}, clientHeaderReason={}",
+                reportOnly ? "REPORT" : "ENFORCE", request.getMethod(), request.getRequestURI(),
+                validOrigin ? "OK" : origin == null ? "ORIGIN_MISSING" : "ORIGIN_NOT_ALLOWED",
+                validHeader ? "OK" : clientHeader == null ? "CLIENT_HEADER_MISSING" : "CLIENT_HEADER_INVALID");
+        if (reportOnly) {
             filterChain.doFilter(request, response);
             return;
         }

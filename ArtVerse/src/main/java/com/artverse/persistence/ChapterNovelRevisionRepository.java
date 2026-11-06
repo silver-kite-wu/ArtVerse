@@ -16,6 +16,10 @@ public interface ChapterNovelRevisionRepository extends JpaRepository<ChapterNov
 
     Optional<ChapterNovelRevision> findByIdAndChapterId(Long id, Long chapterId);
 
+    @Query("select r from ChapterNovelRevision r where r.chapter.id=:chapter and (:before is null or r.id<:before) order by r.id desc")
+    List<ChapterNovelRevision> agentPage(@Param("chapter") Long chapterId, @Param("before") Long before,
+            org.springframework.data.domain.Pageable pageable);
+
     Optional<ChapterNovelRevision> findByProposalId(java.util.UUID proposalId);
 
     Optional<ChapterNovelRevision> findByAgentRunArtifactId(Long artifactId);

@@ -13,6 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class ToolContractVerifierTest {
+    private static final UUID REQUEST = UUID.randomUUID();
+    private static final UUID ARTIFACT = UUID.randomUUID();
 
     private final ToolContractVerifier verifier = new ToolContractVerifier(mock(MangaAgentRunService.class));
 
@@ -28,14 +30,65 @@ class ToolContractVerifierTest {
                 true
         );
         List<AgentRunToolStatus.ToolEvent> events = List.of(
-                success("plan-a:0", "draft_structured_storyboard", Map.of("validated", true)),
-                success("plan-a:0", "commit_storyboard", Map.of("saved", true))
+                success("plan-a:0", "draft_structured_storyboard", receipt(ARTIFACT, false)),
+                success("plan-a:0", "commit_storyboard", receipt(ARTIFACT, true))
         );
 
         ToolContractVerifier.VerificationOutcome outcome =
                 verifier.verify(expectation, events, MangaWorkflowResult.success("done"));
 
         assertThat(outcome.status()).isEqualTo(ToolContractVerifier.VerificationStatus.PASSED);
+    }
+
+    @Test
+    void validDraftCannotProveACommitOfAnotherArtifact() {
+        var outcome = verifier.verify(storyboardExpectation(), List.of(
+                success("plan-a:0", "draft_structured_storyboard", receipt(ARTIFACT, false)),
+                success("plan-a:0", "commit_storyboard", receipt(UUID.randomUUID(), true))), MangaWorkflowResult.success("done"));
+        assertThat(outcome.status()).isEqualTo(ToolContractVerifier.VerificationStatus.FAILED);
+        assertThat(outcome.reasons()).contains("missing_valid_draft");
+    }
+
+    @Test
+    void failedOrUncommittedResultCannotProveASave() {
+        var outcome = verifier.verify(storyboardExpectation(), List.of(
+                success("plan-a:0", "draft_structured_storyboard", receipt(ARTIFACT, false)),
+                success("plan-a:0", "commit_storyboard", receipt(ARTIFACT, false))), MangaWorkflowResult.success("done"));
+        assertThat(outcome.reasons()).contains("missing_required_tool:commit_storyboard");
+    }
+
+    @Test
+    void changedHashBaseOrRunCannotBorrowDraftEvidence() {
+        for (String field : List.of("content_hash", "base_version", "request_id", "step_id")) {
+            var commit = new java.util.LinkedHashMap<>(receipt(ARTIFACT, true));
+            commit.put(field, "changed");
+            var outcome = verifier.verify(storyboardExpectation(), List.of(
+                    success("plan-a:0", "draft_structured_storyboard", receipt(ARTIFACT, false)),
+                    success("plan-a:0", "commit_storyboard", commit)), MangaWorkflowResult.success("done"));
+            assertThat(outcome.status()).as(field).isEqualTo(ToolContractVerifier.VerificationStatus.FAILED);
+        }
+    }
+
+    @Test
+    void replayOfTheSameCommittedReceiptIsOneBusinessEffect() {
+        var commit = success("plan-a:0", "commit_storyboard", receipt(ARTIFACT, true));
+        var outcome = verifier.verify(storyboardExpectation(), List.of(
+                success("plan-a:0", "draft_structured_storyboard", receipt(ARTIFACT, false)), commit, commit),
+                MangaWorkflowResult.success("done"));
+        assertThat(outcome.status()).isEqualTo(ToolContractVerifier.VerificationStatus.PASSED);
+    }
+
+    private ToolExpectation storyboardExpectation() {
+        return new ToolExpectation("plan-a:0", MangaWorkflowRoute.STORYBOARD,
+                RoutingDecision.ExpectedToolPolicy.WRITE_WITH_HITL,
+                java.util.Set.of("draft_structured_storyboard", "commit_storyboard"), java.util.Set.of(),
+                Map.of("commit_storyboard", 1), true);
+    }
+
+    private Map<String,Object> receipt(UUID id, boolean committed) {
+        return Map.of("artifact_id", id.toString(), "content_hash", "hash", "base_version", 7L,
+                "request_id", REQUEST.toString(), "step_id", "plan-a:0", "validated", true,
+                "saved", committed, "artifact_status", committed ? "COMMITTED" : "VALIDATED");
     }
 
     @Test
@@ -84,7 +137,7 @@ class ToolContractVerifierTest {
 
     private AgentRunToolStatus.ToolEvent success(String stepId, String toolName, Map<String, Object> result) {
         return new AgentRunToolStatus.ToolEvent(
-                UUID.randomUUID(), stepId, toolName, "SUCCEEDED", true,
+                REQUEST, stepId, toolName, "SUCCEEDED", true,
                 10L, "hash", null, "audit", result, OffsetDateTime.now());
     }
 

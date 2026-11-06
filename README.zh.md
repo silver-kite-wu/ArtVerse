@@ -159,6 +159,18 @@ mvn spring-boot:run
 
 后端监听 `http://localhost:8080`。
 
+Windows 本地开发推荐在仓库根目录执行：
+
+```powershell
+.\ArtVerse\start-backend-local.ps1
+# 后台运行并将日志写入 ArtVerse/target：
+.\ArtVerse\start-backend-local.ps1 -Background
+# 若 IPv4 的 6379 被其他程序占用，而 Redis 在 IPv6 本机地址可用：
+.\ArtVerse\start-backend-local.ps1 -Background -RedisHost ::1
+```
+
+启动前停止占用 8080 的旧后端。脚本固定使用 `local` Profile，允许 `http://localhost:5173` 与 `http://127.0.0.1:5173`，为本地 HTTP 使用非 Secure Cookie，并保留 CSRF 强制校验。配置只作用于该启动进程，不改写 `.env` 或全局环境变量。IDE 启动时也需设置 `SPRING_PROFILES_ACTIVE=local`、`ARTVERSE_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173` 和 `ARTVERSE_AUTH_COOKIE_SECURE=false`。生产环境继续使用独立的 HTTPS 域名、Secure Cookie 和生产 Profile。详见[本地登录 CSRF 排查与实施记录](ArtVerse/docs/login-csrf-analysis-and-plan.md)。
+
 ### 4. 启动前端
 
 ```bash

@@ -5,7 +5,7 @@ import io.agentscope.harness.agent.subagent.SubagentDeclaration;
 import java.util.List;
 
 /** Fixed four-way review team. Missing workers are audited by MangaReviewAgentNode. */
-final class MangaReviewSubagentDeclarations {
+public final class MangaReviewSubagentDeclarations {
 
     private static final int REVIEWER_MAX_ITERS = 3;
 
@@ -51,7 +51,7 @@ final class MangaReviewSubagentDeclarations {
     private MangaReviewSubagentDeclarations() {
     }
 
-    static List<SubagentDeclaration> all() {
+    public static List<SubagentDeclaration> all() {
         return DECLARATIONS;
     }
 

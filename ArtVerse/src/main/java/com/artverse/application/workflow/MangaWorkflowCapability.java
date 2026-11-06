@@ -18,6 +18,8 @@ public enum MangaWorkflowCapability {
     STORYBOARD_WRITE(true),
     STORYBOARD_REVIEW(false),
     IMAGE_GENERATION(true),
+    CREATIVE_PROPOSALS(false),
+    IMAGE_PROPOSALS(false),
     SCHEDULED_IMAGE_GENERATION(false);
 
     private final boolean mutating;

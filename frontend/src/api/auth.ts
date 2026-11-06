@@ -387,6 +387,9 @@ export async function authFetch(input: RequestInfo, init?: RequestInit): Promise
 function parseApiErrorResponse(text: string): { message: string; code?: number } {
   try {
     const data = JSON.parse(text);
+    if (data?.code === 40303) {
+      return { message: '请求来源校验失败，请联系管理员检查站点来源配置。', code: data.code };
+    }
     if (typeof data?.message === 'string') {
       return { message: data.message, code: typeof data?.code === 'number' ? data.code : undefined };
     }

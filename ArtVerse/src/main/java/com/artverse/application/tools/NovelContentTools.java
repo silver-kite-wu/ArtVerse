@@ -4,7 +4,6 @@ import com.artverse.application.AgentToolAuditService;
 import com.artverse.application.NovelContentService;
 import com.artverse.application.ToolIdempotencyService;
 import com.artverse.domain.NovelContentRevisionSource;
-import io.agentscope.core.tool.Tool;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +17,6 @@ public class NovelContentTools {
     private final NovelContentService novelContentService;
     private final AgentToolAuditService auditService;
 
-    @Tool(name = "save_novel_content", description = "Save confirmed novel text as a new immutable chapter revision.", concurrencySafe = false)
     public Map<String, Object> saveNovelContent(Long chapterId, Long userId, String content, Long baseVersion,
                                                  NovelContentRevisionSource source) {
         return auditService.around("save_novel_content", userId, chapterId, () -> {
@@ -35,7 +33,6 @@ public class NovelContentTools {
         });
     }
 
-    @Tool(name = "restore_novel_content", description = "Restore one confirmed novel-text revision as a new revision.", concurrencySafe = false)
     public Map<String, Object> restoreNovelContent(Long chapterId, Long revisionId, Long userId, Long baseVersion) {
         return auditService.around("restore_novel_content", userId, chapterId, () -> {
             NovelContentService.SaveResult result = novelContentService.restore(chapterId, revisionId, userId, baseVersion);

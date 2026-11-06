@@ -1,6 +1,9 @@
 package com.artverse.application;
 
 import com.artverse.agent.MangaAgentRuntimeContext;
+import com.artverse.agent.AgentTaskType;
+import com.artverse.agent.AgentToolAttempt;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentscope.core.agent.RuntimeContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -48,13 +51,29 @@ class AgentToolAuditServiceTest {
             assertThat(result)
                     .containsEntry("success", true)
                     .containsEntry("saved", true)
-                    .containsKeys("data", "errorCode", "retryable", "auditId", "resultHash");
+                    .containsKeys("errorCode", "retryable", "auditId", "resultHash");
             assertThat(ignored.state().events()).hasSize(1);
             assertThat(ignored.state().events().getFirst().stepId()).isEqualTo("manga-director");
             assertThat(ignored.state().events().getFirst().status()).isEqualTo("SUCCEEDED");
             assertThat(ignored.state().events().getFirst().auditId()).isNotBlank();
             assertThat(ignored.state().events().getFirst().resultHash()).isNotBlank();
         }
+    }
+
+    @Test
+    void validatedNativeAttemptSatisfiesTheExternalToolBudgetBoundary() {
+        AgentToolAttempt attempt = new AgentToolAttempt("ask-call", "ask_user", "a".repeat(64),
+                1L, UUID.randomUUID(), 2L, 7L, AgentTaskType.STORY_CHAT_WRITE.name(), "story-chat:POLISH");
+        MangaAgentRuntimeContext execution = new MangaAgentRuntimeContext(1L, 2L, 7L, UUID.randomUUID(),
+                attempt.requestId(), null, AgentTaskType.STORY_CHAT_WRITE, attempt.stepId(), 1L, null, "worker");
+        RuntimeContext runtime = RuntimeContext.builder()
+                .put(MangaAgentRuntimeContext.class, execution)
+                .put(AgentToolAttempt.class, attempt)
+                .build();
+        var service = new AgentToolAuditService(mock(AgentRunToolStatus.class),
+                mock(AgentBudgetService.class), new ObjectMapper());
+        assertThat(service.around("ask_user", 1L, 7L, runtime, () -> Map.of()))
+                .containsEntry("success", true);
     }
 
     private RedisTemplate<String, Object> redisTemplate() {

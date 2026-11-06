@@ -26,6 +26,8 @@ public interface MangaAgentRunRepository extends JpaRepository<MangaAgentRun, Lo
 
     Optional<MangaAgentRun> findByConversationIdAndRequestId(Long conversationId, UUID requestId);
 
+    List<MangaAgentRun> findByConversationIdOrderByCreatedAtDesc(Long conversationId, Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select run from MangaAgentRun run where run.user.id = :userId and run.chapter.id = :chapterId " +
             "and run.requestId = :requestId")
@@ -53,4 +55,11 @@ public interface MangaAgentRunRepository extends JpaRepository<MangaAgentRun, Lo
     );
 
     List<MangaAgentRun> findByStatusAndLastProgressAtBefore(MangaAgentRunStatus status, OffsetDateTime lastProgressAt);
+
+    @Query("select run.id from MangaAgentRun run where run.status = :status and run.lastProgressAt < :before")
+    List<Long> findStalledCandidateIds(@Param("status") MangaAgentRunStatus status, @Param("before") OffsetDateTime before);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select run from MangaAgentRun run where run.id = :id")
+    Optional<MangaAgentRun> findForUpdateById(@Param("id") Long id);
 }

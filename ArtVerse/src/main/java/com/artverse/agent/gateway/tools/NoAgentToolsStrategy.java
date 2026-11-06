@@ -2,7 +2,7 @@ package com.artverse.agent.gateway.tools;
 
 import com.artverse.agent.AgentTaskType;
 import io.agentscope.core.tool.Toolkit;
-import io.agentscope.core.tool.mcp.McpClientWrapper;
+import com.artverse.agent.AgentRunRequest;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
@@ -19,7 +19,7 @@ class NoAgentToolsStrategy implements AgentToolConfigurationStrategy {
     }
 
     @Override
-    public void configure(Toolkit toolkit, McpClientWrapper businessTools) {
+    public void configure(Toolkit toolkit, AgentRunRequest request) {
         // These agents intentionally have no ArtVerse business tools.
     }
 }

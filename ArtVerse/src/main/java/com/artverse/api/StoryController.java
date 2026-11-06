@@ -21,10 +21,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class StoryController {
 
-    private static final Set<String> ALLOWED_MANGA_STYLES = Set.of(
-            "japanese_manga", "korean_webtoon", "american_comic", "ligne_claire",
-            "chinese_ink", "semi_realistic", "realistic", "oil_painting",
-            "flat_design", "pixel_art", "watercolor", "cyberpunk");
+    private static final Set<String> ALLOWED_MANGA_STYLES = com.artverse.application.StorySettingsPolicy.MANGA_STYLES;
 
     private final StoryService storyService;
     private final MediaStorageService mediaStorageService;

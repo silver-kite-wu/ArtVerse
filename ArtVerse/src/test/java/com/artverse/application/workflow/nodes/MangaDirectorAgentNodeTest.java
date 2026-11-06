@@ -55,6 +55,8 @@ class MangaDirectorAgentNodeTest {
         run.setRequestId(UUID.randomUUID());
         run.setStatus(MangaAgentRunStatus.RUNNING);
         run.setRoute(MangaWorkflowRoute.DIRECTOR);
+        run.setOwnerInstanceId("original-worker");
+        run.setFencingToken(11L);
 
         when(runService.findRun(1L, 7L, run.getRequestId())).thenReturn(Optional.of(run));
         when(runService.routingDecision(run)).thenReturn(decision);
@@ -65,7 +67,9 @@ class MangaDirectorAgentNodeTest {
         when(review.run(any())).thenReturn(MangaWorkflowResult.success(
                 "Review user reply", "Review contract summary", "Review handoff context"));
 
-        MangaWorkflowResult result = node.run(TestContexts.context(run.getRequestId(), run));
+        var originalContext = TestContexts.context(run.getRequestId(), run);
+        run.setFencingToken(12L);
+        MangaWorkflowResult result = node.run(originalContext);
 
         assertThat(result.reply())
                 .contains("Storyboard contract summary")
@@ -74,6 +78,11 @@ class MangaDirectorAgentNodeTest {
         ArgumentCaptor<MangaWorkflowExecutionContext> contextCaptor = forClass(MangaWorkflowExecutionContext.class);
         verify(review).run(contextCaptor.capture());
         assertThat(contextCaptor.getValue().message()).contains("Storyboard handoff context");
+        assertThat(contextCaptor.getValue().executionClaim()).isSameAs(originalContext.executionClaim());
+        assertThat(contextCaptor.getValue().executionClaim().fencingToken()).isEqualTo(11L);
+        ArgumentCaptor<MangaWorkflowExecutionContext> firstStep = forClass(MangaWorkflowExecutionContext.class);
+        verify(storyboard).run(firstStep.capture());
+        assertThat(firstStep.getValue().executionClaim()).isSameAs(originalContext.executionClaim());
         verify(support, never()).saveReply(any(), org.mockito.ArgumentMatchers.contains("Review contract summary"));
     }
 
@@ -104,10 +113,19 @@ class MangaDirectorAgentNodeTest {
         when(review.stream(any(), any())).thenReturn(MangaWorkflowResult.success("review"));
         MangaAgentRunEventPublisher.RunEventSink sink = mock(MangaAgentRunEventPublisher.RunEventSink.class);
 
-        node.stream(TestContexts.context(requestId, run), new MangaWorkflowStreamContext(run, sink));
+        run.setOwnerInstanceId("stream-original-worker");
+        run.setFencingToken(21L);
+        var originalContext = TestContexts.context(requestId, run);
+        run.setOwnerInstanceId("stream-replacement-worker");
+        run.setFencingToken(22L);
+        node.stream(originalContext, new MangaWorkflowStreamContext(run, sink));
 
         ArgumentCaptor<MangaWorkflowStreamContext> streamCaptor = forClass(MangaWorkflowStreamContext.class);
-        verify(storyboard).stream(any(), streamCaptor.capture());
+        ArgumentCaptor<MangaWorkflowExecutionContext> childContext = forClass(MangaWorkflowExecutionContext.class);
+        verify(storyboard).stream(childContext.capture(), streamCaptor.capture());
+        assertThat(childContext.getValue().executionClaim()).isSameAs(originalContext.executionClaim());
+        assertThat(childContext.getValue().executionClaim().owner()).isEqualTo("stream-original-worker");
+        assertThat(childContext.getValue().executionClaim().fencingToken()).isEqualTo(21L);
         assertThat(streamCaptor.getValue().suppressTextDeltas()).isTrue();
         assertThat(streamCaptor.getValue().eventContext())
                 .containsEntry("step", 0)
@@ -115,6 +133,82 @@ class MangaDirectorAgentNodeTest {
                 .containsEntry("agentName", "storyboard-agent");
         verify(storyboard, never()).run(any());
         verify(review, never()).run(any());
+    }
+
+    @Test
+    void nativeAnswerRestoresTheOriginalPlanAndSkipsCompletedNodes() {
+        var registry = mock(MangaWorkflowNodeRegistry.class);
+        var runs = mock(MangaAgentRunService.class);
+        var storyboard = mock(MangaWorkflowNodeHandler.class);
+        var review = mock(MangaWorkflowNodeHandler.class);
+        var support = mock(MangaAgentExecutionSupport.class);
+        var node = new MangaDirectorAgentNode(registry, runs, objectMapper, support, new ExecutionPlanValidator());
+        var run = new MangaAgentRun(); run.setRequestId(UUID.randomUUID());
+        run.setOwnerInstanceId("original-worker"); run.setFencingToken(11L);
+        var decision = new RoutingDecision(MangaWorkflowRoute.DIRECTOR, .9, List.of("resume"), true, false, "test",
+                List.of(MangaWorkflowRoute.STORYBOARD, MangaWorkflowRoute.REVIEW), RoutingDecision.CURRENT_VERSION);
+        var first = new com.artverse.application.workflow.ExecutionStep(0, MangaWorkflowRoute.STORYBOARD, "storyboard", true);
+        first.markCompleted("saved storyboard", "original storyboard handoff");
+        var second = new com.artverse.application.workflow.ExecutionStep(1, MangaWorkflowRoute.REVIEW, "review", false);
+        second.markRunning("original storyboard handoff");
+        var plan = new com.artverse.application.workflow.ExecutionPlan("original-plan", List.of(first, second),
+                RoutingDecision.CURRENT_VERSION, java.time.OffsetDateTime.now());
+        when(runs.findRun(1L, 7L, run.getRequestId())).thenReturn(Optional.of(run));
+        when(runs.routingDecision(run)).thenReturn(decision); when(runs.executionPlan(run)).thenReturn(plan);
+        when(registry.handlerFor(MangaWorkflowRoute.STORYBOARD)).thenReturn(storyboard);
+        when(registry.handlerFor(MangaWorkflowRoute.REVIEW)).thenReturn(review);
+        when(review.run(any())).thenReturn(MangaWorkflowResult.success("review finished"));
+        var resume = new MangaWorkflowExecutionContext.AnswerResume(new com.artverse.agent.AgentAnswerDelivery(
+                UUID.randomUUID(), "original-question", 3L, "hash", "{}", 11L),
+                mock(com.artverse.agent.gateway.AgentSessionTurns.Lease.class), com.artverse.agent.AgentTaskType.MANGA_REVIEW, "original-plan:1");
+        var context = withAnswer(TestContexts.context(run.getRequestId(), run), resume);
+
+        node.run(context);
+
+        verify(storyboard, never()).run(any());
+        var captured = forClass(MangaWorkflowExecutionContext.class);
+        verify(review).run(captured.capture());
+        assertThat(captured.getValue().stepId()).isEqualTo("original-plan:1");
+        assertThat(captured.getValue().answerResume()).isSameAs(resume);
+        assertThat(captured.getValue().message()).contains("original storyboard handoff");
+        assertThat(captured.getValue().executionClaim()).isSameAs(context.executionClaim());
+    }
+
+    @Test
+    void anAlreadyCompletedAnswerNodeRequiresItsCompletionReceiptBeforeContinuing() {
+        var registry = mock(MangaWorkflowNodeRegistry.class);
+        var runs = mock(MangaAgentRunService.class);
+        var review = mock(MangaWorkflowNodeHandler.class);
+        var node = new MangaDirectorAgentNode(registry, runs, objectMapper, mock(MangaAgentExecutionSupport.class), new ExecutionPlanValidator());
+        var run = new MangaAgentRun(); run.setRequestId(UUID.randomUUID());
+        var first = new com.artverse.application.workflow.ExecutionStep(0, MangaWorkflowRoute.STORYBOARD, "storyboard", true);
+        first.markCompleted("saved storyboard", "original handoff");
+        var second = new com.artverse.application.workflow.ExecutionStep(1, MangaWorkflowRoute.REVIEW, "review", false);
+        var plan = new com.artverse.application.workflow.ExecutionPlan("original-plan", List.of(first, second),
+                RoutingDecision.CURRENT_VERSION, java.time.OffsetDateTime.now());
+        when(runs.findRun(1L, 7L, run.getRequestId())).thenReturn(Optional.of(run));
+        when(runs.routingDecision(run)).thenReturn(new RoutingDecision(MangaWorkflowRoute.DIRECTOR, .9, List.of("resume"), true, false, "test",
+                List.of(MangaWorkflowRoute.STORYBOARD, MangaWorkflowRoute.REVIEW), RoutingDecision.CURRENT_VERSION));
+        when(runs.executionPlan(run)).thenReturn(plan);
+        when(registry.handlerFor(MangaWorkflowRoute.REVIEW)).thenReturn(review);
+        when(review.run(any())).thenReturn(MangaWorkflowResult.success("review finished"));
+        var turn = mock(com.artverse.agent.gateway.AgentSessionTurns.Lease.class);
+        var resume = new MangaWorkflowExecutionContext.AnswerResume(new com.artverse.agent.AgentAnswerDelivery(
+                UUID.randomUUID(), "original-question", 3L, "hash", "{}", 11L), turn,
+                com.artverse.agent.AgentTaskType.MANGA_STORYBOARD, "original-plan:0");
+        var context = withAnswer(TestContexts.context(run.getRequestId(), run), resume);
+
+        node.run(context);
+
+        var order = org.mockito.Mockito.inOrder(runs, turn, review);
+        order.verify(runs).requireCompletedAnswerStep(context);
+        order.verify(turn).close();
+        order.verify(review).run(any());
+    }
+
+    private MangaWorkflowExecutionContext withAnswer(MangaWorkflowExecutionContext base, MangaWorkflowExecutionContext.AnswerResume resume) {
+        return new MangaWorkflowExecutionContext(base.conversation(), base.message(), base.requestId(), base.llmApiKey(), base.modelSpec(),
+                base.toolState(), base.user(), base.chapter(), base.workflowContext(), false, resume.stepId(), base.executionClaim(), resume);
     }
 
     @Test

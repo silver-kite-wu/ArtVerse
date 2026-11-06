@@ -11,7 +11,8 @@ import static com.artverse.application.workflow.MangaWorkflowCapability.STORYBOA
 import static com.artverse.application.workflow.MangaWorkflowCapability.SCHEDULED_IMAGE_GENERATION;
 
 public enum MangaWorkflowRoute {
-    CONVERSATION(MangaWorkflowCapability.CONVERSATION, STORYBOARD_READ, SCHEDULED_IMAGE_GENERATION),
+    CONVERSATION(MangaWorkflowCapability.CONVERSATION, STORYBOARD_READ, SCHEDULED_IMAGE_GENERATION,
+            MangaWorkflowCapability.CREATIVE_PROPOSALS,MangaWorkflowCapability.IMAGE_PROPOSALS),
     CREATIVE(CREATIVE_GUIDANCE, STORYBOARD_READ),
     STORYBOARD(STORYBOARD_READ, STORYBOARD_WRITE),
     REVIEW(STORYBOARD_READ, STORYBOARD_REVIEW),

@@ -5,13 +5,14 @@ import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy,
+  ArrowUp,
+  CalendarClock,
   Download,
   Edit3,
   GripVertical,
   ImagePlus,
   Loader2,
   Plus,
-  Send,
   Settings2,
   Trash2,
   X,
@@ -286,6 +287,7 @@ function Composer({
 }) {
   const [configOpen, setConfigOpen] = useState(false);
   const [pasteToast, setPasteToast] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData.items;
@@ -310,96 +312,98 @@ function Composer({
 
   return (
     <div className={compact ? 'w-full' : 'w-full max-w-5xl mx-auto'}>
-      {/* Split the card: text section has overflow-hidden, footer does not */}
-      <div className="rounded-2xl border border-border bg-bg-surface shadow-md transition-shadow duration-200 hover:shadow-lg">
-        <div className="overflow-hidden rounded-t-2xl bg-bg-surface">
-          <div className="relative p-4 sm:p-5">
-            {refFiles.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-2">
-                {refFiles.map((rf, i) => (
-                  <div key={i} className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-border bg-bg-raised">
-                    <img src={rf.preview} alt={`参考图 ${i + 1}`} className="h-full w-full object-cover" />
-                    <button
-                      onClick={() => onRemoveRef(i)}
-                      className="absolute right-0 top-0 rounded-bl-md bg-bg-base/60 p-0.5 text-white"
-                      aria-label={`移除参考图 ${i + 1}`}
-                    >
-                      <X size={10} />
-                    </button>
-                  </div>
-                ))}
+      <div className={`ai-composer${compact ? ' ai-composer--compact' : ''}`}>
+        {refFiles.length > 0 && (
+          <div className="ai-composer__attachments">
+            {refFiles.map((rf, i) => (
+              <div key={i} className="ai-composer__attachment">
+                <img src={rf.preview} alt={`参考图 ${i + 1}`} />
+                <button
+                  type="button"
+                  onClick={() => onRemoveRef(i)}
+                  aria-label={`移除参考图 ${i + 1}`}
+                >
+                  <X size={10} />
+                </button>
               </div>
-            )}
-
-            <textarea
-              value={prompt}
-              onChange={(e) => onPromptChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  onSend();
-                }
-              }}
-              onPaste={handlePaste}
-              placeholder="描述你想生成的画面、风格、主体和细节（支持粘贴图片作为参考图）"
-              disabled={generating}
-              rows={compact ? 4 : 5}
-              className="w-full resize-none bg-transparent text-[1.0625rem] leading-7 text-text-primary outline-none placeholder:text-text-secondary"
-            />
-            {pasteToast && (
-              <div className="absolute right-4 top-4 z-10 animate-fade-in rounded-lg bg-accent/90 px-3 py-1.5 text-xs text-white">
-                已添加参考图
-              </div>
-            )}
+            ))}
           </div>
-        </div>
+        )}
 
-        <div className="relative flex flex-wrap items-center gap-2 border-t border-border px-3 py-3 sm:px-4 bg-bg-surface rounded-b-2xl">
-          <label className={'flex cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2 text-text-secondary transition-all duration-200 hover:border-accent/40 hover:text-accent hover:bg-bg-raised ' + (refFiles.length >= 3 ? 'pointer-events-none opacity-40' : '')}>
-            <ImagePlus size={16} />
-            <span className="text-sm">参考图</span>
-            <input type="file" accept="image/*" multiple onChange={onAddRef} className="hidden" />
-          </label>
-
-          {/* Config button */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setConfigOpen(!configOpen)}
-              className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-text-secondary transition-all duration-200 hover:border-accent/40 hover:bg-bg-raised hover:text-accent"
-              title="图片配置"
-            >
-              <Settings2 size={15} />
-              <span className="text-sm hidden sm:inline">{fmtRes(config.resolution)}</span>
+        <textarea
+          value={prompt}
+          onChange={(e) => onPromptChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+              e.preventDefault();
+              if (canSend) onSend();
+            }
+          }}
+          onPaste={handlePaste}
+          aria-label="生图提示词"
+          placeholder="描述你想生成的画面、风格、主体和细节（支持粘贴图片作为参考图）"
+          disabled={generating}
+          rows={compact ? 3 : 4}
+          className="ai-composer__input"
+        />
+        {pasteToast && (
+          <div className="absolute right-4 top-4 z-10 animate-fade-in rounded-lg bg-accent/90 px-3 py-1.5 text-xs text-white">
+            已添加参考图
+          </div>
+        )}
+        <div className="ai-composer__toolbar">
+          <div className="ai-composer__tools">
+            <button type="button" className="ai-composer__tool" disabled={refFiles.length >= 3 || generating} onClick={() => fileInputRef.current?.click()}>
+              <ImagePlus size={16} />
+              <span>参考图</span>
             </button>
-            {configOpen && (
-              <ConfigPopover
-                config={config}
-                onChange={(c) => { onConfigChange(c); setConfigOpen(false); }}
-                onClose={() => setConfigOpen(false)}
-              />
-            )}
+            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={onAddRef} className="ai-composer__file-input" aria-label="添加参考图" />
+
+            {/* Config button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setConfigOpen(!configOpen)}
+                className="ai-composer__tool"
+                title="图片配置"
+                aria-label={`图片配置：${fmtRes(config.resolution)}`}
+                aria-expanded={configOpen}
+              >
+                <Settings2 size={15} />
+                <span>{config.aspectRatio}</span>
+              </button>
+              {configOpen && (
+                <ConfigPopover
+                  config={config}
+                  onChange={(c) => { onConfigChange(c); setConfigOpen(false); }}
+                  onClose={() => setConfigOpen(false)}
+                />
+              )}
+            </div>
+
+            <button type="button" disabled={!prompt.trim() || generating} onClick={() => openAutomationComposer({ executorKey: 'IMAGE_GEN', instruction: prompt, size: config.resolution, model: selectedModel, referenceFiles: refFiles.map(item => item.file), origin: 'IMAGE_GEN' })} className="ai-composer__tool" title="预约执行"><CalendarClock size={15} /><span>预约</span></button>
+          </div>
+          <div className="ai-composer__model">
+            <ModelSwitcher
+              capability="image"
+              selectedModel={selectedModel}
+              onSelect={onSelectModel}
+              disabled={generating}
+            />
           </div>
 
-          <ModelSwitcher
-            capability="image"
-            selectedModel={selectedModel}
-            onSelect={onSelectModel}
-            disabled={generating}
-          />
-
-          <button type="button" disabled={!prompt.trim() || generating} onClick={() => openAutomationComposer({ executorKey: 'IMAGE_GEN', instruction: prompt, size: config.resolution, model: selectedModel, referenceFiles: refFiles.map(item => item.file), origin: 'IMAGE_GEN' })} className="ml-auto rounded-xl border border-border px-3 py-2 text-sm text-text-secondary hover:text-accent disabled:opacity-40">预约执行</button>
           <button
             type="button"
             onClick={onSend}
             disabled={!canSend}
-            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl btn-accent active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+            className="ai-composer__send"
             aria-label={generating ? '正在生成' : '发送生成请求'}
           >
-            {generating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            {generating ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={18} />}
           </button>
         </div>
       </div>
+      <div className="ai-composer__caption"><span>支持粘贴参考图 · 最多 3 张</span><span>Enter 生成 · Shift + Enter 换行</span></div>
     </div>
   );
 }

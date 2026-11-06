@@ -30,13 +30,8 @@ public class ProductionSecurityConfigurationValidator implements EnvironmentAwar
 
         requireStrongKey("ARTVERSE_SECRET_ENCRYPTION_KEY", properties.getSecrets().getEncryptionKey());
         requireStrongKey("ARTVERSE_AUTH_RISK_HMAC_KEY", properties.getAuth().getRisk().getHmacKey());
-        requireStrongKey("ARTVERSE_AGENT_MCP_SHARED_SECRET", properties.getAgent().getMcp().getSharedSecret());
         if (properties.getSecrets().getEncryptionKey().equals(properties.getAuth().getRisk().getHmacKey())) {
             throw new IllegalStateException("Production encryption and risk HMAC keys must be different.");
-        }
-        if (properties.getAgent().getMcp().getSharedSecret().equals(properties.getSecrets().getEncryptionKey())
-                || properties.getAgent().getMcp().getSharedSecret().equals(properties.getAuth().getRisk().getHmacKey())) {
-            throw new IllegalStateException("Production MCP signing key must be different from other security keys.");
         }
         if (!properties.getAuth().getCookie().isSecure()) {
             throw new IllegalStateException("Production requires ARTVERSE_AUTH_COOKIE_SECURE=true.");

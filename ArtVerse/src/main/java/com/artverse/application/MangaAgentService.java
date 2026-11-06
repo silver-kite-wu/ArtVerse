@@ -20,6 +20,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -39,28 +40,84 @@ public class MangaAgentService {
     private final ArtVerseProperties properties;
     private final AgentConcurrencyGate agentConcurrencyGate;
     private final AgentScopeHarnessAgentGateway agentScopeGateway;
+    private final StoryboardArtifactService storyboardArtifacts;
 
     @Qualifier("mangaGenerationExecutor")
     private final ExecutorService executor;
     private final MangaRoutingMetrics routingMetrics;
 
     public void runBackground(MangaAgentConversation conversation,String message,UUID requestId,UserProviderConfig config) {
+        runBackground(conversation, message, requestId, config, null);
+    }
+
+    public void runBackground(MangaAgentConversation conversation,String message,UUID requestId,UserProviderConfig config,
+                              com.artverse.agent.AutomationExecutionClaim parentClaim) {
         var sink=mangaAgentRunEventPublisher.newPersistentSink();
         var ref=new AtomicReference<MangaAgentRun>();
         var permit=agentConcurrencyGate.acquireOrReject(conversation.getUser().getId(),requestId);
-        try { runStreamTask(()->executeStreamConversation(conversation,message,requestId,null,MangaRouteSource.AUTO,config,sink,ref),conversation,requestId,sink,ref); }
+        try { runStreamTask(()->executeStreamConversation(conversation,message,requestId,null,MangaRouteSource.AUTO,config,sink,ref,parentClaim),conversation,requestId,sink,ref); }
         finally { agentConcurrencyGate.release(permit); }
     }
 
     public void resumeBackground(MangaAgentConversation conversation,UUID requestId,String answer,UserProviderConfig config) {
+        resumeBackground(conversation, requestId, answer, null, null, null, config);
+    }
+
+    public void resumeBackground(MangaAgentConversation conversation, UUID requestId, String answer,
+                                 String toolCallId, Long pendingVersion, String selectedOptionId, UserProviderConfig config) {
+        resumeBackground(conversation, requestId, answer, toolCallId, pendingVersion, selectedOptionId, config, null);
+    }
+
+    public void resumeBackground(MangaAgentConversation conversation, UUID requestId, String answer,
+                                 String toolCallId, Long pendingVersion, String selectedOptionId, UserProviderConfig config,
+                                 com.artverse.agent.AutomationExecutionClaim parentClaim) {
         var sink=mangaAgentRunEventPublisher.newPersistentSink();
         var ref=new AtomicReference<MangaAgentRun>();
         var permit=agentConcurrencyGate.acquireOrReject(conversation.getUser().getId(),requestId);
         try { runStreamTask(()-> {
+            if (toolCallId != null) {
+                resumeNativeAnswer(conversation, requestId, answer, toolCallId, pendingVersion, selectedOptionId, config, sink, ref, parentClaim);
+                return;
+            }
             var snapshot=requireWaitingSnapshot(conversation,requestId);
+            requireNonNativeDecision(snapshot);
             if(handleMutationDecision(conversation,snapshot,answer,sink,ref)||handleContextMissingDecision(conversation,snapshot,answer,sink,ref))return;
-            executeStreamConversation(conversation,resumeMessage(snapshot,answer),requestId,routeForResume(snapshot,answer),routeSourceForResume(snapshot,answer),config,sink,ref);
+            executeStreamConversation(conversation,resumeMessage(snapshot,answer),requestId,routeForResume(snapshot,answer),routeSourceForResume(snapshot,answer),config,sink,ref,parentClaim);
         },conversation,requestId,sink,ref); } finally { agentConcurrencyGate.release(permit); }
+    }
+
+    private Map<String, Object> resumeNativeAnswer(MangaAgentConversation conversation, UUID requestId, String answer,
+            String toolCallId, Long pendingVersion, String selectedOptionId, UserProviderConfig config,
+            MangaAgentRunEventPublisher.RunEventSink sink, AtomicReference<MangaAgentRun> suppliedRef) {
+        return resumeNativeAnswer(conversation, requestId, answer, toolCallId, pendingVersion, selectedOptionId,
+                config, sink, suppliedRef, null);
+    }
+
+    private Map<String, Object> resumeNativeAnswer(MangaAgentConversation conversation, UUID requestId, String answer,
+            String toolCallId, Long pendingVersion, String selectedOptionId, UserProviderConfig config,
+            MangaAgentRunEventPublisher.RunEventSink sink, AtomicReference<MangaAgentRun> suppliedRef,
+            com.artverse.agent.AutomationExecutionClaim parentClaim) {
+        var accepted = mangaAgentRunService.acceptAnswer(conversation, requestId, toolCallId, pendingVersion, answer, selectedOptionId);
+        var execution = mangaAgentRunService.answerExecution(conversation, requestId, accepted);
+        var identity = new com.artverse.agent.AgentRunRequest(String.valueOf(conversation.getUser().getId()),
+                conversation.getStory().getId(), conversation.getChapter().getId(), execution.taskType(), List.of(),
+                Map.of("step_id", execution.stepId()), null, "", requestId, conversation.getConversationUuid());
+        var runRef = suppliedRef == null ? new AtomicReference<MangaAgentRun>() : suppliedRef;
+        try (var turn = agentScopeGateway.acquireSessionTurn(identity)) {
+            if (turn == null) throw new BusinessException(503, "暂时无法取得答复投递执行权");
+            try (var scope = agentRunToolStatus.start(conversation.getUser().getId(), conversation.getChapter().getId(), requestId,
+                    event -> {
+                        if (sink != null) { sink.recordToolProgress(runRef.get()); sink.sendToolEvent(runRef.get(), event); }
+                    })) {
+                return mangaWorkflowOrchestrator.resumeAnswerWithToolState(conversation, requestId, accepted, execution,
+                        turn, scope.state(), config, sink, runRef, parentClaim);
+            }
+        }
+    }
+
+    private void requireNonNativeDecision(MangaAgentRunSnapshots.RunSnapshot snapshot) {
+        if (snapshot.userInputRequest() != null && "USER_QUESTION".equals(snapshot.userInputRequest().purpose()))
+            throw new BusinessException(400, "请提供原提问 toolCallId、pendingVersion 及原选项或答复");
     }
 
     @Transactional(readOnly = true)
@@ -132,19 +189,6 @@ public class MangaAgentService {
                         effectiveRequestId
                 );
             }
-        } catch (AgentUserInputRequiredException e) {
-            mangaAgentRunService.findRun(conversation, effectiveRequestId)
-                    .ifPresent(run -> mangaAgentRunService.markWaiting(conversation, effectiveRequestId, e.request()));
-            throw e;
-        } catch (RuntimeException e) {
-            mangaAgentRunService.findRun(conversation, effectiveRequestId).ifPresent(run -> {
-                if (!mangaAgentRunService.isTerminal(conversation, effectiveRequestId)) {
-                    mangaAgentRunService.markFailed(conversation, effectiveRequestId,
-                            e.getMessage() == null ? "Agent request failed" : e.getMessage());
-                    routingMetrics.recordRunOutcome(run.getRoute(), "FAILED");
-                }
-            });
-            throw e;
         } finally {
             agentConcurrencyGate.release(permit);
         }
@@ -216,6 +260,13 @@ public class MangaAgentService {
                                            UserProviderConfig llmConfig,
                                            MangaAgentRunEventPublisher.RunEventSink sink,
                                            AtomicReference<MangaAgentRun> runRef) {
+        executeStreamConversation(conversation, message, requestId, route, routeSource, llmConfig, sink, runRef, null);
+    }
+
+    private void executeStreamConversation(MangaAgentConversation conversation, String message, UUID requestId,
+                                           MangaWorkflowRoute route, MangaRouteSource routeSource, UserProviderConfig llmConfig,
+                                           MangaAgentRunEventPublisher.RunEventSink sink, AtomicReference<MangaAgentRun> runRef,
+                                           com.artverse.agent.AutomationExecutionClaim parentClaim) {
         User user = conversation.getUser();
         Long chapterId = conversation.getChapter().getId();
         try (AgentRunToolStatus.RunScope ignored = agentRunToolStatus.start(
@@ -229,7 +280,7 @@ public class MangaAgentService {
                 }
         )) {
             mangaWorkflowOrchestrator.runStreamLeader(
-                    conversation, message, requestId, route, ignored.state(), sink, runRef, llmConfig, routeSource);
+                    conversation, message, requestId, route, ignored.state(), sink, runRef, llmConfig, routeSource, parentClaim);
         }
     }
 
@@ -239,8 +290,13 @@ public class MangaAgentService {
 
     public SseEmitter resumeAgUiStream(Long chapterId, UUID requestId, String answer, User user,
                                        UserProviderConfig llmConfig) {
+        return resumeAgUiStream(chapterId, requestId, answer, null, null, null, user, llmConfig);
+    }
+
+    public SseEmitter resumeAgUiStream(Long chapterId, UUID requestId, String answer, String toolCallId,
+                                       Long pendingVersion, String selectedOptionId, User user, UserProviderConfig llmConfig) {
         MangaAgentConversation conversation = conversationService.activeOrCreate(chapterId, user);
-        return resumeStreamInternal(conversation, requestId, answer, llmConfig);
+        return resumeStreamInternal(conversation, requestId, answer, toolCallId, pendingVersion, selectedOptionId, llmConfig);
     }
 
     public SseEmitter resumeAgUiStream(Long chapterId, UUID conversationId, UUID requestId, String answer, User user) {
@@ -250,18 +306,30 @@ public class MangaAgentService {
 
     public SseEmitter resumeAgUiStream(Long chapterId, UUID conversationId, UUID requestId, String answer, User user,
                                        UserProviderConfig llmConfig) {
+        return resumeAgUiStream(chapterId, conversationId, requestId, answer, null, null, null, user, llmConfig);
+    }
+
+    public SseEmitter resumeAgUiStream(Long chapterId, UUID conversationId, UUID requestId, String answer,
+                                       String toolCallId, Long pendingVersion, String selectedOptionId,
+                                       User user, UserProviderConfig llmConfig) {
         MangaAgentConversation conversation = conversationService.requireConversation(chapterId, user, conversationId);
-        return resumeStreamInternal(conversation, requestId, answer, llmConfig);
+        return resumeStreamInternal(conversation, requestId, answer, toolCallId, pendingVersion, selectedOptionId, llmConfig);
     }
 
     private SseEmitter resumeStreamInternal(MangaAgentConversation conversation, UUID requestId, String answer,
+                                            String toolCallId, Long pendingVersion, String selectedOptionId,
                                             UserProviderConfig llmConfig) {
         SseEmitter emitter = new SseEmitter(0L);
         MangaAgentRunEventPublisher.RunEventSink sink = mangaAgentRunEventPublisher.newSink(emitter);
         AtomicReference<MangaAgentRun> runRef = new AtomicReference<>();
 
         submitStreamTask(conversation.getUser().getId(), requestId, () -> runStreamTask(() -> {
+            if (toolCallId != null) {
+                resumeNativeAnswer(conversation, requestId, answer, toolCallId, pendingVersion, selectedOptionId, llmConfig, sink, runRef);
+                return;
+            }
             MangaAgentRunSnapshots.RunSnapshot snapshot = requireWaitingSnapshot(conversation, requestId);
+            requireNonNativeDecision(snapshot);
             if (handleMutationDecision(conversation, snapshot, answer, sink, runRef)) {
                 return;
             }
@@ -290,17 +358,10 @@ public class MangaAgentService {
             task.run();
         } catch (AgentUserInputRequiredException e) {
             MangaAgentRun run = runRef.get();
-            if (run != null) {
-                mangaAgentRunService.markWaiting(conversation, requestId, e.request());
-            }
             sink.sendUserInputRequested(run, requestId, e.request());
         } catch (Exception e) {
             String detail = e.getMessage() == null ? "Agent request failed" : e.getMessage();
             MangaAgentRun run = runRef.get();
-            if (run != null && !mangaAgentRunService.isTerminal(conversation, requestId)) {
-                mangaAgentRunService.markFailed(conversation, requestId, detail);
-                routingMetrics.recordRunOutcome(run.getRoute(), "FAILED");
-            }
             sink.sendError(run, requestId, detail);
         } finally {
             sink.complete();
@@ -312,8 +373,13 @@ public class MangaAgentService {
     }
 
     public RunResult resume(Long chapterId, UUID requestId, String answer, User user, UserProviderConfig llmConfig) {
+        return resume(chapterId, requestId, answer, null, null, null, user, llmConfig);
+    }
+
+    public RunResult resume(Long chapterId, UUID requestId, String answer, String toolCallId,
+                            Long pendingVersion, String selectedOptionId, User user, UserProviderConfig llmConfig) {
         MangaAgentConversation conversation = conversationService.activeOrCreate(chapterId, user);
-        return resumeInternal(conversation, requestId, answer, llmConfig);
+        return resumeInternal(conversation, requestId, answer, toolCallId, pendingVersion, selectedOptionId, llmConfig);
     }
 
     public RunResult resume(Long chapterId, UUID conversationId, UUID requestId, String answer, User user) {
@@ -322,12 +388,27 @@ public class MangaAgentService {
 
     public RunResult resume(Long chapterId, UUID conversationId, UUID requestId, String answer, User user,
                             UserProviderConfig llmConfig) {
+        return resume(chapterId, conversationId, requestId, answer, null, null, null, user, llmConfig);
+    }
+
+    public RunResult resume(Long chapterId, UUID conversationId, UUID requestId, String answer,
+                            String toolCallId, Long pendingVersion, String selectedOptionId, User user,
+                            UserProviderConfig llmConfig) {
         MangaAgentConversation conversation = conversationService.requireConversation(chapterId, user, conversationId);
-        return resumeInternal(conversation, requestId, answer, llmConfig);
+        return resumeInternal(conversation, requestId, answer, toolCallId, pendingVersion, selectedOptionId, llmConfig);
     }
 
     private RunResult resumeInternal(MangaAgentConversation conversation, UUID requestId, String answer,
-                                     UserProviderConfig llmConfig) {
+                                     String toolCallId, Long pendingVersion, String selectedOptionId, UserProviderConfig llmConfig) {
+        if (toolCallId != null) {
+            var permit = agentConcurrencyGate.acquireOrReject(conversation.getUser().getId(), requestId);
+            try {
+                return new RunResult(String.valueOf(resumeNativeAnswer(conversation, requestId, answer, toolCallId,
+                        pendingVersion, selectedOptionId, llmConfig, null, null).getOrDefault("reply", "")), requestId);
+            } finally {
+                agentConcurrencyGate.release(permit);
+            }
+        }
         MangaAgentRunSnapshots.RunSnapshot snapshot = mangaAgentRunService.snapshot(
                 mangaAgentRunService.findRun(conversation, requestId)
                         .orElseThrow(() -> new BusinessException(404, "Agent run not found"))
@@ -335,6 +416,7 @@ public class MangaAgentService {
         if (snapshot.status() != com.artverse.domain.MangaAgentRunStatus.WAITING_USER) {
             throw new BusinessException(409, "Can only resume a paused run");
         }
+        requireNonNativeDecision(snapshot);
         AgentUserInputRequest waiting = snapshot.userInputRequest();
         if (waiting == null) {
             throw new BusinessException(409, "No waiting user input request on the run");
@@ -342,33 +424,23 @@ public class MangaAgentService {
         if ("MUTATION_CONFIRMATION".equalsIgnoreCase(waiting.purpose())) {
             if (!isAffirmative(answer)) {
                 String reply = "已取消覆盖操作，当前分镜保持不变。";
-                conversationService.saveMessage(
-                        conversation, com.artverse.domain.MessageRole.ASSISTANT, reply, requestId);
-                mangaAgentRunService.markSucceeded(conversation, requestId, reply);
+                mangaWorkflowOrchestrator.completeWaitingDecision(conversation, requestId, waiting, reply);
                 return new RunResult(reply, requestId);
             }
-            agentRunToolStatus.authorizeMutation(
-                    conversation.getUser().getId(), conversation.getChapter().getId(), requestId);
+            storyboardArtifacts.authorizeOverwrite(conversation.getUser().getId(), conversation.getChapter().getId(),
+                    requestId, conversation.getConversationUuid());
         }
         if ("CONTEXT_MISSING".equalsIgnoreCase(waiting.purpose()) && isCancelSelection(waiting, answer)) {
             String reply = "已取消本次需要上下文的写入请求。补齐章节正文或分镜后，可以随时重新发起。";
-            conversationService.saveMessage(
-                    conversation, com.artverse.domain.MessageRole.ASSISTANT, reply, requestId);
-            mangaAgentRunService.markSucceeded(conversation, requestId, reply);
+            mangaWorkflowOrchestrator.completeWaitingDecision(conversation, requestId, waiting, reply);
             return new RunResult(reply, requestId);
         }
         String message = conversationService.resumeMessage(snapshot.inputMessage(), waiting, answer);
         try {
-            RunResult result = runInternal(conversation, message, requestId, routeForResume(snapshot, answer),
+            return runInternal(conversation, message, requestId, routeForResume(snapshot, answer),
                     routeSourceForResume(snapshot, answer), llmConfig);
-            mangaAgentRunService.markSucceeded(conversation, requestId, result.reply());
-            return result;
-        } catch (AgentUserInputRequiredException e) {
-            mangaAgentRunService.markWaiting(conversation, requestId, e.request());
-            throw e;
         } catch (Exception e) {
             String detail = e.getMessage() == null ? "Agent request failed" : e.getMessage();
-            mangaAgentRunService.markFailed(conversation, requestId, detail);
             throw e instanceof RuntimeException runtimeException
                     ? runtimeException
                     : new RuntimeException(detail, e);
@@ -423,7 +495,7 @@ public class MangaAgentService {
         routingMetrics.recordRunOutcome(run.getRoute(), "CANCELLED");
         agentRunToolStatus.markCancelled(user.getId(), chapterId, requestId);
         agentRunToolStatus.clearWaitingInput(user.getId(), chapterId, requestId);
-        agentScopeGateway.interrupt(requestId);
+        agentScopeGateway.interrupt(String.valueOf(user.getId()), conversation.getConversationUuid(), requestId);
         return mangaAgentRunService.snapshot(run);
     }
 
@@ -436,7 +508,7 @@ public class MangaAgentService {
         routingMetrics.recordRunOutcome(run.getRoute(), "CANCELLED");
         agentRunToolStatus.markCancelled(user.getId(), chapterId, requestId);
         agentRunToolStatus.clearWaitingInput(user.getId(), chapterId, requestId);
-        agentScopeGateway.interrupt(requestId);
+        agentScopeGateway.interrupt(String.valueOf(user.getId()), conversation.getConversationUuid(), requestId);
         return mangaAgentRunService.snapshot(run);
     }
 
@@ -512,17 +584,15 @@ public class MangaAgentService {
             return false;
         }
         if (isAffirmative(answer)) {
-            agentRunToolStatus.authorizeMutation(
-                    conversation.getUser().getId(), conversation.getChapter().getId(), snapshot.requestId());
+            storyboardArtifacts.authorizeOverwrite(conversation.getUser().getId(), conversation.getChapter().getId(),
+                    snapshot.requestId(), conversation.getConversationUuid());
             return false;
         }
         MangaAgentRun run = mangaAgentRunService.findRun(conversation, snapshot.requestId())
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
         runRef.set(run);
         String reply = "已取消覆盖操作，当前分镜保持不变。";
-        conversationService.saveMessage(
-                conversation, com.artverse.domain.MessageRole.ASSISTANT, reply, snapshot.requestId());
-        mangaAgentRunService.markSucceeded(conversation, snapshot.requestId(), reply);
+        mangaWorkflowOrchestrator.completeWaitingDecision(conversation, snapshot.requestId(), waiting, reply);
         sink.sendDone(run, reply, snapshot.requestId());
         return true;
     }
@@ -541,9 +611,7 @@ public class MangaAgentService {
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
         runRef.set(run);
         String reply = "已取消本次需要上下文的写入请求。补齐章节正文或分镜后，可以随时重新发起。";
-        conversationService.saveMessage(
-                conversation, com.artverse.domain.MessageRole.ASSISTANT, reply, snapshot.requestId());
-        mangaAgentRunService.markSucceeded(conversation, snapshot.requestId(), reply);
+        mangaWorkflowOrchestrator.completeWaitingDecision(conversation, snapshot.requestId(), waiting, reply);
         sink.sendDone(run, reply, snapshot.requestId());
         return true;
     }

@@ -105,6 +105,8 @@ public class AgUiEventFactory {
         metadata.put("allowFreeText", request.allowFreeText());
         metadata.put("purpose", request.purpose());
         metadata.put("reason", request.reason() == null ? "" : request.reason());
+        if (request.toolCallId() != null) metadata.put("toolCallId", request.toolCallId());
+        if (request.pendingVersion() != null) metadata.put("pendingVersion", request.pendingVersion());
 
         Map<String, Object> interrupt = new LinkedHashMap<>();
         interrupt.put("id", runId(requestId));
@@ -202,7 +204,7 @@ public class AgUiEventFactory {
         payload.put("durationMs", event.durationMs());
         payload.put("resultHash", event.resultHash());
         payload.put("auditId", event.auditId());
-        payload.put("result", event.result());
+        payload.put("result", StoryChatToolAuditSummary.project(event.toolName(), event.result()));
         payload.put("error", event.error());
         return payload;
     }

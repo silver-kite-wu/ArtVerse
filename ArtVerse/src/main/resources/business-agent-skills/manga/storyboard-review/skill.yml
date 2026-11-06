@@ -10,7 +10,8 @@ capabilities:
   - STORYBOARD_READ
   - STORYBOARD_REVIEW
 allowedToolGroups:
-  - context-tools
+  - story-context
+  - review-experts
 hitlPolicy: NONE
 content: content.md
 references:

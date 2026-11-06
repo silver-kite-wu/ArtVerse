@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test:auth": "node --experimental-strip-types --test test/auth.test.ts",
+    "test:markdown": "node --experimental-strip-types --test test/markdownRenderer.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

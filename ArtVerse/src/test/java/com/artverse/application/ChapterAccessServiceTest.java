@@ -40,7 +40,7 @@ class ChapterAccessServiceTest {
     }
 
     @Test
-    void allowsLegacyChapterWithoutStoryOwner() {
+    void rejectsChapterWithoutStoryOwner() {
         ChapterRepository chapterRepository = mock(ChapterRepository.class);
         Chapter chapter = new Chapter();
         chapter.setId(7L);
@@ -49,7 +49,7 @@ class ChapterAccessServiceTest {
 
         ChapterAccessService service = new ChapterAccessService(chapterRepository);
 
-        assertThat(service.requireVisible(7L, 2L)).isSameAs(chapter);
+        assertThatThrownBy(() -> service.requireVisible(7L, 2L)).isInstanceOf(BusinessException.class).hasMessage("Forbidden");
     }
 
     @Test

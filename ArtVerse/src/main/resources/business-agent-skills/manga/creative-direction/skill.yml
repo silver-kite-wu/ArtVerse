@@ -11,7 +11,7 @@ capabilities:
   - CONVERSATION
   - CREATIVE_GUIDANCE
 allowedToolGroups:
-  - context-tools
+  - story-context
 hitlPolicy: NONE
 content: content.md
 references:

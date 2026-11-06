@@ -11,7 +11,7 @@ export type MangaAgentRunEvent =
   | { type: 'tool'; data: { tool?: string; succeeded?: boolean; saved?: boolean; scenes_count?: number; error?: string } }
   | { type: 'user_input_requested'; data: AgentUserInputRequest }
   | { type: 'done'; data: { reply?: string; requestId?: string; request_id?: string } }
-  | { type: 'error'; data: { detail?: string; error?: string; requestId?: string; request_id?: string } }
+  | { type: 'error'; data: { detail?: string; error?: string; requestId?: string; request_id?: string; transport?: boolean } }
   | { type: 'ag_ui_event'; data: ArtVerseAgUiEvent };
 
 export type ArtVerseAgUiEvent = AGUIEvent & {
@@ -42,6 +42,8 @@ export type ArtVerseAgUiEvent = AGUIEvent & {
         allowFreeText?: boolean;
         purpose?: AgentUserInputRequest['purpose'];
         reason?: string;
+        toolCallId?: string;
+        pendingVersion?: number;
       };
     }>;
   };
@@ -167,8 +169,16 @@ export interface AgentUserInputRequest {
   options: AgentUserInputOption[];
   allowFreeText?: boolean;
   reason?: string;
+  toolCallId?: string;
+  pendingVersion?: number;
   purpose?: 'ROUTING' | 'MUTATION_CONFIRMATION' | 'BUSINESS_CONFIRMATION' | string;
 }
+
+export type AgentAnswer = { answer: string; selectedOptionId?: never } | { selectedOptionId: string; answer?: never };
+export type StoryChatResume = { decision: 'reviewed'; artifactId: string }
+  | ({ decision: 'answer'; toolCallId: string; pendingVersion: number } & AgentAnswer);
+export type MangaAgentResume = ({ toolCallId: string; pendingVersion: number } & AgentAnswer)
+  | { answer: string; toolCallId?: never; pendingVersion?: never; selectedOptionId?: never };
 
 class ArtVerseMangaAgentHttpAgent extends HttpAgent {
   private readonly message: string;
@@ -227,8 +237,8 @@ class ArtVerseMangaAgentHttpAgent extends HttpAgent {
 }
 
 function streamErrorMessage(err: unknown, fallback: string): string {
-  const payload = (err as { payload?: { detail?: unknown; error?: unknown } } | null)?.payload;
-  const detail = payload?.detail ?? payload?.error;
+  const payload = (err as { payload?: { message?: unknown; detail?: unknown; error?: unknown } } | null)?.payload;
+  const detail = payload?.message ?? payload?.detail ?? payload?.error;
   if (typeof detail === 'string' && detail.trim()) return detail;
   const message = (err as { message?: unknown } | null)?.message;
   return typeof message === 'string' && message ? message : fallback;
@@ -269,7 +279,7 @@ export function runStoryChatAgUiStream(
 }
 
 export async function decideNovelDraft(chapterId: number, conversationId: string, requestId: string, artifactId: string,
-  body: { decision: 'confirm' | 'discard'; content: string; base_version: number; expected_content_hash: string },
+  body: { decision: 'confirm' | 'discard'; content: string; base_version: number; expected_content_hash: string; continue_agent?: boolean },
 ): Promise<{ changed: boolean; chapter_version: number; status: string }> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/story-chat/conversations/${conversationId}/runs/${requestId}/artifacts/${artifactId}/decision`, {
     method: 'POST', headers: apiHeaders(true, 'POST'), body: JSON.stringify(body),
@@ -282,22 +292,40 @@ export function resumeStoryChatAgUiStream(
   chapterId: number,
   conversationId: string,
   requestId: string,
-  decision: 'confirm' | 'discard',
-  artifactId: string,
+  response: StoryChatResume,
   onEvent: (event: MangaAgentRunEvent) => void,
   model?: string,
 ): AbortController {
+  return resumeAgentAgUiStream(chapterId, conversationId, requestId, 'story-chat', response, onEvent, model);
+}
+
+export function resumeMangaAgentAgUiStream(
+  chapterId: number,
+  conversationId: string,
+  requestId: string,
+  response: MangaAgentResume,
+  onEvent: (event: MangaAgentRunEvent) => void,
+  model?: string,
+): AbortController {
+  return resumeAgentAgUiStream(chapterId, conversationId, requestId, 'manga-agent', response, onEvent, model);
+}
+
+function resumeAgentAgUiStream(
+  chapterId: number, conversationId: string, requestId: string,
+  kind: 'story-chat' | 'manga-agent', response: StoryChatResume | MangaAgentResume,
+  onEvent: (event: MangaAgentRunEvent) => void, model?: string,
+): AbortController {
   const controller = new AbortController();
   const agent = new ArtVerseMangaAgentHttpAgent(
-    `${BASE}/api/chapters/${chapterId}/story-chat/conversations/${conversationId}/ag-ui/runs/${requestId}/resume`,
+    `${BASE}/api/chapters/${chapterId}/${kind}/conversations/${conversationId}/ag-ui/runs/${requestId}/resume`,
     '',
     requestId,
     controller,
-    { decision, artifact_id: artifactId, artifactId },
+    response,
     model,
   );
   const subscription = agent.run({
-    threadId: `story-chat-${chapterId}-${conversationId}`,
+    threadId: `${kind}-${chapterId}-${conversationId}`,
     runId: requestId,
     state: {},
     messages: [],
@@ -309,22 +337,60 @@ export function resumeStoryChatAgUiStream(
   return controller;
 }
 
+export async function listStoryChatRuns(chapterId: number, conversationId: string): Promise<MangaAgentRunSnapshot[]> {
+  const response = await authFetch(`${BASE}/api/chapters/${chapterId}/story-chat/conversations/${conversationId}/runs`);
+  if (!response.ok) throw new Error(parseApiError(await response.text()));
+  const data = await readApiData(response) as Record<string, unknown>[];
+  return data.map(normalizeStoryChatRun);
+}
+
+export async function getStoryChatRun(chapterId: number, conversationId: string, requestId: string): Promise<MangaAgentRunSnapshot> {
+  const response = await authFetch(`${BASE}/api/chapters/${chapterId}/story-chat/conversations/${conversationId}/runs/${requestId}`);
+  if (!response.ok) throw new Error(parseApiError(await response.text()));
+  return normalizeStoryChatRun(await readApiData(response));
+}
+
+function normalizeStoryChatRun(raw: Record<string, unknown>): MangaAgentRunSnapshot {
+  const get = (camel: string, snake: string) => raw[camel] ?? raw[snake];
+  const events = Array.isArray(raw.events) ? raw.events as Record<string, unknown>[] : [];
+  return {
+    ...raw,
+    requestId: String(get('requestId', 'request_id') || ''),
+    status: String(raw.status || 'FAILED') as MangaAgentRunStatus,
+    currentPhase: get('currentPhase', 'current_phase') as string | undefined,
+    finalReply: get('finalReply', 'final_reply') as string | undefined,
+    errorMessage: get('errorMessage', 'error_message') as string | undefined,
+    runAttributes: get('runAttributes', 'run_attributes') as Record<string, unknown> | undefined,
+    createdAt: get('createdAt', 'created_at') as string | undefined,
+    updatedAt: get('updatedAt', 'updated_at') as string | undefined,
+    events: events.map(event => ({
+      eventId: Number(event.eventId ?? event.event_id),
+      eventName: String(event.eventName ?? event.event_name) as AgentRunPersistedEvent['eventName'],
+      data: event.data as AgentRunPersistedEvent['data'],
+      createdAt: (event.createdAt ?? event.created_at) as string | undefined,
+    })),
+  };
+}
+
 function storyChatStreamObserver(controller: AbortController, requestId: string,
   onEvent: (event: MangaAgentRunEvent) => void, onError?: (detail: string) => void) {
   let finished = false;
-  const fail = (detail: string) => {
+  const fail = (detail: string, transport = false) => {
     if (finished || controller.signal.aborted) return;
     finished = true;
     onError?.(detail);
-    onEvent({ type: 'error', data: { detail, requestId } });
+    onEvent({ type: 'error', data: { detail, requestId, transport } });
   };
   return {
     next(event: { type: string }) {
       if (event.type === 'RUN_FINISHED' || event.type === 'RUN_ERROR') finished = true;
       onEvent({ type: 'ag_ui_event', data: event as ArtVerseAgUiEvent });
     },
-    error(err: unknown) { fail(streamErrorMessage(err, '连接已断开，请刷新查看任务状态。')); },
-    complete() { fail('回复连接提前结束，请刷新查看任务状态。'); },
+    error(err: unknown) {
+      const response = err as { status?: number; payload?: unknown } | null;
+      fail(streamErrorMessage(err, '连接已断开，请刷新查看任务状态。'), !response?.status && !response?.payload);
+    },
+    complete() { fail('回复连接提前结束，正在核对任务状态。', true); },
   };
 }
 
@@ -418,8 +484,8 @@ export async function getOpenStoryChatConversationRun(
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/story-chat/conversations/${conversationId}/runs/open`);
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   const data = await readApiData(res);
-  const run = data.run as (MangaAgentRunSnapshot & { current_phase?: string }) | null;
-  return run ? { ...run, requestId: run.requestId ?? run.request_id ?? '', currentPhase: run.currentPhase ?? run.current_phase } : null;
+  const run = data.run as Record<string, unknown> | null;
+  return run ? normalizeStoryChatRun(run) : null;
 }
 
 export async function cancelStoryChatConversationRun(

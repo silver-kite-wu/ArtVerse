@@ -94,7 +94,9 @@ public class StoryService {
 
     @Transactional
     public String setMangaStyle(Long id, String mangaStyle) {
-        storyRepository.setMangaStyle(id, mangaStyle);
+        Story story = getRequired(id);
+        story.setMangaStyle(mangaStyle);
+        storyRepository.saveAndFlush(story);
         return mangaStyle;
     }
 

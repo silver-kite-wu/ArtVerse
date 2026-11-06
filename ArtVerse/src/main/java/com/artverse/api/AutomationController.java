@@ -24,8 +24,19 @@ public class AutomationController {
     @com.fasterxml.jackson.databind.annotation.JsonNaming(com.fasterxml.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record VersionRequest(Long expectedVersion) {}
     public record PreviewRequest(AutomationDefinition.Schedule schedule) {}
+    @com.fasterxml.jackson.databind.annotation.JsonNaming(com.fasterxml.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
+    public record CommandDecision(String decision, String commandHash, Long expectedVersion) {}
 
     @PostMapping("/automations/schedule-preview") public Map<String,Object> preview(@RequestBody PreviewRequest input) { return service.preview(input.schedule()); }
+    @GetMapping("/automation-command-proposals") public AutomationService.ModelCommandPage commands(
+            @RequestParam(required=false) Long chapterId, @RequestParam(required=false) UUID conversationId,
+            @RequestParam(required=false) UUID before, @RequestParam(defaultValue="20") int size) {
+        return service.modelCommands(userId(),chapterId,conversationId,before,size);
+    }
+    @PostMapping("/automation-command-proposals/{id}/decision") public AutomationService.ModelCommandView decideCommand(
+            @PathVariable UUID id,@RequestBody CommandDecision decision) {
+        return service.decideModelCommand(userId(),id,decision.decision(),decision.commandHash(),decision.expectedVersion());
+    }
     @PostMapping("/automations") public AutomationStore.Plan create(@RequestHeader("Idempotency-Key") String key,@RequestBody AutomationDefinition input) { return service.create(userId(),key,input); }
     @GetMapping("/automations") public Map<String,Object> list(@RequestParam(defaultValue="") String status,@RequestParam(defaultValue="") String taskType,
             @RequestParam(defaultValue="false") boolean needsAttention,@RequestParam(defaultValue="") String search,

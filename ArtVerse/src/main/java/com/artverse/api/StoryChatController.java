@@ -29,7 +29,8 @@ public class StoryChatController {
     private final MangaAgentEventReplayService eventReplayService;
     private final NovelDraftReviewService novelDraftReviewService;
 
-    public record DraftDecisionRequest(String decision, String content, Long baseVersion, String expectedContentHash) { }
+    public record DraftDecisionRequest(String decision, String content, Long baseVersion, String expectedContentHash,
+                                       Boolean continueAgent) { }
 
     @PostMapping("/conversations/{conversationId}/runs/{requestId}/artifacts/{artifactId}/decision")
     @RateLimit(windowSeconds = 60, maxRequests = 20, key = "story-chat-write")
@@ -37,6 +38,10 @@ public class StoryChatController {
             @PathVariable UUID conversationId, @PathVariable UUID requestId, @PathVariable UUID artifactId,
             @RequestBody DraftDecisionRequest body) {
         User user = currentUserService.requireCurrentUser();
+        if (Boolean.TRUE.equals(body.continueAgent())) {
+            return novelDraftReviewService.decideForContinuation(user.getId(), chapterId, conversationId, requestId, artifactId,
+                    body.decision(), body.content(), body.baseVersion(), body.expectedContentHash());
+        }
         return novelDraftReviewService.decide(user.getId(), chapterId, conversationId, requestId, artifactId,
                 body.decision(), body.content(), body.baseVersion(), body.expectedContentHash());
     }
@@ -73,7 +78,7 @@ public class StoryChatController {
         User user = currentUserService.requireCurrentUser();
         return storyChatAgentService.resumeAgUiStream(
                 chapterId, conversationId, requestId, body.decision(), body.artifactId(), body.answer(),
-                user, requireLlmConfig(user, body));
+                body.toolCallId(), body.pendingVersion(), body.selectedOptionId(), user, requireLlmConfig(user, body));
     }
 
     @GetMapping("/conversations/{conversationId}/runs/open")
@@ -86,6 +91,12 @@ public class StoryChatController {
                         ? null
                         : MangaAgentDtos.RunStateResponse.from(open)
         );
+    }
+
+    @GetMapping("/conversations/{conversationId}/runs")
+    public List<MangaAgentDtos.RunStateResponse> runs(@PathVariable Long chapterId, @PathVariable UUID conversationId) {
+        return storyChatAgentService.conversationRuns(chapterId, conversationId, currentUserService.requireCurrentUser())
+                .stream().map(MangaAgentDtos.RunStateResponse::from).toList();
     }
 
     @GetMapping("/conversations/{conversationId}/runs/{requestId}")

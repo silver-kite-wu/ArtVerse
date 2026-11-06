@@ -93,6 +93,26 @@ class MangaAgentExecutionSupportTest {
     }
 
     @Test
+    void matchingNativeAnswerDeliversTheOriginalResultAndPreservesTheSessionTurn() {
+        var delivery = new com.artverse.agent.AgentAnswerDelivery(UUID.randomUUID(), "original-question", 3L, "hash", "{\"answer\":\"bright\"}", 7L);
+        var turn = mock(com.artverse.agent.gateway.AgentSessionTurns.Lease.class);
+        when(context.answerResume()).thenReturn(new MangaWorkflowExecutionContext.AnswerResume(delivery, turn, AgentTaskType.MANGA_STORYBOARD, "original-plan:1"));
+        when(request.taskType()).thenReturn(AgentTaskType.MANGA_STORYBOARD);
+        when(request.variables()).thenReturn(Map.of("step_id", "original-plan:1"));
+        var msg = Msg.builder().role(MsgRole.ASSISTANT).textContent("original continuation finished").build();
+        when(gateway.streamEvents(org.mockito.ArgumentMatchers.eq(request), org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.eq(turn)))
+                .thenReturn(Flux.just(new AgentResultEvent(msg)));
+
+        assertThat(support.executeRequest(context, request, false).reply()).isEqualTo("original continuation finished");
+
+        verify(gateway).streamEvents(org.mockito.ArgumentMatchers.eq(request), org.mockito.ArgumentMatchers.argThat(results -> results.size() == 1
+                && results.getFirst().getId().equals("original-question")
+                && ((io.agentscope.core.message.TextBlock) results.getFirst().getOutput().getFirst()).getText().equals(delivery.canonicalResult())), org.mockito.ArgumentMatchers.eq(turn));
+        verify(gateway, org.mockito.Mockito.never()).generateText(request);
+        verifyNoInteractions(conversationService);
+    }
+
+    @Test
     void prepareAgentMessagesInjectsServerOwnedChapterSnapshotBeforeCurrentUserMessage() {
         MangaWorkflowContextSnapshot snapshot = new MangaWorkflowContextSnapshot(
                 3L,
@@ -141,23 +161,23 @@ class MangaAgentExecutionSupportTest {
     }
 
     @Test
-    void executeRequestPreservesBusinessExceptionAndPersistsFailure() {
+    void executeRequestPreservesBusinessExceptionForTheClaimedFinalizer() {
         BusinessException failure = new BusinessException(409, "conflict");
         when(gateway.generateText(request)).thenReturn(Mono.error(failure));
 
         assertThatThrownBy(() -> support.executeRequest(context, request, false))
                 .isSameAs(failure);
-        verify(conversationService).saveFailureMessage(conversation, "conflict", requestId);
+        verify(conversationService, org.mockito.Mockito.never()).saveFailureMessage(conversation, "conflict", requestId);
     }
 
     @Test
-    void executeRequestPersistsEmptyResponseFailure() {
+    void executeRequestLeavesEmptyResponsePersistenceToTheClaimedFinalizer() {
         when(gateway.generateText(request)).thenReturn(Mono.just("   "));
 
         assertThatThrownBy(() -> support.executeRequest(context, request, false))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("Agent returned empty response");
-        verify(conversationService).saveFailureMessage(
+        verify(conversationService, org.mockito.Mockito.never()).saveFailureMessage(
                 conversation, "Agent returned empty response", requestId);
     }
 

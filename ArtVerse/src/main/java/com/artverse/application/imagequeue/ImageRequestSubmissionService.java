@@ -92,6 +92,8 @@ public class ImageRequestSubmissionService {
         if(!found.get().submissionHash().equals(submissionHash))throw new ImageRequestException("IDEMPOTENCY_CONFLICT","同请求身份的输入不同");return found.get();
     }
     private Manifest build(long user,UUID root,Long chapter,Integer number,String operation,Map<String,Object> body,String submissionHash,UserProviderConfig config,Long expectedId,Long expectedVersion) {
+        if(body.containsKey("expected_provider_hash")&&!hash(config).equals(body.get("expected_provider_hash")))
+            throw new ImageRequestException("CONFIG_CHANGED","已审阅的供应商配置已变化，请重新准备提案");
         boolean chapterMode="MANGA_GENERATE".equals(operation);
         String lane=chapterMode||"MANGA_REGENERATE".equals(operation)?"SERIAL_MODEL":"PARALLEL_MODEL";
         String prompt=text(body,"prompt"),size=text(body,"size"),color=null;
@@ -108,14 +110,31 @@ public class ImageRequestSubmissionService {
             panels.add(new Panel(stable(root,"image",0),null,prompt,null,null,null,null,List.of(),hash(List.of(prompt,size,hash(config),references,lane,operation))));
         } else {
             List<Integer> numbers=chapterMode?inputs.missingPanels(user,chapter):List.of(Objects.requireNonNull(number));
+            if(chapterMode&&body.containsKey("image_numbers")) {
+                if(!(body.get("image_numbers") instanceof List<?> selected)||selected.isEmpty()||selected.size()>60)
+                    throw new ImageRequestException("INVALID_INPUT","图序集合无效");
+                List<Integer> requestedNumbers=new ArrayList<>();
+                for(Object value:selected) {
+                    Long parsed=number(value);
+                    if(parsed==null||parsed<1||parsed>60||!numbers.contains(parsed.intValue())||requestedNumbers.contains(parsed.intValue()))
+                        throw new ImageRequestException("TARGET_CONFLICT","已审阅目标不再为空，请重新准备提案");
+                    requestedNumbers.add(parsed.intValue());
+                }
+                numbers=List.copyOf(requestedNumbers);
+            }
             references=List.of();
             for(int index=0;index<numbers.size();index++) {
                 int imageNumber=numbers.get(index);String scene=chapterMode||prompt.isBlank()?null:prompt;
                 var preview=inputs.preview(user,chapter,imageNumber,assets,scene);
+                if(body.get("expected_context_hashes") instanceof Map<?,?> expected
+                        &&!hash(preview).equals(expected.get(Integer.toString(imageNumber))))
+                    throw new ImageRequestException("INPUT_STALE","已审阅的分镜或素材上下文已变化");
                 if(imageNumber>((Number)preview.get("image_count")).intValue())throw new ImageRequestException("INVALID_INPUT","图序超出章节范围");
                 if(chapterMode&&!MangaPromptPolicy.isStoryboardPage(preview.get("scene").toString()))throw new ImageRequestException("INVALID_INPUT","请先生成有效的多格分镜");
                 @SuppressWarnings("unchecked") var keys=(List<String>)preview.get("reference_images");
                 if(index==0)references=inputs.freezeReferences(keys);
+                if(body.containsKey("expected_reference_hash")&&!hash(references).equals(body.get("expected_reference_hash")))
+                    throw new ImageRequestException("INPUT_STALE","已审阅的参考图片已变化");
                 color=preview.get("color_mode").toString();
                 String generatedPrompt=preview.get("prompt").toString();
                 panels.add(new Panel(stable(root,"image",index),imageNumber,generatedPrompt,scene,expectedId,expectedVersion,hash(preview),List.of(),hash(Arrays.asList(generatedPrompt,size,hash(config),references,lane,operation,expectedId,expectedVersion))));

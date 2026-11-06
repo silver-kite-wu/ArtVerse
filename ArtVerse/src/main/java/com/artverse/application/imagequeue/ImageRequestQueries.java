@@ -23,6 +23,13 @@ public class ImageRequestQueries {
     }
     public Map<String,Object> get(long user,UUID root) { return snapshot(manifest(user,root)); }
     public Map<String,Object> panel(Manifest m,Panel p) {
+        return panel(m,p,true);
+    }
+    /** Model reads observe the same evidence without rebuilding or locking Redis state. */
+    public Map<String,Object> readOnlyPanel(Manifest m,Panel p) {
+        return panel(m,p,false);
+    }
+    private Map<String,Object> panel(Manifest m,Panel p,boolean rebuild) {
         ImageGenRecord r=records.findByUserIdAndRequestId(m.userId(),p.operationId()).orElse(null);
         Map<String,String> runtime;boolean redis=true;
         try { runtime=state.read(state.state(m,p)); } catch(RuntimeException e) { runtime=Map.of();redis=false; }
@@ -30,7 +37,7 @@ public class ImageRequestQueries {
         if(r!=null&&("FINAL".equals(r.getAttemptDecision())||status==null)) {
             String durable=ImageGenerationEvidence.status(r);
             if("FINAL".equals(r.getAttemptDecision())) { status=durable;source="db"; }
-            if(redis&&!durable.equals(runtime.get("status"))) {
+            if(rebuild&&redis&&!durable.equals(runtime.get("status"))) {
                 String owner="rebuild:"+UUID.randomUUID();boolean locked=false;
                 try {
                     locked=state.lock(state.opLock(m,p),owner,Duration.ofSeconds(5));
@@ -110,4 +117,5 @@ public class ImageRequestQueries {
         try { return state.read(state.root(m.userId(),m.rootId())).getOrDefault("submission_status","UNKNOWN"); }
         catch(RuntimeException e) { return "UNKNOWN"; }
     }
+    public String readOnlySubmission(Manifest m) { return submission(m); }
 }

@@ -2,7 +2,7 @@ package com.artverse.agent.gateway.tools;
 
 import com.artverse.agent.AgentTaskType;
 import io.agentscope.core.tool.Toolkit;
-import io.agentscope.core.tool.mcp.McpClientWrapper;
+import com.artverse.agent.AgentRunRequest;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumMap;
@@ -34,9 +34,14 @@ public class AgentToolConfigurationRegistry {
         this.strategies = Map.copyOf(indexed);
     }
 
-    public void configure(Toolkit toolkit, AgentTaskType taskType, McpClientWrapper businessTools) {
+    public void configure(Toolkit toolkit, AgentRunRequest request) {
         Objects.requireNonNull(toolkit, "toolkit must not be null");
-        Objects.requireNonNull(taskType, "taskType must not be null");
-        strategies.get(taskType).configure(toolkit, Objects.requireNonNull(businessTools, "businessTools"));
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(request.taskType(), "taskType must not be null");
+        if (Boolean.TRUE.equals(request.variables().get("review_completed"))) {
+            strategies.get(AgentTaskType.STORY_CHAT_READ).configure(toolkit, request);
+        } else {
+            strategies.get(request.taskType()).configure(toolkit, request);
+        }
     }
 }

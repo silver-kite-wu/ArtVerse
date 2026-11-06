@@ -44,7 +44,7 @@ class ImageQueueIntegrationTest {
             .withEnv("RABBITMQ_DEFAULT_USER","image-test").withEnv("RABBITMQ_DEFAULT_PASS","isolated-test-broker-password").withEnv("RABBITMQ_DEFAULT_VHOST","artverse")
             .waitingFor(org.testcontainers.containers.wait.strategy.Wait.forLogMessage(".*Server startup complete.*",1)).withImagePullPolicy(image -> false);
     @DynamicPropertySource static void properties(DynamicPropertyRegistry p) {
-        p.add("spring.datasource.url",postgres::getJdbcUrl);p.add("spring.datasource.username",postgres::getUsername);p.add("spring.datasource.password",postgres::getPassword);
+        p.add("spring.datasource.url",()->postgres.getJdbcUrl()+(postgres.getJdbcUrl().contains("?")?"&":"?")+"stringtype=unspecified");p.add("spring.datasource.username",postgres::getUsername);p.add("spring.datasource.password",postgres::getPassword);
         p.add("spring.data.redis.host",redis::getHost);p.add("spring.data.redis.port",()->redis.getMappedPort(6379));p.add("spring.data.redis.timeout",()->"500ms");
         p.add("spring.rabbitmq.host",rabbit::getHost);p.add("spring.rabbitmq.port",()->rabbit.getMappedPort(5672));p.add("spring.rabbitmq.username",()->"image-test");p.add("spring.rabbitmq.password",()->"isolated-test-broker-password");
         p.add("artverse.minio.endpoint",()->"http://"+minio.getHost()+":"+minio.getMappedPort(9000));p.add("artverse.minio.access-key",()->"image-test");p.add("artverse.minio.secret-key",()->"isolated-test-storage-password");p.add("artverse.minio.bucket",()->"image-queue-test");
@@ -75,6 +75,11 @@ class ImageQueueIntegrationTest {
     @Autowired ImageGenRecordRepository records;
     @Autowired ImageRequestEvents events;
     @Autowired com.artverse.application.MangaImageStorageService sharedImages;
+    @Autowired com.artverse.application.imageproposal.ImageProposalService creativeImages;
+    @Autowired com.artverse.application.CreativeProposalArtifacts creativeArtifacts;
+    @Autowired com.artverse.application.ApiKeyService apiKeys;
+    @Autowired com.artverse.application.AgentRunLeaseService agentLeases;
+    @Autowired jakarta.persistence.EntityManager entityManager;
     @MockBean Image2Client model;
     @MockBean ImageExecutionFaults faults;
     long user,chapter;
@@ -115,6 +120,30 @@ class ImageQueueIntegrationTest {
         assertThatThrownBy(()->submissions.submit(user,chapter,1,"MANGA_SINGLE_GENERATE",Map.of("model","test-image"),null)).isInstanceOf(ImageRequestException.class).hasMessage("无供应商，请选择生图供应商");
         assertThatThrownBy(()->submissions.submit(user,chapter,1,"MANGA_REGENERATE",body(),null)).isInstanceOf(ImageRequestException.class).hasMessageContaining("image_version");
         assertThat(strings.keys("image:target-active:*")).isEmpty();verifyNoInteractions(model);
+    }
+
+    @Test void reviewedCreativeProposalUsesRealQueueAndReadOnlyStatusWithNoProviderBeforeAuthorApproval() throws Exception {
+        var context=tx.execute(status->{
+            var owner=users.findById(user).orElseThrow();var c=chapters.findById(chapter).orElseThrow();
+            apiKeys.saveProviderConfig(owner,null,new com.artverse.application.UserProviderConfig("image","openai","Controlled image fixture","test-only-never-sent","https://api.openai.com/v1","test-image"),true);
+            var conversation=new MangaAgentConversation();conversation.setConversationUuid(UUID.randomUUID());conversation.setTitle("Creative queue review");conversation.setConversationType(AiConversationType.STORY_CHAT);conversation.setUser(owner);conversation.setStory(c.getStory());conversation.setChapter(c);entityManager.persist(conversation);
+            var run=new MangaAgentRun();run.setUser(owner);run.setStory(c.getStory());run.setChapter(c);run.setConversation(conversation);run.setRunType(AgentRunType.STORY_CHAT);run.setRoute(com.artverse.application.workflow.MangaWorkflowRoute.CONVERSATION);run.setRouteKey("READ");run.setInputMessage("Prepare image proposal");run.setRunAttributesJson("{\"story_chat_execution\":{\"profile\":\"local-tools-v1\",\"route\":\"READ\",\"task_type\":\"STORY_CHAT_READ\",\"step_id\":\"story-chat:READ\",\"version\":1}}");entityManager.persist(run);entityManager.flush();agentLeases.claim(run);
+            return new com.artverse.agent.MangaAgentRuntimeContext(user,c.getStory().getId(),chapter,conversation.getConversationUuid(),run.getRequestId(),null,com.artverse.agent.AgentTaskType.STORY_CHAT_READ,"story-chat:READ",run.getFencingToken(),null,run.getOwnerInstanceId());
+        });
+        var config=creativeImages.models(context,null,null,20).items().getFirst();
+        var selection=new com.artverse.application.imageproposal.ImageProposalViews.Selection(List.of(1),config.configId(),config.configVersion(),"test-image",com.artverse.application.imageproposal.ImageProposalViews.Mode.FIRST,null,"1024x1024");
+        var preview=creativeImages.preview(context,selection);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM manga_agent_run_artifacts WHERE run_id=(SELECT id FROM manga_agent_runs WHERE request_id=?)",Integer.class,context.requestId())).isZero();
+        var proposal=creativeImages.propose(context,preview.previewRef(),null);verifyNoInteractions(model);
+        UUID artifact=UUID.fromString(proposal.get("artifactId").toString());var accepted=creativeImages.decide(user,artifact,"confirm",proposal.get("commandHash").toString());
+        assertThat(accepted.get("status")).isEqualTo("COMMITTED");verifyNoInteractions(model);
+        var receipt=(Map<?,?>)accepted.get("receipt");UUID root=UUID.fromString(((List<?>)receipt.get("accepted_requests")).getFirst().toString());var m=queries.manifest(user,root);
+        assertThat(m.panels()).extracting(Panel::imageNumber).containsExactly(1);assertThat(m.executionLane()).isEqualTo("SERIAL_MODEL");assertThat(queries.snapshot(m).get("submission_status")).isEqualTo("ACCEPTED");
+        publisher.advance(m);consume(ImageMessagingConfig.PREFIX+"advance.q");consume(m);publisher.advance(m);consume(ImageMessagingConfig.PREFIX+"advance.q");
+        var stateBefore=states.read(states.state(m,m.panels().getFirst()));var result=creativeImages.request(context,root,null);
+        assertThat(result.images().getFirst().status()).isEqualTo("SUCCEEDED");assertThat(result.images().getFirst().imageId()).isNotNull();assertThat(states.read(states.state(m,m.panels().getFirst()))).isEqualTo(stateBefore);
+        assertThat(creativeImages.decide(user,artifact,"confirm",proposal.get("commandHash").toString())).isEqualTo(accepted);assertThat(images.findByChapterIdOrderByImageNumberAsc(chapter)).hasSize(1);
+        assertThat(mapper.writeValueAsString(creativeArtifacts.list(user,chapter,context.conversationId(),null,20))).doesNotContain("test-only-never-sent","commands","api_key");verify(model,times(1)).generateScheduled(any(),any());
     }
     @Test void stableIdentityAndDifferentUuidJoinOneCanonicalOperation() throws Exception {
         Manifest first=submit(1);Manifest repeat=submit(1);assertThat(repeat.rootId()).isEqualTo(first.rootId());

@@ -4,6 +4,7 @@ import com.artverse.domain.*;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Import;
@@ -51,6 +52,7 @@ class StoryChatPreparationIntegrationTest {
     @Autowired EntityManager em;
     @Autowired PlatformTransactionManager transactions;
     @Autowired StoryChatPreparationService preparation;
+    @MockBean MangaAgentRunService runLifecycle;
     @Autowired com.artverse.persistence.MangaAgentRunRepository runs;
     @Autowired com.artverse.persistence.MangaAgentRunEventRepository events;
 

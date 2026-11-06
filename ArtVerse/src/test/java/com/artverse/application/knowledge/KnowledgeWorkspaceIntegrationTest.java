@@ -68,6 +68,25 @@ class KnowledgeWorkspaceIntegrationTest {
         shenCard=create("CHARACTER_CARD","沈岚","守卫",Map.of("character_id",shen.getId(),"reveal_chapter_id",ch(1)));
     }
     Long ch(int i){return chapters.get(i-1);}
+    AgentOutboxService.OutboxEvent extractionAction(Long chapterId) {
+        Map<String,Object> payload=Map.of("user_id",user.getId(),"story_id",story.getId(),"chapter_id",chapterId);
+        long id=jdbc.queryForObject("""
+                INSERT INTO agent_outbox_events(aggregate_type,aggregate_id,event_type,payload,status,
+                    owner_instance_id,fencing_token,lease_until)
+                VALUES ('CHAPTER',?,'CHAPTER_CONTENT_CHANGED',?::jsonb,'PROCESSING','isolated-extractor',1,
+                    clock_timestamp()+interval '5 minutes') RETURNING id
+                """,Long.class,chapterId.toString(),schema.write(payload));
+        return new AgentOutboxService.OutboxEvent(id,"CHAPTER",chapterId.toString(),"CHAPTER_CONTENT_CHANGED",
+                payload,1,1L,java.time.OffsetDateTime.now().plusMinutes(5));
+    }
+    List<KnowledgeCandidateService.CandidateView> extract(Long chapterId,List<KnowledgeCandidateService.ExtractedCandidate> values) {
+        var action=extractionAction(chapterId);
+        var source=candidates.beginChapterExtraction(chapterId,user.getId(),action);
+        return candidates.replaceChapterExtraction(action,source,values);
+    }
+    KnowledgeCandidateService.ExtractedCandidate extracted(String title) {
+        return new KnowledgeCandidateService.ExtractedCandidate("WORLDVIEW",title,"章节中的规则","",Map.of("subtype","RULE"),3,null,null);
+    }
     KnowledgeService.UnitView create(String type,String title,String body,Map<String,Object> data){return knowledge.create(story.getId(),user.getId(),new KnowledgeService.UnitInput(type,title,body,"",data,3,null,null));}
     KnowledgeFactService.Fact save(long unit,String kind,Map<String,Object> payload,int reveal,int from,Integer to){return knowledge.saveFactCommand(story.getId(),unit,user.getId(),new KnowledgeFactService.Command(null,null,kind,payload,ch(reveal),ch(from),to==null?null:ch(to),"FACT",null));}
     Map<String,Object> map(Object v){return (Map<String,Object>)v;}
@@ -111,7 +130,7 @@ class KnowledgeWorkspaceIntegrationTest {
         assertThat(projections.events(story.getId(),ch(12),null,"STORY")).hasSize(1);
     }
     @Test void oldArrayCandidateCanBeViewedAndApprovedWithoutManualJsonRepair() {
-        var candidate=candidates.replaceChapterExtraction(ch(2),user.getId(),List.of(new KnowledgeCandidateService.ExtractedCandidate("WORLDVIEW","月下规则","原文规则","",Map.of("subtype","RULE"),3,null,null))).getFirst();
+        var candidate=extract(ch(2),List.of(new KnowledgeCandidateService.ExtractedCandidate("WORLDVIEW","月下规则","原文规则","",Map.of("subtype","RULE"),3,null,null))).getFirst();
         // Simulate a candidate persisted before the adapter existed, without changing its version.
         jdbc.update("UPDATE knowledge_candidates SET structured_data=CAST(? AS jsonb) WHERE id=?",schema.write(Map.of("subtype","RULE","limits",List.of("仅限夜间","需触碰目标"),"costs",List.of(),"exceptions",List.of())),candidate.id());
         var detail=candidates.detail(story.getId(),candidate.id(),user.getId());
@@ -132,7 +151,7 @@ class KnowledgeWorkspaceIntegrationTest {
         assertThat(schema.write(facts.project(story.getId(),null,null))).contains("限制修改","第二行","月圆").doesNotContain("[object Object]");
     }
     @Test void candidatesFilterByTypeAndMissingSetupCanBeEditedBeforeApproval() {
-        var proposed=candidates.replaceChapterExtraction(ch(2),user.getId(),List.of(
+        var proposed=extract(ch(2),List.of(
             new KnowledgeCandidateService.ExtractedCandidate("FORESHADOWING","玉佩","玉佩发光","",Map.of(),3,null,null),
             new KnowledgeCandidateService.ExtractedCandidate("TIMELINE","旅途","人物出发","",Map.of(),3,null,null)));
         assertThat(facts.browse(story.getId(),user.getId(),"FORESHADOWING","PENDING","玉佩",null,0,30).items()).hasSize(1);
@@ -216,7 +235,7 @@ class KnowledgeWorkspaceIntegrationTest {
     EmbeddingSpace activeSpace(){return tx.execute(s->{UserEmbeddingConfig c=new UserEmbeddingConfig();c.setUser(user);c.setModel("isolated-model");c.setStatus(EmbeddingConfigStatus.VERIFIED);em.persist(c);EmbeddingSpace space=new EmbeddingSpace();space.setUser(user);space.setConfig(c);space.setConfigVersion(1);space.setModelIdentifier("isolated-model");space.setDimensions(3);em.persist(space);jdbc.update("INSERT INTO story_embedding_spaces(story_id,embedding_space_id) VALUES (?,?)",story.getId(),space.getId());return space;});}
     @Test void rollbackLeavesNoApprovalFactsRevisionsOutboxOrIndexDispatchThenCommitDispatches() throws Exception {
         Thread.sleep(2200);activeSpace();clearInvocations(indexExecutor);
-        var c=candidates.replaceChapterExtraction(ch(2),user.getId(),List.of(new KnowledgeCandidateService.ExtractedCandidate("FORESHADOWING","回滚","玉佩", "",Map.of("setup","玉佩"),3,null,null))).getFirst();
+        var c=extract(ch(2),List.of(new KnowledgeCandidateService.ExtractedCandidate("FORESHADOWING","回滚","玉佩", "",Map.of("setup","玉佩"),3,null,null))).getFirst();
         int roots=jdbc.queryForObject("SELECT count(*) FROM knowledge_units WHERE story_id=?",Integer.class,story.getId());
         tx.executeWithoutResult(s->{candidates.approve(story.getId(),c.id(),user.getId(),c.version());s.setRollbackOnly();});
         assertThat(candidates.detail(story.getId(),c.id(),user.getId()).status()).isEqualTo("PENDING");
@@ -293,10 +312,82 @@ class KnowledgeWorkspaceIntegrationTest {
         assertThat(schema.write(projections.characters(story.getId(),null))).contains("修订后的描述","旅行者");
     }
     @Test void pendingRelationPreviewIsExplicitAndConfirmationTurnsItIntoAnOfficialEdge() {
-        var candidate=candidates.replaceChapterExtraction(ch(2),user.getId(),List.of(new KnowledgeCandidateService.ExtractedCandidate("CHARACTER_RELATION","监视","沈岚监视林舟","",Map.of("source_character_id",shen.getId(),"target_character_id",lin.getId(),"relation_type","监视"),3,2,null))).getFirst();
+        var candidate=extract(ch(2),List.of(new KnowledgeCandidateService.ExtractedCandidate("CHARACTER_RELATION","监视","沈岚监视林舟","",Map.of("source_character_id",shen.getId(),"target_character_id",lin.getId(),"relation_type","监视"),3,2,null))).getFirst();
         assertThat(facts.graph(story.getId(),user.getId(),ch(5),null,false).edges()).isEmpty();
         assertThat(facts.graph(story.getId(),user.getId(),ch(5),null,true).edges()).singleElement().satisfies(e->assertThat(e.get("pending")).isEqualTo(true));
         candidates.approve(story.getId(),candidate.id(),user.getId(),candidate.version());
         assertThat(facts.graph(story.getId(),user.getId(),ch(5),null,false).edges()).singleElement().satisfies(e->assertThat(e.get("pending")).isEqualTo(false));
+    }
+
+    @Test void extractionFreezesExactInputAndRejectsChangedSourceWithoutReplacingPendingBatch() {
+        var old=extract(ch(2),List.of(extracted("旧候选"))).getFirst();
+        var action=extractionAction(ch(2));
+        var batch=candidates.beginChapterExtraction(ch(2),user.getId(),action);
+        assertThat(batch.source().material()).contains("第2章原文");
+        assertThat(candidates.beginChapterExtraction(ch(2),user.getId(),action)).isEqualTo(batch);
+        jdbc.update("UPDATE chapters SET novel_content='作者修改的新原文',version=version+1 WHERE id=?",ch(2));
+        assertThatThrownBy(()->candidates.replaceChapterExtraction(action,batch,List.of(extracted("旧输入生成的输出"))))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("来源已变化");
+        assertThat(candidates.detail(story.getId(),old.id(),user.getId()).status()).isEqualTo("PENDING");
+        assertThat(candidates.detail(story.getId(),old.id(),user.getId()).sourceStale()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT payload->'knowledge_extraction'->>'status' FROM agent_outbox_events WHERE id=?",String.class,action.id())).isEqualTo("PREPARED");
+        assertThatThrownBy(()->candidates.beginChapterExtraction(ch(2),user.getId(),action)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test void emptySourceCleanupAlsoChecksFrozenVersionAndPreservesPendingBatchOnConflict() {
+        var old=extract(ch(2),List.of(extracted("应保留"))).getFirst();
+        jdbc.update("UPDATE chapters SET novel_content='',scenes_text='',version=version+1 WHERE id=?",ch(2));
+        var action=extractionAction(ch(2));var batch=candidates.beginChapterExtraction(ch(2),user.getId(),action);
+        assertThat(batch.source().material()).isEmpty();
+        jdbc.update("UPDATE chapters SET scenes_text='补写分镜',version=version+1 WHERE id=?",ch(2));
+        assertThatThrownBy(()->candidates.replaceChapterExtraction(action,batch,List.of()))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("来源已变化");
+        assertThat(candidates.detail(story.getId(),old.id(),user.getId()).status()).isEqualTo("PENDING");
+    }
+
+    @Test void oversizedExtractionDoesNotFreezeTruncatedInputOrSupersedeOldCandidates() {
+        var old=extract(ch(2),List.of(extracted("完整旧候选"))).getFirst();
+        jdbc.update("UPDATE chapters SET novel_content=?,version=version+1 WHERE id=?","全".repeat(48_001),ch(2));
+        var action=extractionAction(ch(2));
+        assertThatThrownBy(()->candidates.beginChapterExtraction(ch(2),user.getId(),action))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("48000");
+        assertThat(candidates.detail(story.getId(),old.id(),user.getId()).status()).isEqualTo("PENDING");
+        assertThat(jdbc.queryForObject("SELECT jsonb_exists(payload,'knowledge_extraction') FROM agent_outbox_events WHERE id=?",Boolean.class,action.id())).isFalse();
+    }
+
+    @Test void completedExtractionReplayReturnsSameIdsAndCannotReplaceNewerPendingBatch() {
+        jdbc.update("UPDATE chapters SET novel_content='  未裁剪原文  ',scenes_text='  分镜  ' WHERE id=?",ch(2));
+        var action=extractionAction(ch(2));var batch=candidates.beginChapterExtraction(ch(2),user.getId(),action);
+        var first=candidates.replaceChapterExtraction(action,batch,List.of(extracted("第一批"))).getFirst();
+        assertThat(first.sourceSnapshot()).containsEntry("novel","  未裁剪原文  ").containsEntry("complete",true);
+        assertThat(schema.hash(first.sourceSnapshot())).isEqualTo(batch.sourceHash());
+        assertThat(first.sourceStale()).isFalse();
+        var second=extract(ch(2),List.of(extracted("第二批"))).getFirst();
+        var replay=candidates.replaceChapterExtraction(action,batch,List.of(extracted("重放不应新建")));
+        assertThat(replay).extracting(KnowledgeCandidateService.CandidateView::id).containsExactly(first.id());
+        assertThat(replay.getFirst().status()).isEqualTo("SUPERSEDED");
+        assertThat(candidates.detail(story.getId(),second.id(),user.getId()).status()).isEqualTo("PENDING");
+        assertThat(candidates.beginChapterExtraction(ch(2),user.getId(),action).completed()).isTrue();
+    }
+
+    @Test void emptyResultReceiptPreventsReplayFromClearingANewerBatch() {
+        var action=extractionAction(ch(2));var batch=candidates.beginChapterExtraction(ch(2),user.getId(),action);
+        assertThat(candidates.replaceChapterExtraction(action,batch,List.of())).isEmpty();
+        var newer=extract(ch(2),List.of(extracted("后续候选"))).getFirst();
+        assertThat(candidates.replaceChapterExtraction(action,batch,List.of())).isEmpty();
+        assertThat(candidates.detail(story.getId(),newer.id(),user.getId()).status()).isEqualTo("PENDING");
+        assertThat(candidates.beginChapterExtraction(ch(2),user.getId(),action).completed()).isTrue();
+    }
+
+    @Test void extractionCompletionAndReceiptRollbackTogetherAndExpiredFenceCannotCommit() {
+        var old=extract(ch(2),List.of(extracted("原批次"))).getFirst();
+        var action=extractionAction(ch(2));var batch=candidates.beginChapterExtraction(ch(2),user.getId(),action);
+        tx.executeWithoutResult(s->{candidates.replaceChapterExtraction(action,batch,List.of(extracted("回滚批次")));s.setRollbackOnly();});
+        assertThat(candidates.detail(story.getId(),old.id(),user.getId()).status()).isEqualTo("PENDING");
+        assertThat(candidates.beginChapterExtraction(ch(2),user.getId(),action).completed()).isFalse();
+        jdbc.update("UPDATE agent_outbox_events SET fencing_token=fencing_token+1 WHERE id=?",action.id());
+        assertThatThrownBy(()->candidates.replaceChapterExtraction(action,batch,List.of(extracted("迟到结果"))))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("失去执行权");
+        assertThat(candidates.detail(story.getId(),old.id(),user.getId()).status()).isEqualTo("PENDING");
     }
 }

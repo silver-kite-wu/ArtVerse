@@ -7,9 +7,7 @@ import com.artverse.agent.AgentTaskType;
 import com.artverse.agent.gateway.AgentScopeHarnessAgentGateway;
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
-import com.artverse.domain.Chapter;
 import com.artverse.domain.User;
-import com.artverse.persistence.ChapterRepository;
 import com.artverse.persistence.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -26,10 +24,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class KnowledgeExtractionService {
 
-    private static final int MAX_SOURCE_CHARS = 48_000;
-
     private final UserRepository userRepository;
-    private final ChapterRepository chapterRepository;
     private final ApiKeyService apiKeyService;
     private final AgentModelSpecFactory modelSpecFactory;
     private final AgentScopeHarnessAgentGateway agentGateway;
@@ -42,13 +37,13 @@ public class KnowledgeExtractionService {
         long chapterId = longPayload(event, "chapter_id");
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(404, "Outbox user not found"));
-        Chapter chapter = chapterRepository.findByIdForIdempotencyAndUserId(chapterId, userId)
-                .orElseThrow(() -> new BusinessException(404, "Outbox chapter not found"));
-
-        String source = chapterSource(chapter);
+        KnowledgeCandidateService.ExtractionBatch batch = candidateService.beginChapterExtraction(chapterId, userId, event);
+        if (batch.completed()) return candidateService.extractionResults(batch).size();
+        KnowledgeCandidateService.ExtractionSource snapshot = batch.source();
+        String source = snapshot.material();
         if (source.isBlank()) {
             ownershipCheck.run();
-            candidateService.replaceChapterExtraction(chapterId, userId, List.of());
+            candidateService.replaceChapterExtraction(event, batch, List.of());
             return 0;
         }
 
@@ -61,11 +56,12 @@ public class KnowledgeExtractionService {
                 ("agent-outbox:" + event.id()).getBytes(StandardCharsets.UTF_8));
         AgentRunRequest request = new AgentRunRequest(
                 String.valueOf(userId),
-                chapter.getStory().getId(),
+                snapshot.storyId(),
                 chapterId,
                 AgentTaskType.KNOWLEDGE_EXTRACTION,
-                List.of(new AgentMessage("user", extractionPrompt(chapter, source))),
-                Map.of("outbox_event_id", event.id()),
+                List.of(new AgentMessage("user", extractionPrompt(snapshot.chapterNumber(), source))),
+                Map.of("outbox_event_id", event.id(), "source_hash", batch.sourceHash(),
+                        "source_version", snapshot.chapterVersion()),
                 modelSpecFactory.fromProviderConfig(provider),
                 provider.apiKey(),
                 extractionId,
@@ -74,22 +70,12 @@ public class KnowledgeExtractionService {
         ExtractionResult result = agentGateway.generateStructured(request, ExtractionResult.class)
                 .block(Duration.ofSeconds(Math.max(30, properties.getAgent().getModelIdleTimeoutSeconds())));
         ownershipCheck.run();
-        List<KnowledgeCandidateService.ExtractedCandidate> candidates = result == null
-                || result.candidates() == null ? List.of() : result.candidates();
-        return candidateService.replaceChapterExtraction(chapterId, userId, candidates).size();
+        if (result == null || result.candidates() == null)
+            throw new BusinessException(502, "知识提取未返回完整结构化结果，保留原待审批次");
+        return candidateService.replaceChapterExtraction(event, batch, result.candidates()).size();
     }
 
-    private String chapterSource(Chapter chapter) {
-        String novel = chapter.getNovelContent() == null ? "" : chapter.getNovelContent().trim();
-        String storyboard = chapter.getScenesText() == null ? "" : chapter.getScenesText().trim();
-        if (novel.isBlank() && storyboard.isBlank()) return "";
-        String combined = "NOVEL_CONTENT:\n" + novel + "\n\nSTORYBOARD:\n" + storyboard;
-        return combined.length() <= MAX_SOURCE_CHARS
-                ? combined
-                : combined.substring(0, MAX_SOURCE_CHARS);
-    }
-
-    private String extractionPrompt(Chapter chapter, String source) {
+    private String extractionPrompt(Integer chapterNumber, String source) {
         try {
             return """
                     Extract knowledge candidates from this JSON data block. Allowed knowledge_type values:
@@ -113,7 +99,7 @@ public class KnowledgeExtractionService {
                     Do not invent IDs. Missing entity bindings are acceptable candidate issues, never guessed IDs.
                     DATA:
                     """ + objectMapper.writeValueAsString(Map.of(
-                    "chapter_number", chapter.getChapterNumber(),
+                    "chapter_number", chapterNumber,
                     "material", source));
         } catch (Exception error) {
             throw new IllegalStateException("Failed to serialize extraction material", error);

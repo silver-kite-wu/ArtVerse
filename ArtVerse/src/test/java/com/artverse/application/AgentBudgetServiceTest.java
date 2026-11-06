@@ -1,79 +1,61 @@
 package com.artverse.application;
 
-import com.artverse.agent.AgentRunRequest;
-import com.artverse.agent.AgentTaskType;
-import com.artverse.agent.AgentMessage;
+import com.artverse.agent.*;
 import com.artverse.config.ArtVerseProperties;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import org.springframework.transaction.PlatformTransactionManager;
+import java.util.*;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class AgentBudgetServiceTest {
-
-    @Test
-    void stopsRouterAfterHardModelLimit() {
-        StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(redis.execute(any(), anyList(), any(), any())).thenReturn(1L, 2L, 3L);
-        when(jdbc.update(any(String.class), any(Object[].class))).thenReturn(1);
-        ArtVerseProperties properties = new ArtVerseProperties();
-        properties.getAgent().setRouterMaxModelCalls(2);
-        AgentBudgetService service = new AgentBudgetService(redis, jdbc, properties);
-        AgentRunRequest request = new AgentRunRequest(
-                "1", 2L, 3L, AgentTaskType.MANGA_ROUTER, List.of(), Map.of(),
-                null, "key", UUID.randomUUID(), UUID.randomUUID());
-
-        assertThat(service.consumeModelCall(request)).isEqualTo(1);
-        assertThat(service.consumeModelCall(request)).isEqualTo(2);
-        assertThatThrownBy(() -> service.consumeModelCall(request))
-                .isInstanceOf(AgentBudgetExceededException.class)
-                .hasMessageContaining("3/2");
+    @Test void everyTaskTypeHasAnExplicitFiniteBudget() {
+        var service = service(new ArtVerseProperties());
+        for (var task : AgentTaskType.values()) {
+            var limit = service.limits(task, BusinessSkillSelection.empty());
+            assertThat(limit.models()).isPositive().isLessThan(100);
+            assertThat(limit.tools()).isBetween(0L, 100L);
+        }
+        assertThat(service.limits(AgentTaskType.MANGA_DIRECTOR, null).tools()).isEqualTo(4);
+        assertThat(service.limits(AgentTaskType.STORY_CHAT_WRITE, null).models()).isEqualTo(8);
+        assertThat(service.limits(AgentTaskType.KNOWLEDGE_EXTRACTION, null).models()).isEqualTo(2);
+        assertThat(service.limits(AgentTaskType.CHAT, null).tools()).isZero();
     }
 
-    @Test
-    void rejectsOversizedInputBeforeAModelCall() {
-        StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.update(any(String.class), any(Object[].class))).thenReturn(1);
-        ArtVerseProperties properties = new ArtVerseProperties();
-        properties.getAgent().setMaxInputTokens(3);
-        AgentBudgetService service = new AgentBudgetService(redis, jdbc, properties);
-        AgentRunRequest request = new AgentRunRequest(
-                "1", 2L, 3L, AgentTaskType.MANGA_CONVERSATION,
-                List.of(new AgentMessage("user", "四个汉字")), Map.of("step_id", "direct"),
-                null, "key", UUID.randomUUID(), UUID.randomUUID());
-
-        assertThatThrownBy(() -> service.validateAndRecordInput(request))
-                .isInstanceOf(AgentBudgetExceededException.class)
-                .hasMessageContaining("INPUT_TOKEN");
+    @Test void rejectsOversizedInputWithoutOpeningATransaction() {
+        var properties = new ArtVerseProperties(); properties.getAgent().setMaxInputTokens(3);
+        var transactions = mock(PlatformTransactionManager.class);
+        var service = new AgentBudgetService(mock(JdbcTemplate.class), transactions, properties);
+        var request = new AgentRunRequest("1",2L,3L,AgentTaskType.CHAT,
+                List.of(new AgentMessage("user", "四个汉字")), Map.of(), null, "");
+        assertThatThrownBy(() -> service.validateAndRecordInput(request)).hasMessageContaining("INPUT_TOKEN_ESTIMATE");
+        verifyNoInteractions(transactions);
     }
 
-    @Test
-    void enforcesBothOutputTokenAndUtf8ByteLimits() {
-        AgentBudgetService service = new AgentBudgetService(
-                mock(StringRedisTemplate.class), mock(JdbcTemplate.class), new ArtVerseProperties());
-        AgentBudgetService.OutputUsage usage = service.measureOutput("漫画");
+    @Test void defaultInputBudgetAcceptsTheObservedLargeChatPayload() {
+        var properties = new ArtVerseProperties();
+        var service = service(properties);
+        var request = new AgentRunRequest("1", 2L, 3L, AgentTaskType.CHAT,
+                List.of(new AgentMessage("user", "x".repeat(75_476))), Map.of(), null, "");
 
+        assertThatCode(() -> service.validateAndRecordInput(request)).doesNotThrowAnyException();
+        assertThat(properties.getAgent().getMaxInputTokens() + properties.getAgent().getMaxOutputTokens())
+                .isEqualTo(256_000);
+        assertThat(properties.getAgent().getMaxInputBytes()).isGreaterThanOrEqualTo(896_000);
+        assertThat(properties.getAgent().getMaxOutputTokens()).isGreaterThanOrEqualTo(32_000);
+    }
+
+    @Test void enforcesOutputEstimateAndUtf8BytesWithoutCallingThemActualTokens() {
+        var properties = new ArtVerseProperties(); properties.getAgent().setMaxOutputBytes(5);
+        var service = service(properties);
+        var usage = service.measureOutput("漫画");
         assertThat(usage.estimatedTokens()).isEqualTo(2);
         assertThat(usage.bytes()).isEqualTo(6);
+        assertThatThrownBy(() -> service.requireOutputWithinLimit(usage)).hasMessageContaining("OUTPUT_BYTE");
+    }
 
-        ArtVerseProperties byteLimited = new ArtVerseProperties();
-        byteLimited.getAgent().setMaxOutputBytes(5);
-        AgentBudgetService limitedService = new AgentBudgetService(
-                mock(StringRedisTemplate.class), mock(JdbcTemplate.class), byteLimited);
-        assertThatThrownBy(() -> limitedService.requireOutputWithinLimit(usage))
-                .isInstanceOf(AgentBudgetExceededException.class)
-                .hasMessageContaining("OUTPUT_BYTE");
+    private AgentBudgetService service(ArtVerseProperties properties) {
+        return new AgentBudgetService(mock(JdbcTemplate.class), mock(PlatformTransactionManager.class), properties);
     }
 }

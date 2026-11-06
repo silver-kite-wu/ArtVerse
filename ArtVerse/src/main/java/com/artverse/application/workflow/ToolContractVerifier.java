@@ -48,7 +48,10 @@ public class ToolContractVerifier {
         }
 
         for (Map.Entry<String, Integer> entry : expectation.maxCalls().entrySet()) {
-            long count = stepEvents.stream().filter(event -> entry.getKey().equals(event.toolName())).count();
+            long count = "commit_storyboard".equals(entry.getKey())
+                    ? stepEvents.stream().filter(event -> "commit_storyboard".equals(event.toolName()) && event.succeeded())
+                        .map(event -> binding(event)).distinct().count()
+                    : stepEvents.stream().filter(event -> entry.getKey().equals(event.toolName())).count();
             if (count > entry.getValue()) {
                 reasons.add("tool_called_too_many_times:" + entry.getKey() + ":" + count);
                 status = VerificationStatus.FAILED;
@@ -56,9 +59,9 @@ public class ToolContractVerifier {
         }
 
         if (expectation.route() == MangaWorkflowRoute.STORYBOARD) {
-            int firstCommit = firstIndex(stepEvents, "commit_storyboard");
+            int firstCommit = firstSuccessfulCommit(stepEvents, expectation.stepId());
             boolean hasCommit = firstCommit >= 0;
-            boolean hasValidDraft = hasValidDraft(stepEvents, hasCommit ? firstCommit : stepEvents.size());
+            boolean hasValidDraft = hasCommit && hasValidDraft(stepEvents, firstCommit, stepEvents.get(firstCommit));
             if (!hasValidDraft) {
                 reasons.add("missing_valid_draft");
                 status = VerificationStatus.FAILED;
@@ -142,31 +145,47 @@ public class ToolContractVerifier {
         return Map.copyOf(payload);
     }
 
-    private boolean hasValidDraft(List<AgentRunToolStatus.ToolEvent> events, int beforeIndexExclusive) {
+    private boolean hasValidDraft(List<AgentRunToolStatus.ToolEvent> events, int beforeIndexExclusive,
+                                  AgentRunToolStatus.ToolEvent commit) {
         for (int index = 0; index < Math.min(events.size(), beforeIndexExclusive); index++) {
             AgentRunToolStatus.ToolEvent event = events.get(index);
-            if (!"draft_structured_storyboard".equals(event.toolName()) || !event.succeeded()) {
+            if (!"draft_structured_storyboard".equals(event.toolName()) || !event.succeeded()
+                    || !java.util.Objects.equals(event.requestId(), commit.requestId())
+                    || !java.util.Objects.equals(event.stepId(), commit.stepId())) {
                 continue;
             }
-            Object validated = event.result().get("validated");
-            if (Boolean.TRUE.equals(validated)) {
-                return true;
-            }
-            Object nested = event.result().get("data");
-            if (nested instanceof Map<?, ?> data && Boolean.TRUE.equals(data.get("validated"))) {
+            if (Boolean.TRUE.equals(data(event).get("validated")) && binding(event) != null
+                    && binding(event).equals(binding(commit))) {
                 return true;
             }
         }
         return false;
     }
 
-    private int firstIndex(List<AgentRunToolStatus.ToolEvent> events, String toolName) {
+    private int firstSuccessfulCommit(List<AgentRunToolStatus.ToolEvent> events, String stepId) {
         for (int index = 0; index < events.size(); index++) {
-            if (toolName.equals(events.get(index).toolName())) {
+            var event = events.get(index);
+            if ("commit_storyboard".equals(event.toolName()) && event.succeeded()
+                    && stepId.equals(event.stepId()) && binding(event) != null
+                    && Boolean.TRUE.equals(data(event).get("saved"))
+                    && "COMMITTED".equals(data(event).get("artifact_status"))) {
                 return index;
             }
         }
         return -1;
+    }
+
+    private List<String> binding(AgentRunToolStatus.ToolEvent event) {
+        Map<?,?> data = data(event);
+        List<String> fields = List.of("artifact_id", "content_hash", "base_version", "request_id", "step_id");
+        if (fields.stream().anyMatch(key -> data.get(key) == null || data.get(key).toString().isBlank())) return null;
+        if (event.requestId() == null || !event.requestId().toString().equals(data.get("request_id").toString())
+                || !java.util.Objects.equals(event.stepId(), data.get("step_id"))) return null;
+        return fields.stream().map(key -> data.get(key).toString()).toList();
+    }
+
+    private Map<?,?> data(AgentRunToolStatus.ToolEvent event) {
+        return event.result().get("data") instanceof Map<?,?> data ? data : event.result();
     }
 
     enum VerificationStatus {

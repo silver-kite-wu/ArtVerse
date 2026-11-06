@@ -23,8 +23,10 @@
 - Reader-to-character chat design, chapter knowledge boundaries, and MVP implementation notes: `docs/reader-character-chat-plan.md`.
 - Knowledge base schemas, temporal facts, review and validation record: `docs/knowledge-base-implementation.md`.
 - Novel text diff review, deterministic author confirmation, version checks and validation boundaries: `docs/novel-text-review.md`.
+- Agent tool catalog and native AgentScope registration design: `docs/agent-tools-and-registration-design.md`; implementation progress, per-tool verification, and remaining work: `docs/agent-tools-implementation.md`.
 - AI conversation automatic titles, bounded fallback, concurrency and validation: `docs/ai-conversation-titles.md`.
 - Account menu, profile/avatar/password APIs, migration and verification: `docs/account-profile-implementation.md`.
+- Local login CSRF diagnosis, development launcher, environment separation and verification: `docs/login-csrf-analysis-and-plan.md`.
 - When code and a runtime skill disagree, call out the mismatch and update the skill in the same change when appropriate.
 
 ## Backend and Data Changes

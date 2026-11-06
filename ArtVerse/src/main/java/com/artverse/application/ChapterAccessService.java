@@ -27,8 +27,8 @@ public class ChapterAccessService {
             throw new BusinessException(404, "Chapter not found");
         }
         Story story = chapter.getStory();
-        if (story == null || story.getUser() == null) {
-            return;
+        if (story == null || story.getUser() == null || story.getUser().getId() == null) {
+            throw new BusinessException(403, "Forbidden");
         }
         if (userId == null || !story.getUser().getId().equals(userId)) {
             throw new BusinessException(403, "Forbidden");

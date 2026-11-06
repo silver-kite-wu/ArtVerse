@@ -14,6 +14,7 @@ export interface Story {
 
 export interface ChatMessage {
   id: number;
+  request_id?: string;
   chapter_id?: number;
   role: string;
   content: string;
@@ -27,6 +28,7 @@ export async function listStoryChatMessages(chapterId: number, conversationId: s
   const items = await readApiData(res) as Array<Record<string, unknown>>;
   return items.map((item) => ({
     id: Number(item.id),
+    request_id: typeof (item.request_id ?? item.requestId) === 'string' ? String(item.request_id ?? item.requestId) : undefined,
     chapter_id: chapterId,
     role: String(item.role || '').toLowerCase(),
     content: String(item.content || ''),

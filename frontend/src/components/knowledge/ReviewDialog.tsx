@@ -4,8 +4,10 @@ import { browseKnowledge, candidateFromResponse, recordFromResponse, getCandidat
 import type { KnowledgeUnitInput, KnowledgeUnitType } from '../../api/knowledgeAndImage';
 import TypedKnowledgeForm from './TypedKnowledgeForm';
 import { normalizeFormData } from './knowledgeFormValues';
+import { useConfirm } from '../../ui/confirm/useConfirm';
 
 export default function ReviewDialog({ story, options, schemas, record, candidateId, initial, onClose, onSaved }: { story: number; options: KnowledgeOptions; schemas: KnowledgeSchema[]; record?: KnowledgeRecord; candidateId?: number; initial: KnowledgeUnitInput; onClose: () => void; onSaved: () => void }) {
+  const confirm = useConfirm();
   const [draft, setDraft] = useState(initial);const [candidate, setCandidate] = useState<KnowledgeCandidateDetail | null>(null);const [targets, setTargets] = useState<KnowledgeRecord[]>([]);const [targetId, setTargetId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);const [loading, setLoading] = useState(Boolean(candidateId));const [error, setError] = useState('');const [reason, setReason] = useState('');
   const [targetQuery, setTargetQuery] = useState('');const [targetPage, setTargetPage] = useState(0);const [targetTotal, setTargetTotal] = useState(0);
@@ -18,7 +20,7 @@ export default function ReviewDialog({ story, options, schemas, record, candidat
     return () => {alive = false;};
   }, [story, candidate, draft.type, targetQuery, targetPage, targetId]);
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => e.preventDefault();window.addEventListener('beforeunload', warn);return () => window.removeEventListener('beforeunload', warn); }, []);
-  const close = () => { if (window.confirm('尚未保存的修改将被放弃，是否关闭？')) onClose(); };
+  const close = async () => { if (await confirm({ title: '关闭编辑', message: '尚未保存的修改将被放弃，是否关闭？', confirmText: '关闭' })) onClose(); };
   const save = async (approve = false) => { setSaving(true);setError('');try {
     const normalizedDraft = {...draft, structuredData: normalizeFormData(draft.structuredData, schemas.find(s => s.type === draft.type)?.fields ?? [])};setDraft(normalizedDraft);
     if (candidateId && !candidate) throw new Error('候选详情未加载，请关闭后重新打开');
@@ -34,7 +36,7 @@ export default function ReviewDialog({ story, options, schemas, record, candidat
       <label className="kb-field"><span>搜索正式知识更新目标</span><input value={targetQuery} onChange={e => {setTargetQuery(e.target.value);setTargetPage(0);}} /></label>{(targetPage + 1) * 100 < targetTotal && <button type="button" onClick={() => setTargetPage(p => p + 1)}>加载更多更新目标</button>}
       <details open={candidate.sourceStale}><summary>来源快照与当前内容{candidate.sourceStale ? '（需要核对）' : ''}</summary><SourceView title="抽取时快照" data={candidate.sourceSnapshot} /><SourceView title="当前来源" data={candidate.currentSource} />{candidate.sourceStale && candidate.status === 'PENDING' && <><p className="kb-warning">旧快照缺失或来源已变化。请逐项核对当前来源与候选内容，再确认。</p><button type="button" disabled={saving} onClick={() => void acknowledge()}>已核对当前来源，保留此候选继续审核</button></>}</details>
       <label className="kb-field"><span>审核方式 / 更新目标</span><select value={targetId ?? ''} onChange={e => setTargetId(e.target.value ? Number(e.target.value) : null)}><option value="">新建正式知识</option>{targets.map(t => <option key={t.id} value={t.id}>更新 · {t.title} #{t.id} · v{t.version}</option>)}</select></label>{targetId && <details open><summary>与当前正式版本比较</summary><FieldDiff before={targets.find(t => t.id === targetId)} after={draft} /></details>}</>}
-    <fieldset disabled={Boolean(candidateId && !candidate) || Boolean(candidate && candidate.status !== 'PENDING')}><label className="kb-field"><span>知识分类</span><select value={draft.type} disabled={Boolean(record) || candidate?.sourceType === 'CHARACTER_PROFILE'} onChange={e => { if (window.confirm('切换分类将清空类型专用字段，标题和描述保留。是否继续？')) {setDraft({ ...draft, type: e.target.value as KnowledgeUnitType, structuredData: blankKnowledge(e.target.value as KnowledgeUnitType, null).structuredData });setTargetId(null);setTargetPage(0);} }}>{TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
+    <fieldset disabled={Boolean(candidateId && !candidate) || Boolean(candidate && candidate.status !== 'PENDING')}><label className="kb-field"><span>知识分类</span><select value={draft.type} disabled={Boolean(record) || candidate?.sourceType === 'CHARACTER_PROFILE'} onChange={async e => { const nextType = e.target.value as KnowledgeUnitType; if (await confirm({ title: '切换知识分类', message: '切换分类将清空类型专用字段，标题和描述保留。是否继续？', confirmText: '切换' })) {setDraft({ ...draft, type: nextType, structuredData: blankKnowledge(nextType, null).structuredData });setTargetId(null);setTargetPage(0);} }}>{TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
     <TypedKnowledgeForm draft={draft} onChange={setDraft} schema={schemas.find(s => s.type === draft.type)} options={options} /></fieldset>
     {error && <p role="alert" className="kb-error">{error}</p>}{candidate && <label className="kb-field"><span>拒绝理由（可选）</span><input value={reason} onChange={e => setReason(e.target.value)} maxLength={500} /></label>}
     <footer>{candidate ? candidate.status === 'PENDING' ? <><button type="button" disabled={saving} onClick={() => void reject()}>拒绝</button><button disabled={saving}>保存补充</button><button className="kb-primary" type="button" disabled={saving || candidate.sourceStale} onClick={() => void save(true)}>{saving ? '处理中…' : '确认入库'}</button></> : <span>此候选已结束审核，仅保留历史。</span> : <><button type="button" onClick={close}>取消</button><button className="kb-primary" disabled={saving}>{saving ? '保存中…' : '保存正式知识'}</button></>}</footer>

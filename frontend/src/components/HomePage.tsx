@@ -47,6 +47,7 @@ import AssetGroupManagerModal from './AssetGroupManagerModal';
 import OverlayPortal from '../ui/OverlayPortal';
 import StudioArtwork from './StudioArtwork';
 import { useToast } from '../ui/toast/useToast';
+import { useConfirm } from '../ui/confirm/useConfirm';
 
 interface Props {
   onSelectStory: (story: Story) => void;
@@ -54,6 +55,7 @@ interface Props {
 
 export default function HomePage({ onSelectStory }: Props) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -304,7 +306,7 @@ export default function HomePage({ onSelectStory }: Props) {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('确定要删除这本小说吗？所有章节、对话、漫画都将被永久删除！')) return;
+    if (!(await confirm({ title: '删除小说', message: '确定要删除这本小说吗？所有章节、对话、漫画都将被永久删除！', confirmText: '删除', tone: 'danger' }))) return;
     await deleteStory(id);
     setStories((prev) => prev.filter((s) => s.id !== id));
     toast.success('故事已删除');
@@ -908,7 +910,7 @@ export default function HomePage({ onSelectStory }: Props) {
                           <button
                             onClick={async () => {
                               const ch = characters.find(c => c.id === editingCharId);
-                              if (!confirm('确定删除角色"' + (ch?.name || '') + '"吗？')) return;
+                              if (!(await confirm({ title: '删除角色', message: '确定删除角色“' + (ch?.name || '') + '”吗？此操作无法撤销。', confirmText: '删除', tone: 'danger' }))) return;
                               try {
                                 await deleteCharacterProfile(charModalStoryId!, editingCharId!);
                                 setCharacters(prev => prev.filter(x => x.id !== editingCharId));

@@ -5,6 +5,7 @@ import type { NovelEditorHandle } from './NovelEditor';
 import KnowledgeBasePage from './KnowledgeBasePage';
 import { createNextChapter, deleteChapter, errorMessage, getChapter, listChapters, type Chapter } from '../api';
 import { useToast } from '../ui/toast/useToast';
+import { useConfirm } from '../ui/confirm/useConfirm';
 
 interface Props {
   storyId: number;
@@ -18,6 +19,7 @@ const LS_CHAPTER_IDX = 'lorevista.currentChapterIdx';
 
 export default function WorkspaceEditor({ storyId, onBack, onLoadError }: Props) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [currentIdx, setCurrentIdx] = useState(0);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null);
@@ -124,7 +126,7 @@ export default function WorkspaceEditor({ storyId, onBack, onLoadError }: Props)
   const handleDelete = async () => {
     if (!currentChapter || chapters.length <= 1) return;
     if (novelEditorRef.current && !novelEditorRef.current.canLeave()) return;
-    if (!confirm('确定删除这一章吗？')) return;
+    if (!(await confirm({ title: '删除章节', message: '确定删除这一章吗？删除后无法恢复。', confirmText: '删除', tone: 'danger' }))) return;
     try {
       await deleteChapter(currentChapter.id);
       const chs = await listChapters(storyId);

@@ -21,6 +21,7 @@ import {
 } from '../api';
 import EmbeddingSettingsPanel from './EmbeddingSettingsPanel';
 import { useToast } from '../ui/toast/useToast';
+import { useConfirm } from '../ui/confirm/useConfirm';
 
 type ProviderPreset = {
   id: string;
@@ -132,6 +133,7 @@ function CapabilityTabs({ active, onChange, settings }: { active: CapabilityTab;
 
 export default function ApiSettingsPage() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [settings, setSettings] = useState<ApiKeySettings>(() => getApiKeySettings());
   const [activeTab, setActiveTab] = useState<CapabilityTab>('llm');
   const [editor, setEditor] = useState<Editor>({ mode: 'list' });
@@ -368,7 +370,8 @@ export default function ApiSettingsPage() {
   };
 
   const deleteEntry = async (entryId: string, entry: ProviderPresetConfig) => {
-    if (!capability || !confirm(`确定删除“${entry.label}”吗？`)) return;
+    if (!capability) return;
+    if (!(await confirm({ title: '删除配置', message: `确定删除“${entry.label}”吗？`, confirmText: '删除', tone: 'danger' }))) return;
     try {
       if (entry.remoteId) await deleteUserProviderConfig(entry.remoteId);
       const nextEntries = { ...settings.providers[capability].entries };

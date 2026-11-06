@@ -2,6 +2,7 @@
 import { Fragment, useReducer } from 'react';
 import { ArrowUp, Clock3, History, LoaderCircle, MessageSquarePlus, Square, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { useConfirm } from '../ui/confirm/useConfirm';
 import {
   API_KEY_CHANGE_EVENT,
   cancelStoryChatConversationRun,
@@ -63,6 +64,7 @@ export default function ChatPanel(props: Props) {
 }
 
 function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSend, onBeforeApply, onApplyingChange, active = true, reviewTarget, onReviewOpenChange, onOpenReview }: Props) {
+  const confirm = useConfirm();
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [task, dispatchTask] = useReducer(storyChatTaskReducer, initialStoryChatTask);
@@ -341,7 +343,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
 
   const handleDeleteConversation = async (selected: AiConversationSummary) => {
     if (!chapter || busy || conversationLoading || pendingDraft || conversationMutationRef.current) return;
-    if (!window.confirm(`删除“${selected.title || '新会话'}”及其聊天记录？此操作无法撤销。`)) return;
+    if (!(await confirm({ title: '删除会话', message: `删除“${selected.title || '新会话'}”及其聊天记录？此操作无法撤销。`, confirmText: '删除', tone: 'danger' }))) return;
     conversationMutationRef.current = true;
     let loadingNextConversation = false;
     setConversationLoading(true);

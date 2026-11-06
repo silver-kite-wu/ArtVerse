@@ -3,10 +3,12 @@ import { ChevronDown, ChevronUp, KeyRound, LogOut, Monitor, Moon, Sun, UserRound
 import type { UserInfo } from '../api/auth';
 import { useTheme } from '../hooks/useTheme';
 import OverlayPortal from '../ui/OverlayPortal';
+import { useConfirm } from '../ui/confirm/useConfirm';
 import UserAvatar from './UserAvatar';
 
 interface Props { user: UserInfo; compact?: boolean; mobile?: boolean; onProfile: () => void; onSettings: () => void; onLogout: () => Promise<void> }
 export default function AccountMenu({ user, compact, mobile, onProfile, onSettings, onLogout }: Props) {
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [position, setPosition] = useState({ left: 12, top: 12 });
@@ -70,7 +72,8 @@ export default function AccountMenu({ user, compact, mobile, onProfile, onSettin
         {([{ value: 'light', label: '浅色', Icon: Sun }, { value: 'dark', label: '深色', Icon: Moon }, { value: 'system', label: '跟随系统', Icon: Monitor }] as const).map(({ value, label, Icon }) => <button key={value} type="button" aria-pressed={preference === value} onClick={() => setPreference(value)}><Icon size={16} /><span>{label}</span></button>)}
       </div></fieldset>
       <div className="account-menu-links account-logout"><button type="button" disabled={loggingOut} onClick={async () => {
-        if (loggingOut || !window.confirm('确定退出当前账号吗？')) return;
+        if (loggingOut) return;
+        if (!(await confirm({ title: '退出登录', message: '确定退出当前账号吗？', confirmText: '退出登录', tone: 'danger' }))) return;
         setLoggingOut(true);
         try { await onLogout(); setOpen(false); } finally { setLoggingOut(false); }
       }}><LogOut size={17} /><span>{loggingOut ? '正在退出…' : '退出登录'}</span></button></div>

@@ -825,7 +825,7 @@ review_summary_status 仅是既有 run 的派生投影，可区分 PENDING/COMPL
 | 无业务工具 generateText / generateStructured | 业务工具配置为空；结构化返回由 6.10 的原生 response_format/单次 generate_response 处理。需要业务工具时走同一受控事件调用，不能绕过桥接或另发一次完整 Agent |
 | CONTEXT_MISSING / ROUTING / MUTATION_CONFIRMATION 等服务端决策 | 使用服务器生成的 decision 引用/版本，走对应现有领域处理；没有原生 call 时不提供虚构 ToolResultBlock。覆盖确认绑定具体 artifact/hash/base，不以肯定词自动批准下一产物 |
 
-对照 MangaAgentController 的同步、两类 SSE resume 及 AgentAutomationExecutor 漫画分支，统一更新 ResumeRequest 和调用方；旧裸 answer 协议在研发切换时撤下。保留产品仍使用的入口，删除确无调用方的重复适配。这里只统一 Gateway 小型调用辅助方法和事件映射，不创建新 Gateway 执行器或业务编排系统。
+`MangaAgentController` 及其 `/api/chapters/{chapterId}/manga-agent/**` 路由已于 2026-11-06 随“未调用路由清理”整体删除（前端只保留从未被调用的 `resumeMangaAgentAgUiStream` 辅助函数）；其历史上的同步、两类 SSE resume 语义仍由 `MangaAgentService` 与 `AgentAutomationExecutor` 漫画分支承担。对照这些服务入口统一更新 ResumeRequest 和调用方；旧裸 answer 协议在研发切换时撤下。保留产品仍使用的入口，删除确无调用方的重复适配。这里只统一 Gateway 小型调用辅助方法和事件映射，不创建新 Gateway 执行器或业务编排系统。
 
 原生 2.0.4 的 `enablePendingToolRecovery(true)` 会在存在 pending、输入有普通消息而无 ToolResultBlock 时补合成错误，再继续模型；这不是可靠地恢复人工答案。当前 Factory 已设 false，保留此设置并增加回归；有普通消息却缺结果时由框架拒绝。注意其空消息分支仍会 resume pending，不能把 false 当成“所有续接入口都已受控”：产品 USER_QUESTION 恢复必须携已持久受理的真实结果，先由 Gateway 业务边界拒绝无答案续接。
 
@@ -1180,7 +1180,7 @@ T16/T20/T29/T30 增补：两个输出上限字段及默认/扩展 body 覆盖、
 | 固定审查专家与任务仓储 | 补回尚未接通的审查能力，用原生 SubagentsMiddleware + 四 Entry 装配；约束父运行查询和取消，完成父子预算、等待、恢复和审查结果校验 |
 | external 事件与决策桥接 | 保留现有原生 external 声明；完整 ToolUseBlock 已接入的部分继续复用，补全所有入口、状态保存确认、晚到事件 CAS 和可靠投递。关闭业务 Agent 自动补错恢复，不恢复手写 Schema 或方法体暂停 |
 | `StoryChatAgentService`、`NovelDraftReviewService`、`AgentAutomationExecutor`、Controller 与任务中心 | 接续已撤下旧 commit/裸确认的改动；恢复保留原 route/taskType/step/session，SUMMARY 切换提示/技能/权限且只领取一次；补后台 response 入队前回执校验、失败重试分流和全部合法审核状态的真实回执投影 |
-| `MangaAgentService`、`MangaAgentController`、`MangaAgentExecutionSupport` 与漫画客户端 | 同步/SSE/后台普通问题使用同 call 的原生结果，恢复原执行节点；有工具同步聚合一次事件调用；服务端 ROUTING/CONTEXT_MISSING/覆盖确认走独立决策引用，禁止文本拼接重跑整条流程 |
+| `MangaAgentService`、`MangaAgentExecutionSupport` 与漫画客户端（`MangaAgentController` 已删除，不再提供 HTTP 入口） | 同步/SSE/后台普通问题使用同 call 的原生结果，恢复原执行节点；有工具同步聚合一次事件调用；服务端 ROUTING/CONTEXT_MISSING/覆盖确认走独立决策引用，禁止文本拼接重跑整条流程 |
 | `MangaAgentRunService`、`AgentRunLeaseService` 和后台 retry | 接续已有停滞行锁，补完整租约校验与并发验收；认领/续租分开，领取一次并绑定 fencing，状态/取消/重开与正式提交统一锁或 CAS；作者审核与模型授权失效分别处理 |
 | `RedisAgentStateStoreConfig`、`StrictAgentStateStore`、`AgentSessionTurns`、`AgentTurnStateStores`、Factory/Gateway、Hydrator | 已有本轮视图、稳定双读和原子 owner guard；补 shutdown/专家/全入口与 SQL 联合验收。答复未取证本轮使用 disableCompaction/disableToolResultEviction，原生保存后核对精确结果再允许后续压缩，见 7.13.1 |
 | `MangaContextTools`、快照/读取关联与 `StoryboardArtifactService` | 一致读取及 section 分页/截断，实际 read_ref 绑定，基准不可追溯覆盖；语义 JSON 哈希避免 jsonb 序列化差异；统一只读标记与技术记录职责 |
@@ -1241,7 +1241,7 @@ P35 不是仅补两个字段。审核后的交付单元须包括以下内容；�
 
 | 位置 | 具体修改和验收条件 |
 |---|---|
-| MangaAgentDtos、StoryChatController、MangaAgentController | resume 用明确分支区分普通问题、作者已审阅、服务端决策；普通问题带 toolCallId/pendingVersion 及二选一的 answer/selectedOptionId，reviewed 带 artifactId，由服务器读取 receipt；服务端决策带真实 decision 引用/版本。不提供客户端 purpose/phase/confirmed 作为权限来源 |
+| MangaAgentDtos、StoryChatController（`MangaAgentController` 已删除，不再作为 resume 入口） | resume 用明确分支区分普通问题、作者已审阅、服务端决策；普通问题带 toolCallId/pendingVersion 及二选一的 answer/selectedOptionId，reviewed 带 artifactId，由服务器读取 receipt；服务端决策带真实 decision 引用/版本。不提供客户端 purpose/phase/confirmed 作为权限来源 |
 | AgentUserInputRequest、AgUiEventFactory、run 详情及回放 | live interrupt、user_input_requested、运行快照/任务详情和 replay 都投影同一个 question/options/allowFreeText/purpose/call/version 及答复投递状态；刷新后仍能取回问题。只有原生保存并核对后才发布可答，原生结束事件不提前宣称产品成功 |
 | frontend/src/api/agentRuns.ts、automations.ts | 建立共享待答类型与按分支的请求类型；产品字段采用明确的 lowerCamelCase，模型工具参数保留 snake_case，不做全局重命名或长期双解析。pendingVersion 为受运行上限约束的正整数，其他大 ID/版本沿用十进制字符串约定 |
 | ChatPanel | 恢复普通待答状态并显示问题、选项和按 allowFreeText 开放的输入；答复走原 requestId/call/version，不新建任务。只有草稿时进入现有差异审核。刷新/断流从 owned run 重新拉取；切换章节/会话后隔离本地待答，旧 SSE 不能覆盖新会话 |
@@ -1617,7 +1617,7 @@ Harness 证据分开记录：8 个作品/知识/素材/候选工具调用真实 
 - `agent/gateway/AgentToolBoundaryMiddleware.java`、`agent/gateway/tools/AgentToolCapability.java`、`AgentToolGroupSupport.java`、`application/tools/MangaHitlTools.java`、`application/automation/AutomationAgentTools.java`：构建前后契约、raw/input 检查与重复键检测；不完整能力快照、external 持久桥接、文本意图和运行来源检查。
 - `application/StoryChatAgentService.java`、`application/NovelDraftReviewService.java`、`application/MangaAgentRunService.java`、`application/AgentRunLeaseService.java`、`application/automation/AgentAutomationExecutor.java`、AutomationService：统一 resumeTask、已修正的原路由/一次认领、尚未验收的领域回执投影和后台 respond/retry 分支；前端 AutomationNovelReview/AutomationCenterPage 已有试验性接入。
 - `application/AgentUserInputRequest.java`、`api/dto/MangaAgentDtos.java`、`NovelContentArtifactService.reviewedContent/toCommitView`、`agent/AgentAnswerDelivery.java`、RunService 的 acceptAnswer/claimAnswerDelivery/recordNativeAnswer：已有 call/version、不可变保存回执及普通答复取证。后台 respond 已调用 acceptBackgroundAnswer，V55/V56 和 AutomationStore 已关联动作/具体消费凭证，retry 已按阶段冻结，executor 已采用数据库租约判定；全入口恢复、普通失败答案 retry、终态和后续压缩仍为剩余缺口。
-- `application/MangaAgentService.java` 的 resumeBackground/resumeStreamInternal/resumeInternal、`api/MangaAgentController.java`、`application/workflow/nodes/MangaAgentExecutionSupport.java` 的 executeRequest、Gateway 的三个调用入口、Factory 的 enablePendingToolRecovery：P36 的全入口差异证据；不能把 StoryChat 的恢复改动当成漫画已同步。
+- `application/MangaAgentService.java` 的 resumeBackground/resumeStreamInternal/resumeInternal、`application/workflow/nodes/MangaAgentExecutionSupport.java` 的 executeRequest、Gateway 的三个调用入口、Factory 的 enablePendingToolRecovery：P36 的全入口差异证据；不能把 StoryChat 的恢复改动当成漫画已同步。`api/MangaAgentController.java` 已于 2026-11-06 删除（无任何前端调用方），不再计入入口证据。
 - `frontend/src/api/agentRuns.ts`、`automations.ts`、`components/ChatPanel.tsx`、`components/AgentQuestion.tsx`、`components/automations/AutomationCenterPage.tsx` 及对应调用方/测试：P35 的共享普通问题协议已接入，漫画旧分支仍裸 confirm；executor 已用 asText(null)，后台具体消费已有 12.4/12.5 的局部证据，产品和全入口尚未闭环，详见 11.3。
 - `agent/gateway/AgentToolBoundaryMiddleware.java` 的 onModelCall/onActing/verifyTool：已接入 AgentStructuredOutput 和整批原生 ToolValidator 预检/SQL 预占；P37 固定类型/完整属性及 P22/P28 的全部边界尚未验收。原生结构化路径见 6.10/14.3。
 - `application/MangaAgentConversationService.java`：活动 prompt 中旧分镜直写推荐已清理，历史事件展示另行保留；其余技能/配置/路由仍按 P07 审计。

@@ -1,13 +1,13 @@
 // Module-level store for ongoing manga generation state.
 // Keyed by chapterId so state survives chapter switching in the UI.
 
-export interface GenImage {
+interface GenImage {
   image_number: number;
   image_path: string;
   prompt: string;
 }
 
-export interface GenState {
+interface GenState {
   active: boolean;        // true while SSE is streaming
   current: number;
   total: number;

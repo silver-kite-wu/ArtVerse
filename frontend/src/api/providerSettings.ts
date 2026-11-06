@@ -3,9 +3,9 @@ import { readApiData, BASE, authFetch, parseApiError, LS_LLM_API_KEY, LS_IMAGE_A
 export const API_KEY_CHANGE_EVENT = 'lorevista:api-key-change';
 
 export type ApiCapability = 'llm' | 'image' | 'workflow';
-export type ProviderMode = 'official' | 'custom';
+type ProviderMode = 'official' | 'custom';
 
-export interface ProviderEndpointConfig {
+interface ProviderEndpointConfig {
   configId?: number;
   active?: boolean;
   apiKeyMasked?: string;
@@ -40,7 +40,7 @@ export interface ProviderModelOption {
   baseUrl: string;
 }
 
-export interface CapabilityProviderSettings {
+interface CapabilityProviderSettings {
   activePresetId: string;
   entries: Record<string, ProviderPresetConfig>;
 }
@@ -474,7 +474,7 @@ export function getProviderModelSelections(capability: ApiCapability): ProviderM
     );
 }
 
-export function getProviderModelSelectionMeta(
+function getProviderModelSelectionMeta(
   capability: ApiCapability,
   selection: string,
 ): ProviderModelOption | null {

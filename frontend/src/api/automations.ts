@@ -10,7 +10,7 @@ export interface AutomationSchedule {
   timezone: string;
   weekdays?: number[] | null;
 }
-export interface AutomationPayload {
+interface AutomationPayload {
   version?: number;
   storyId?: number;
   chapterId?: number;
@@ -48,7 +48,7 @@ export interface AutomationCommandProposal {
   expectedVersion: number | null; definition: AutomationDefinition; result: AutomationPlan | null;
   applied: boolean; expiresAt: string; reviewUrl: string;
 }
-export interface AutomationCommandPage { items: AutomationCommandProposal[]; nextCursor: string | null; hasMore: boolean }
+interface AutomationCommandPage { items: AutomationCommandProposal[]; nextCursor: string | null; hasMore: boolean }
 export interface AutomationRun {
   id: string; automationId: string; automationVersion: number; triggerKind: 'SCHEDULED' | 'MANUAL';
   scheduledFor: string; definition: AutomationDefinition;
@@ -56,12 +56,12 @@ export interface AutomationRun {
   attemptCount: number; summary: string | null; errorCode: string | null; errorMessage: string | null;
   waitingReason: string | null; createdAt: string; startedAt: string | null; completedAt: string | null;
 }
-export interface AutomationExecution {
+interface AutomationExecution {
   id: number; targetKey: string; executionKind: AutomationExecutorKey;
   agentRunId: number | null; scheduledMangaId: string | null; imageRecordId: number | null;
   conversationId: string | null; requestId: string | null;
 }
-export interface AutomationEvent { id: number; type: string; payload: { summary?: string; code?: string }; createdAt: string }
+interface AutomationEvent { id: number; type: string; payload: { summary?: string; code?: string }; createdAt: string }
 export interface AutomationRunDetail { run: AutomationRun; executions: AutomationExecution[]; events: AutomationEvent[]; artifacts?: AutomationArtifact[]; reviewReceipt?: { artifact_id: string; status: 'COMMITTED' | 'REJECTED' }; userInputRequest?: AgentUserInputRequest & { artifactId?: string } }
 export interface AutomationArtifact { kind: string; id: string; title: string; url?: string; content?: string; state?: string; imageNumber?: number; error?: string; review?: { chapterId: number; conversationId: string; requestId: string; baseVersion: number; currentVersion: number; contentHash: string; originalContent: string } }
 export interface AutomationNotification { id: number; runId: string; name: string; kind: string; summary: string; read: boolean; createdAt: string }

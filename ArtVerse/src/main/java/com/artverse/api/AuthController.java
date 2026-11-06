@@ -215,26 +215,6 @@ public class AuthController {
         return noStore(toResponse(StpUtil.getTokenInfo()));
     }
 
-    @PostMapping("/kickout")
-    @RateLimit(windowSeconds = 60, maxRequests = 10, key = "kickout")
-    public ResponseEntity<Void> kickout(@RequestParam Long userId) {
-        StpUtil.checkRole("ADMIN");
-        refreshTokenService.revokeAll(userId);
-        StpUtil.kickout(userId);
-        log.warn("User kicked out: id={}, by admin id={}", userId, StpUtil.getLoginIdAsLong());
-        return ResponseEntity.noContent()
-                .cacheControl(CacheControl.noStore())
-                .build();
-    }
-
-    @GetMapping("/me")
-    @RateLimit(windowSeconds = 60, maxRequests = 60, key = "me")
-    public ResponseEntity<Object> me() {
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(StpUtil.getTokenInfo());
-    }
-
     private ResponseEntity<AuthResponse> noStore(AuthResponse response) {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())

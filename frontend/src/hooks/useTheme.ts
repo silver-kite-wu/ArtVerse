@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 type Mode = 'dark' | 'light';
-export type ThemePreference = Mode | 'system';
+type ThemePreference = Mode | 'system';
 const KEY = 'artverse.mode';
 const listeners = new Set<() => void>();
 const media = window.matchMedia('(prefers-color-scheme: light)');

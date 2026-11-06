@@ -88,7 +88,7 @@ export function referenceImageCacheKey(messageId: string, index: number): string
   return `reference:${messageId}:${index}`;
 }
 
-export async function getCachedImage(key: string): Promise<Blob | null> {
+async function getCachedImage(key: string): Promise<Blob | null> {
   try {
     const database = await openDatabase();
     const transaction = database.transaction(STORE_NAME, 'readonly');

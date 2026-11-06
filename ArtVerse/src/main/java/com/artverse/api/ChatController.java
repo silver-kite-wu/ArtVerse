@@ -6,13 +6,11 @@ import com.artverse.application.CurrentUserService;
 import com.artverse.application.StoryChatAgentService;
 import com.artverse.application.UserProviderConfig;
 import com.artverse.domain.MangaAgentConversation;
-import com.artverse.domain.ChatMessage;
 import com.artverse.domain.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -39,11 +37,6 @@ public class ChatController {
         MangaAgentConversation conversation = chatService.storyConversation(chapterId, user);
         return storyChatAgentService.runAgUiStream(chapterId, conversation.getConversationUuid(),
                 content, null, user, llmConfig);
-    }
-
-    @GetMapping("/messages")
-    public List<ChatMessage> getMessages(@PathVariable Long chapterId) {
-        return chatService.getMessages(chapterId);
     }
 
     private UserProviderConfig requestConfig(Map<String, String> body) {

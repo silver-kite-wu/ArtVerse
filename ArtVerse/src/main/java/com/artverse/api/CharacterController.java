@@ -60,20 +60,4 @@ public class CharacterController {
         return ResponseEntity.noContent().build();
     }
 
-    // ===== Asset group character association =====
-
-    @GetMapping("/asset-groups/{groupId}/characters")
-    public List<CharacterProfile> listByAssetGroup(@PathVariable Long groupId) {
-        return characterProfileService.listByAssetGroup(groupId);
-    }
-
-    @PutMapping("/asset-groups/{groupId}/characters")
-    public Map<String, Object> setAssetGroupCharacters(@PathVariable Long groupId,
-                                                        @RequestBody Map<String, Object> body) {
-        @SuppressWarnings("unchecked")
-        List<Number> ids = (List<Number>) body.get("character_ids");
-        List<Long> characterIds = ids != null ? ids.stream().map(Number::longValue).toList() : List.of();
-        characterProfileService.setAssetGroupCharacters(groupId, characterIds);
-        return Map.of("success", true);
-    }
 }

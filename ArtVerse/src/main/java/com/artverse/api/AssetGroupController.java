@@ -40,11 +40,6 @@ public class AssetGroupController {
         return toGroupMap(group);
     }
 
-    @GetMapping("/asset-groups/{groupId}")
-    public Map<String, Object> get(@PathVariable Long groupId) {
-        return toGroupMap(assetGroupService.getRequired(groupId));
-    }
-
     @PutMapping("/asset-groups/{groupId}")
     public Map<String, Object> update(@PathVariable Long groupId, @RequestBody Map<String, Object> body) {
         String name = body.get("name") != null ? body.get("name").toString() : null;

@@ -2,7 +2,7 @@ import { createContext } from 'react';
 
 export type ToastTone = 'success' | 'error' | 'warning' | 'info';
 
-export interface ToastAction {
+interface ToastAction {
   label: string;
   onClick: () => void;
 }
@@ -13,7 +13,7 @@ export interface ToastOptions {
   action?: ToastAction;
 }
 
-export interface ToastApi {
+interface ToastApi {
   show: (message: string, options?: ToastOptions) => string;
   success: (message: string, options?: Omit<ToastOptions, 'tone'>) => string;
   error: (message: string, options?: Omit<ToastOptions, 'tone'>) => string;

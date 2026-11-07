@@ -2,7 +2,7 @@ import { ApiError, authFetch, BASE, getUser, readApiData } from './auth';
 import { randomUUID, stableDigest } from '../utils/browserSecurity';
 
 export type ImageRequestStatus = 'QUEUED' | 'LOAD_CONTEXT' | 'GENERATING' | 'UPLOADING' | 'COMMITTING' | 'RETRY_WAIT' | 'SUCCEEDED' | 'FAILED' | 'STALE' | 'NEEDS_REVIEW' | 'PARTIAL_FAILED';
-export interface ImageOperation {
+interface ImageOperation {
   request_id: string; operation_id: string; image_number: number | null;
   status: ImageRequestStatus | null; state_epoch: string | null; version: number;
   record_id: number | null; manga_image_id: number | null; image_version: string | null;

@@ -70,17 +70,6 @@ public class KnowledgeController {
         knowledgeService.archive(storyId, unitId, user().getId()); return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/stories/{storyId}/knowledge/{unitId}/jobs")
-    public List<KnowledgeService.IndexJobView> jobs(@PathVariable Long storyId, @PathVariable Long unitId) { return knowledgeService.jobs(storyId, unitId, user().getId()); }
-
-    @GetMapping("/stories/{storyId}/knowledge/{unitId}/revisions")
-    public List<KnowledgeService.RevisionView> revisions(@PathVariable Long storyId, @PathVariable Long unitId) { return knowledgeService.revisions(storyId, unitId, user().getId()); }
-
-    @PostMapping("/stories/{storyId}/knowledge/{unitId}/jobs/{jobId}/retry")
-    public ResponseEntity<Void> retry(@PathVariable Long storyId, @PathVariable Long unitId, @PathVariable Long jobId) {
-        knowledgeService.retry(storyId, unitId, jobId, user().getId()); return ResponseEntity.accepted().build();
-    }
-
     @PostMapping("/stories/{storyId}/knowledge/rebuild")
     public ResponseEntity<Void> rebuild(@PathVariable Long storyId, @RequestBody Map<String, Object> body) {
         Long configId = longValue(body, "config_id");

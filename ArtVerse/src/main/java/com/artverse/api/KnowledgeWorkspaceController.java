@@ -57,20 +57,12 @@ public class KnowledgeWorkspaceController {
     }
     @GetMapping("/characters")
     public List<Map<String,Object>> characters(@PathVariable long storyId,@RequestParam(required=false) Long asOfChapterId) { facts.requireStory(storyId,user());return projections.characters(storyId,asOfChapterId); }
-    @GetMapping("/characters/{characterId}")
-    public Map<String,Object> character(@PathVariable long storyId,@PathVariable long characterId,@RequestParam(required=false) Long asOfChapterId) {
-        facts.requireStory(storyId,user());return projections.characters(storyId,asOfChapterId).stream().filter(c->Objects.equals(KnowledgeSchema.id(c.get("characterId")),characterId)).findFirst().orElseThrow(()->new BusinessException(404,"该视角无此人物"));
-    }
     @GetMapping("/relations/graph")
     public KnowledgeFactService.Graph graph(@PathVariable long storyId,@RequestParam(required=false) Long asOfChapterId,@RequestParam(required=false) Long characterId,@RequestParam(defaultValue="false") boolean pending,@RequestParam(defaultValue="") String q,@RequestParam(defaultValue="1") int hops) { return facts.graph(storyId,user(),asOfChapterId,characterId,pending,q,hops); }
     @GetMapping("/events")
     public List<Map<String,Object>> events(@PathVariable long storyId,@RequestParam(required=false) Long asOfChapterId,@RequestParam(required=false) Long characterId,@RequestParam(defaultValue="NARRATIVE") String order) { facts.requireStory(storyId,user());return projections.events(storyId,asOfChapterId,characterId,order); }
     @GetMapping("/foreshadowing")
     public List<Map<String,Object>> foreshadowing(@PathVariable long storyId,@RequestParam(required=false) Long asOfChapterId) {facts.requireStory(storyId,user());return projections.foreshadowing(storyId,asOfChapterId);}
-    @PostMapping("/entities")
-    public Map<String,Long> entity(@PathVariable long storyId,@RequestBody Map<String,String> body) {return Map.of("id",facts.defineEntity(storyId,user(),body.get("kind"),body.get("name")));}
-    @GetMapping("/{unitId}/facts")
-    public List<KnowledgeFactService.Fact> listFacts(@PathVariable long storyId,@PathVariable long unitId,@RequestParam(required=false) Long asOfChapterId) {facts.requireStory(storyId,user());return facts.all(storyId,asOfChapterId,null).stream().filter(f->f.unitId()==unitId).toList();}
     @PostMapping("/{unitId}/facts")
     public KnowledgeFactService.Fact saveFact(@PathVariable long storyId,@PathVariable long unitId,@RequestBody KnowledgeFactService.Command command) {return knowledge.saveFactCommand(storyId,unitId,user(),command);}
     @GetMapping("/facts/{factId}/history")

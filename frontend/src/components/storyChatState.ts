@@ -1,7 +1,7 @@
-export type StoryChatPhase = 'IDLE' | 'SAVING' | 'PREPARING_CONTEXT' | 'BUILDING_REQUEST'
+type StoryChatPhase = 'IDLE' | 'SAVING' | 'PREPARING_CONTEXT' | 'BUILDING_REQUEST'
   | 'WAITING_MODEL' | 'GENERATING' | 'WAITING_USER' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
-export interface StoryChatTaskState { phase: StoryChatPhase; requestId: string | null; accepted: boolean }
+interface StoryChatTaskState { phase: StoryChatPhase; requestId: string | null; accepted: boolean }
 export const initialStoryChatTask: StoryChatTaskState = { phase: 'IDLE', requestId: null, accepted: false };
 export const isStoryChatBusy = (phase: StoryChatPhase) =>
   ['SAVING', 'PREPARING_CONTEXT', 'BUILDING_REQUEST', 'WAITING_MODEL', 'GENERATING'].includes(phase);

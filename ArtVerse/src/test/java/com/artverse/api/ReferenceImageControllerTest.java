@@ -26,14 +26,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ReferenceImageControllerTest {
 
     @Test
-    void addChapterRefImageUploadsToMinioAndReturnsStoredImage() throws Exception {
+    void addChapterRefImageUploadsToObjectStorageAndReturnsStoredImage() throws Exception {
         ArtVerseProperties properties = new ArtVerseProperties();
-        properties.getMinio().setBucket("artverse-test");
+        properties.getOss().setBucket("artverse-test");
         Path tempRoot = Files.createTempDirectory("artverse-ref-test-");
         properties.getStorage().setRoot(tempRoot.toString());
 
         Story story = new Story();
         story.setId(3L);
+        com.artverse.domain.User owner = new com.artverse.domain.User();
+        owner.setId(1L);
+        story.setUser(owner);
         Chapter chapter = new Chapter();
         chapter.setId(7L);
         chapter.setStory(story);
@@ -77,7 +80,22 @@ class ReferenceImageControllerTest {
 
     private static class CapturingStorage implements ObjectStorageService {
         @Override
+        public String defaultBucket() {
+            return "artverse-test";
+        }
+
+        @Override
+        public String privateBucket() {
+            return "artverse-test-private";
+        }
+
+        @Override
         public StoredObject put(String objectKey, java.io.InputStream content, long sizeBytes, String contentType) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<StoredObject> putIfAbsent(String bucket, String objectKey, java.io.InputStream content, long sizeBytes, String contentType, Map<String, String> metadata) {
             throw new UnsupportedOperationException();
         }
 
@@ -98,6 +116,11 @@ class ReferenceImageControllerTest {
         @Override
         public java.io.InputStream get(String bucket, String objectKey) {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<java.io.InputStream> openIfPresent(String bucket, String objectKey) {
+            return Optional.empty();
         }
 
         @Override

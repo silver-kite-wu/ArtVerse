@@ -40,7 +40,7 @@ export function parseAppHash(hash: string): AppRoute | null {
   return Number.isSafeInteger(storyId) && storyId > 0 ? { view: 'editor', storyId } : null;
 }
 
-export function appRouteHash(route: AppRoute): string {
+function appRouteHash(route: AppRoute): string {
   if (route.view === 'automations') return `#/automations${route.automationId ? `/${route.automationId}` : ''}${route.runId ? `?run=${route.runId}` : ''}`;
   if (route.view === 'editor') return `#/editor/${route.storyId}`;
   if (route.view === 'square' && 'storyId' in route) return `#/square/${route.format}/${route.storyId}${route.chapterId ? `/chapter/${route.chapterId}` : ''}`;

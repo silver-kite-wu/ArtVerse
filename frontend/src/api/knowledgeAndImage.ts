@@ -1,6 +1,5 @@
 import { readApiData, BASE, authFetch, parseApiError } from './auth';
 import { getProviderRequestPayload } from './providerSettings';
-import type { UserAgentSkill } from './agentRuns';
 import { submitImageRequest, getImageRequest, type ImageRequestSnapshot, type ImageRequestStatus } from './imageRequests';
 
 function encodeStaticPath(imagePath: string): string {
@@ -24,21 +23,6 @@ export interface ImageGenRecord {
 
 // ---- Story knowledge base ----
 export type KnowledgeUnitType = 'CHARACTER_CARD' | 'CHARACTER_RELATION' | 'WORLDVIEW' | 'TIMELINE' | 'FORESHADOWING';
-export interface KnowledgeUnit {
-  id: number;
-  type: KnowledgeUnitType;
-  title: string;
-  body: string;
-  summary: string;
-  structuredData: Record<string, unknown>;
-  importance: number;
-  effectiveFromChapter: number | null;
-  effectiveToChapter: number | null;
-  status: 'ACTIVE' | 'ARCHIVED';
-  version: number;
-  indexStatus: string;
-  updatedAt: string;
-}
 export interface KnowledgeUnitInput {
   type: KnowledgeUnitType;
   title: string;
@@ -63,7 +47,7 @@ export interface EmbeddingConfigInfo {
   usedByStories: boolean;
   usedByStoryTitles?: string[];
 }
-export interface EmbeddingConfigInput {
+interface EmbeddingConfigInput {
   configId?: number;
   displayName: string;
   baseUrl: string;
@@ -71,7 +55,7 @@ export interface EmbeddingConfigInput {
   model: string;
   customHeaders: string;
 }
-export interface KnowledgeRecallPreview {
+interface KnowledgeRecallPreview {
   items: Array<{ knowledgeUnitId: number; version: number; type: KnowledgeUnitType; title: string; content: string; score: number }>;
   context: string;
   contextHash: string;
@@ -79,7 +63,7 @@ export interface KnowledgeRecallPreview {
   snapshotId?: number | null;
 }
 
-export type NovelRevisionSource = 'manual' | 'ai' | 'restore' | 'legacy_import' | 'generated';
+type NovelRevisionSource = 'manual' | 'ai' | 'restore' | 'legacy_import' | 'generated';
 
 export interface NovelRevision {
   id: number;
@@ -90,7 +74,7 @@ export interface NovelRevision {
   created_at: string;
 }
 
-export interface NovelContentSaveResult {
+interface NovelContentSaveResult {
   changed: boolean;
   chapter_version: number;
   revision_id?: number;
@@ -142,6 +126,8 @@ export interface AiConversationSummary {
   status: 'ACTIVE' | 'ARCHIVED';
   chapterId: number | null;
   lastActivityAt: string;
+  /** 该会话由定时任务运行创建（每次运行一个独立会话，默认 ARCHIVED 只读）。 */
+  automationRun?: boolean;
 }
 
 export async function listAiConversations(type: AiConversationSummary['type'], chapterId?: number): Promise<AiConversationSummary[]> {
@@ -180,132 +166,6 @@ export async function deleteAiConversation(conversationId: string): Promise<void
   if (!res.ok) throw new Error(parseApiError(await res.text()));
 }
 
-export type KnowledgeCandidateStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUPERSEDED';
-export interface KnowledgeCandidate {
-  id: number;
-  sourceType: string;
-  sourceId: string | null;
-  knowledgeType: KnowledgeUnitType;
-  title: string;
-  body: string;
-  summary: string;
-  structuredData: Record<string, unknown>;
-  importance: number;
-  effectiveFromChapter: number | null;
-  effectiveToChapter: number | null;
-  status: KnowledgeCandidateStatus;
-  approvedKnowledgeUnitId: number | null;
-  rejectionReason: string | null;
-  createdAt: string;
-  reviewedAt: string | null;
-}
-
-function knowledgeCandidateFromResponse(item: Record<string, unknown>): KnowledgeCandidate {
-  return {
-    id: Number(item.id),
-    sourceType: String(item.source_type ?? item.sourceType ?? ''),
-    sourceId: item.source_id == null && item.sourceId == null ? null : String(item.source_id ?? item.sourceId),
-    knowledgeType: String(item.knowledge_type ?? item.knowledgeType) as KnowledgeUnitType,
-    title: String(item.title ?? ''),
-    body: String(item.body ?? ''),
-    summary: String(item.summary ?? ''),
-    structuredData: (item.structured_data ?? item.structuredData ?? {}) as Record<string, unknown>,
-    importance: Number(item.importance ?? 3),
-    effectiveFromChapter: item.effective_from_chapter == null && item.effectiveFromChapter == null ? null : Number(item.effective_from_chapter ?? item.effectiveFromChapter),
-    effectiveToChapter: item.effective_to_chapter == null && item.effectiveToChapter == null ? null : Number(item.effective_to_chapter ?? item.effectiveToChapter),
-    status: String(item.status ?? 'PENDING') as KnowledgeCandidateStatus,
-    approvedKnowledgeUnitId: item.approved_knowledge_unit_id == null && item.approvedKnowledgeUnitId == null ? null : Number(item.approved_knowledge_unit_id ?? item.approvedKnowledgeUnitId),
-    rejectionReason: item.rejection_reason == null && item.rejectionReason == null ? null : String(item.rejection_reason ?? item.rejectionReason),
-    createdAt: String(item.created_at ?? item.createdAt ?? ''),
-    reviewedAt: item.reviewed_at == null && item.reviewedAt == null ? null : String(item.reviewed_at ?? item.reviewedAt),
-  };
-}
-
-export async function listKnowledgeCandidates(storyId: number, status: KnowledgeCandidateStatus | '' = 'PENDING'): Promise<KnowledgeCandidate[]> {
-  const query = status ? `?status=${status}` : '';
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/knowledge/candidates${query}`);
-  if (!res.ok) throw new Error(parseApiError(await res.text()));
-  const data = await readApiData(res);
-  return Array.isArray(data) ? data.map(knowledgeCandidateFromResponse) : [];
-}
-
-export async function approveKnowledgeCandidate(storyId: number, candidateId: number): Promise<KnowledgeCandidate> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/knowledge/candidates/${candidateId}/approve`, { method: 'POST' });
-  if (!res.ok) throw new Error(parseApiError(await res.text()));
-  return knowledgeCandidateFromResponse(await readApiData(res));
-}
-
-export async function rejectKnowledgeCandidate(storyId: number, candidateId: number, reason = ''): Promise<KnowledgeCandidate> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/knowledge/candidates/${candidateId}/reject`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
-  });
-  if (!res.ok) throw new Error(parseApiError(await res.text()));
-  return knowledgeCandidateFromResponse(await readApiData(res));
-}
-
-export async function listAgentSkills(): Promise<UserAgentSkill[]> {
-  const res = await authFetch(`${BASE}/api/user/agent-skills`);
-  if (!res.ok) throw new Error(parseApiError(await res.text()));
-  const data = await readApiData(res);
-  return Array.isArray(data) ? data.map(userAgentSkillFromResponse) : [];
-}
-
-export async function setAgentSkillEnabled(skillKey: string, enabled: boolean): Promise<UserAgentSkill> {
-  const res = await authFetch(`${BASE}/api/user/agent-skills/${encodeURIComponent(skillKey)}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }),
-  });
-  if (!res.ok) throw new Error(parseApiError(await res.text()));
-  return userAgentSkillFromResponse(await readApiData(res));
-}
-
-function userAgentSkillFromResponse(item: Record<string, unknown>): UserAgentSkill {
-  const manifest = (item.manifest ?? {}) as Record<string, unknown>;
-  return {
-    enabled: Boolean(item.enabled),
-    manifest: {
-      skillKey: String(manifest.skill_key ?? manifest.skillKey ?? ''),
-      semanticVersion: String(manifest.semantic_version ?? manifest.semanticVersion ?? ''),
-      checksum: String(manifest.checksum ?? ''),
-      status: String(manifest.status ?? ''),
-      supportedRoutes: ((manifest.supported_routes ?? manifest.supportedRoutes ?? []) as unknown[]).map((v) => String(v)),
-      capabilities: ((manifest.capabilities ?? []) as unknown[]).map((v) => String(v)),
-      promptVersion: String(manifest.prompt_version ?? manifest.promptVersion ?? ''),
-      allowedToolGroups: ((manifest.allowed_tool_groups ?? manifest.allowedToolGroups ?? []) as unknown[]).map((v) => String(v)),
-      budgetPolicy: (manifest.budget_policy ?? manifest.budgetPolicy ?? {}) as Record<string, unknown>,
-      evaluatorKey: (manifest.evaluator_key ?? manifest.evaluatorKey ?? null) as string | null,
-      hitlPolicy: String(manifest.hitl_policy ?? manifest.hitlPolicy ?? 'NONE'),
-      userConfigurable: Boolean(manifest.user_configurable ?? manifest.userConfigurable),
-    },
-  };
-}
-
-function knowledgePayload(input: KnowledgeUnitInput): Record<string, unknown> {
-  return {
-    type: input.type,
-    title: input.title,
-    body: input.body,
-    summary: input.summary,
-    structured_data: input.structuredData,
-    importance: input.importance,
-    effective_from_chapter: input.effectiveFromChapter ?? null,
-    effective_to_chapter: input.effectiveToChapter ?? null,
-  };
-}
-export async function listKnowledge(storyId: number): Promise<KnowledgeUnit[]> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/knowledge`);
-  if (!res.ok) throw new Error(parseApiError(await res.text()));
-  return readApiData(res);
-}
-export async function createKnowledge(storyId: number, input: KnowledgeUnitInput): Promise<KnowledgeUnit> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/knowledge`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(knowledgePayload(input)) });
-  if (!res.ok) throw new Error(parseApiError(await res.text()));
-  return readApiData(res);
-}
-export async function updateKnowledge(storyId: number, id: number, input: KnowledgeUnitInput): Promise<KnowledgeUnit> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/knowledge/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(knowledgePayload(input)) });
-  if (!res.ok) throw new Error(parseApiError(await res.text()));
-  return readApiData(res);
-}
 export async function archiveKnowledge(storyId: number, id: number): Promise<void> {
   const res = await authFetch(`${BASE}/api/stories/${storyId}/knowledge/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(parseApiError(await res.text()));

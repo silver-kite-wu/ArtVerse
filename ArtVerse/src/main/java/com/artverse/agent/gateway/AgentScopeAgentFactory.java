@@ -282,7 +282,9 @@ public class AgentScopeAgentFactory {
         return switch (taskType) {
             case MANGA_ROUTER -> agent.getRouterMaxModelCalls();
             case MANGA_CONVERSATION, MANGA_CREATIVE -> agent.getConversationMaxModelCalls();
-            case STORY_CHAT_READ -> agent.getConversationMaxModelCalls();
+            // 迭代上限必须与 AgentBudgetService 的 STORY_CHAT_READ 预算同源，否则会在预算耗尽前
+            // 就被 Harness 截断，模型还没有机会输出最终结论文本。
+            case STORY_CHAT_READ -> agent.getStoryChatReadMaxModelCalls();
             case STORY_CHAT_WRITE -> agent.getDirectorMaxModelCalls();
             case READER_CHARACTER_CHAT -> agent.getConversationMaxModelCalls();
             case MANGA_STORYBOARD -> agent.getStoryboardMaxModelCalls();

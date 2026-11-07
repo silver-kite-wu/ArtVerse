@@ -165,7 +165,7 @@ public class ReferenceImageController {
 
     private Map<String, Object> listImages(String prefix) {
         int max = properties.getRef().getMaxImagesPerLevel();
-        List<Map<String, Object>> images = objectStorageService.list(properties.getMinio().getBucket(), prefix, max).stream()
+        List<Map<String, Object>> images = objectStorageService.list(objectStorageService.defaultBucket(), prefix, max).stream()
                 .filter(o -> isImageObject(o.objectKey()))
                 .sorted(Comparator.comparing(StoredObject::objectKey))
                 .map(o -> Map.<String, Object>of(
@@ -193,7 +193,7 @@ public class ReferenceImageController {
 
     private void uploadRefImage(String prefix, Map<String, String> body) {
         int max = properties.getRef().getMaxImagesPerLevel();
-        if (objectStorageService.list(properties.getMinio().getBucket(), prefix, max).stream()
+        if (objectStorageService.list(objectStorageService.defaultBucket(), prefix, max).stream()
                 .filter(o -> isImageObject(o.objectKey()))
                 .count() >= max) {
             throw new BusinessException(400, "已达到最大垫图数量限制 (" + max + " 张)");
@@ -222,7 +222,7 @@ public class ReferenceImageController {
     private void deleteRefImage(String prefix, String filename) {
         mediaStorageService.validateImagePath(filename);
         String safeFilename = Path.of(filename).getFileName().toString();
-        objectStorageService.deleteBestEffort(properties.getMinio().getBucket(), prefix + safeFilename);
+        objectStorageService.deleteBestEffort(objectStorageService.defaultBucket(), prefix + safeFilename);
     }
 
     @SuppressWarnings("unchecked")

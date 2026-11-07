@@ -9,6 +9,7 @@ import App from './App.tsx'
 import ErrorBoundary from './ErrorBoundary.tsx'
 import GuardDashboardPage from './components/GuardDashboardPage.tsx'
 import ToastProvider from './ui/toast/ToastProvider.tsx'
+import ConfirmProvider from './ui/confirm/ConfirmProvider.tsx'
 
 const Root = window.location.pathname === '/internal/guard'
   ? GuardDashboardPage
@@ -18,7 +19,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <ToastProvider>
-        <Root />
+        <ConfirmProvider>
+          <Root />
+        </ConfirmProvider>
       </ToastProvider>
     </ErrorBoundary>
   </StrictMode>,

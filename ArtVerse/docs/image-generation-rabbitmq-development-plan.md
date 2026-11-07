@@ -691,7 +691,7 @@ abandon-and-regenerate 要求新的 request_id、当前图片基准及 accept_po
 | ImageRecoveryService / Listener / Controller | 有界核实、恢复版本及审计、人工清单、安全替代关联；不重复调用模型 |
 | ImageLeaseRenewalScheduler | 独立平台线程续期 op/target/额度/占用 heartbeat，失租停止安全推进，不跨线程 ACK |
 | ImageGenRecord / Repository / Flyway | 有限消费证据、历史过滤与兼容；无扫描派发 |
-| ObjectStorageService / MinioStorageService | 已有流上传 + 私有不可变输入 + 条件创建 + 候选元数据 |
+| ObjectStorageService / OssStorageService | 已有流上传 + 私有不可变输入 + 条件创建 + 候选元数据（原 MinIO 实现已由 OSS 取代） |
 | ImageGenerationRequestController / DTO | 四种提交、统一查询和 SSE、权限检查 |
 | frontend API / useImageGenerationRequest / 页面 | 单一 status 类型、保存 canonical ID/基准并原样重试、GET SSE、阶段展示与恢复 |
 | Compose / pom.xml / application.yml | MQ、Redis 持久化策略、角色与预算配置，审核后才改 |

@@ -4,7 +4,7 @@ import com.artverse.ai.*;
 import com.artverse.domain.*;
 import com.artverse.persistence.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.minio.*;
+import com.artverse.storage.InMemoryObjectStorageService;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,14 +32,12 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 import static com.artverse.application.imagequeue.ImageProtocol.*;
 
-/** Real isolated PostgreSQL/Redis/RabbitMQ/MinIO; the paid provider is always a Mockito substitute. */
+/** Real isolated PostgreSQL/Redis/RabbitMQ; object storage is an in-memory test double; the paid provider is always a Mockito substitute. */
 @SpringBootTest @ActiveProfiles("test") @Testcontainers(disabledWithoutDocker = true) @org.springframework.test.annotation.DirtiesContext
 class ImageQueueIntegrationTest {
     @Container static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>(DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"))
             .withDatabaseName("image_queue_test").withUsername("image_test").withPassword("isolated-test-password").withImagePullPolicy(image -> false);
     @Container static final GenericContainer<?> redis=new GenericContainer<>("redis:7-alpine").withExposedPorts(6379).withCommand("redis-server","--appendonly","yes","--maxmemory-policy","noeviction").withImagePullPolicy(image -> false);
-    @Container static final GenericContainer<?> minio=new GenericContainer<>("minio/minio:RELEASE.2025-04-08T15-41-24Z").withExposedPorts(9000)
-            .withEnv("MINIO_ROOT_USER","image-test").withEnv("MINIO_ROOT_PASSWORD","isolated-test-storage-password").withCommand("server","/data").withImagePullPolicy(image -> false);
     @Container static final GenericContainer<?> rabbit=new GenericContainer<>("public.ecr.aws/docker/library/rabbitmq:4.1.8-management").withExposedPorts(5672)
             .withEnv("RABBITMQ_DEFAULT_USER","image-test").withEnv("RABBITMQ_DEFAULT_PASS","isolated-test-broker-password").withEnv("RABBITMQ_DEFAULT_VHOST","artverse")
             .waitingFor(org.testcontainers.containers.wait.strategy.Wait.forLogMessage(".*Server startup complete.*",1)).withImagePullPolicy(image -> false);
@@ -47,7 +45,6 @@ class ImageQueueIntegrationTest {
         p.add("spring.datasource.url",()->postgres.getJdbcUrl()+(postgres.getJdbcUrl().contains("?")?"&":"?")+"stringtype=unspecified");p.add("spring.datasource.username",postgres::getUsername);p.add("spring.datasource.password",postgres::getPassword);
         p.add("spring.data.redis.host",redis::getHost);p.add("spring.data.redis.port",()->redis.getMappedPort(6379));p.add("spring.data.redis.timeout",()->"500ms");
         p.add("spring.rabbitmq.host",rabbit::getHost);p.add("spring.rabbitmq.port",()->rabbit.getMappedPort(5672));p.add("spring.rabbitmq.username",()->"image-test");p.add("spring.rabbitmq.password",()->"isolated-test-broker-password");
-        p.add("artverse.minio.endpoint",()->"http://"+minio.getHost()+":"+minio.getMappedPort(9000));p.add("artverse.minio.access-key",()->"image-test");p.add("artverse.minio.secret-key",()->"isolated-test-storage-password");p.add("artverse.minio.bucket",()->"image-queue-test");
         p.add("artverse.secrets.encryption-key",()->"isolated-image-queue-test-encryption-key");p.add("artverse.auth.risk.hmac-key",()->"isolated-image-queue-test-risk-key");
         p.add("artverse.image-queue.producer-enabled",()->true);p.add("artverse.image-queue.worker-enabled",()->false);p.add("artverse.image-queue.coordinator-enabled",()->false);
         p.add("artverse.automations.enabled",()->false);p.add("artverse.scheduled-manga.poll-interval-ms",()->3600000);
@@ -79,6 +76,7 @@ class ImageQueueIntegrationTest {
     @Autowired com.artverse.application.CreativeProposalArtifacts creativeArtifacts;
     @Autowired com.artverse.application.ApiKeyService apiKeys;
     @Autowired com.artverse.application.AgentRunLeaseService agentLeases;
+    @Autowired InMemoryObjectStorageService objectStorage;
     @Autowired jakarta.persistence.EntityManager entityManager;
     @MockBean Image2Client model;
     @MockBean ImageExecutionFaults faults;
@@ -90,8 +88,7 @@ class ImageQueueIntegrationTest {
         records.deleteAll();images.deleteAll();strings.getConnectionFactory().getConnection().serverCommands().flushDb();
         var admin=new RabbitAdmin(connections);admin.initialize();
         for(String q:List.of("work.parallel.q","work.serial.q","quarantine.q","advance.q","advance.wait.5s.q","recovery.q","recovery.wait.30s.q","recovery.wait.120s.q"))admin.purgeQueue(ImageMessagingConfig.PREFIX+q);
-        var client=MinioClient.builder().endpoint("http://"+minio.getHost()+":"+minio.getMappedPort(9000)).credentials("image-test","isolated-test-storage-password").build();
-        if(!client.bucketExists(BucketExistsArgs.builder().bucket("image-queue-test").build()))client.makeBucket(MakeBucketArgs.builder().bucket("image-queue-test").build());
+        objectStorage.clear();
         tx.executeWithoutResult(status->{
             User owner=new User();owner.setUsername("iq_"+UUID.randomUUID().toString().replace("-",""));owner.setEmail(owner.getUsername()+"@example.test");owner.setPasswordHash("test-only");users.saveAndFlush(owner);user=owner.getId();
             Story story=new Story();story.setUser(owner);story.setTitle("Isolated image queue test");stories.saveAndFlush(story);
@@ -397,9 +394,7 @@ class ImageQueueIntegrationTest {
     }
     @Test void corruptCandidateBecomesActionableReviewWithoutRegeneration() throws Exception {
         Manifest m=submit(1);oneFailure("AFTER_UPLOAD");assertThatThrownBy(()->consume(m)).isInstanceOf(Exception.class);Panel p=m.panels().getFirst();var record=evidence.find(m,p);
-        var client=MinioClient.builder().endpoint("http://"+minio.getHost()+":"+minio.getMappedPort(9000)).credentials("image-test","isolated-test-storage-password").build();
-        client.removeObject(RemoveObjectArgs.builder().bucket("image-queue-test").object(record.getCandidateObjectKey()).build());
-        client.putObject(PutObjectArgs.builder().bucket("image-queue-test").object(record.getCandidateObjectKey()).stream(new java.io.ByteArrayInputStream(PNG),PNG.length,-1).contentType("image/png").build());
+        objectStorage.putObject(objectStorage.defaultBucket(),record.getCandidateObjectKey(),PNG,"image/png",java.util.Map.of());
         redelivery(m);var result=queries.panel(m,p);assertThat(result.get("status")).isEqualTo("NEEDS_REVIEW");assertThat((List<?>)result.get("recovery_actions")).isNotEmpty();verify(model,times(1)).generateScheduled(any(),any());
     }
     @Test void adminCanResolveEvidenceAfterChapterDeletion() throws Exception {

@@ -47,6 +47,7 @@ public class AutomationController {
     @GetMapping("/automations/{id}") public AutomationStore.Plan get(@PathVariable UUID id) { return service.get(userId(),id); }
     @PatchMapping("/automations/{id}") public AutomationStore.Plan edit(@PathVariable UUID id,@RequestBody AutomationDefinition definition) { return service.update(userId(),id,definition); }
     @PostMapping("/automations/{id}/{action:pause|resume|archive}") public AutomationStore.Plan lifecycle(@PathVariable UUID id,@PathVariable String action,@RequestBody VersionRequest input) { return service.lifecycle(userId(),id,action,input.expectedVersion()); }
+    @DeleteMapping("/automations/{id}") public Map<String,Object> delete(@PathVariable UUID id,@RequestParam Long expectedVersion) { service.delete(userId(),id,expectedVersion);return Map.of("deleted",true); }
     @PostMapping("/automations/{id}/run-now") public AutomationStore.Run runNow(@PathVariable UUID id,@RequestHeader("Idempotency-Key") String key) { return service.runNow(userId(),id,key); }
     @GetMapping("/automations/{id}/runs") public Map<String,Object> runs(@PathVariable UUID id,@RequestParam(required=false) UUID before,@RequestParam(defaultValue="20") int size) { return Map.of("items",service.runs(userId(),id,before,size)); }
     @GetMapping("/automation-runs/{id}") public Map<String,Object> run(@PathVariable UUID id) { return service.runDetail(userId(),id); }
@@ -55,6 +56,9 @@ public class AutomationController {
     @PostMapping("/automation-runs/{id}/respond") public AutomationStore.Run respond(@PathVariable UUID id,@RequestHeader("Idempotency-Key") String key,@RequestBody JsonNode response) { return service.respond(userId(),id,key,response); }
     @GetMapping("/automation-notifications") public Map<String,Object> notifications() { return Map.of("items",service.notifications(userId())); }
     @PostMapping("/automation-notifications/{id}/read") public Map<String,Boolean> read(@PathVariable long id) { service.markRead(userId(),id);return Map.of("read",true); }
+    @PostMapping("/automation-notifications/read-all") public Map<String,Integer> readAll() { return Map.of("updated",service.markAllRead(userId())); }
+    @DeleteMapping("/automation-notifications/{id}") public Map<String,Boolean> deleteNotification(@PathVariable long id) { service.deleteNotification(userId(),id);return Map.of("deleted",true); }
+    @DeleteMapping("/automation-notifications") public Map<String,Object> clearNotifications() { return Map.of("deleted",service.clearNotifications(userId())); }
 
     @GetMapping(value="/automation-runs/{id}/events",produces=MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter events(@PathVariable UUID id,@RequestHeader(value="Last-Event-ID",required=false) String lastEventId,

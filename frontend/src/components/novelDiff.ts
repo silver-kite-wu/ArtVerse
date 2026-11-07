@@ -1,4 +1,4 @@
-export interface TextChange { type: 'equal' | 'delete' | 'insert'; text: string }
+interface TextChange { type: 'equal' | 'delete' | 'insert'; text: string }
 export interface NovelDiffBlock { id: number; original: string; proposed: string; changed: boolean; oldLine: number; newLine: number }
 
 // Bound the LCS matrix: long, completely rewritten chapters fall back to a

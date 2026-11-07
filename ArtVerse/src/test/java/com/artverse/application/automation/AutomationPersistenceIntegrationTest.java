@@ -64,6 +64,13 @@ class AutomationPersistenceIntegrationTest {
         assertThat(store.transition(first,"SUCCEEDED",null,"stale",null,0)).isFalse();
         assertThat(store.transition(second,"SUCCEEDED",null,"complete",null,0)).isTrue();
     }
+    @Test void retryClearsPreviousAttemptStartTimeSoDurationLimitAppliesToNewAttempt() {
+        var plan=plan();var run=immediate(plan);
+        jdbc.update("UPDATE automation_run SET state='FAILED',error_code='EXECUTOR_ERROR',started_at=now()-interval '2 hours' WHERE id=?",run.id());
+        var retried=tx.execute(s->service.retry(user,run.id(),"retry-new-attempt"));
+        assertThat(retried.state()).isEqualTo("QUEUED");
+        assertThat(jdbc.queryForList("SELECT started_at FROM automation_run WHERE id=?",run.id()).getFirst().get("started_at")).isNull();
+    }
     @Test void creationAndRunNowAreIdempotentAndConflictingInputIsRejected() {
         var first=tx.execute(s->service.create(user,"same",definition()));
         assertThat(tx.execute(s->service.create(user,"same",definition())).id()).isEqualTo(first.id());
@@ -141,6 +148,40 @@ class AutomationPersistenceIntegrationTest {
             assertThat(store.run(run.id()).state()).isEqualTo("CANCELLED");
             verify(adapter,times(1)).execute(any());verify(adapter,times(1)).cancel(any());
         } finally { worker.close(); }
+    }
+    @Test void deletingPlanIsRejectedWhileARunIsActiveAndRemovesHistoryOnceFinished() {
+        var plan=plan();var run=immediate(plan);var ledgerRequest=UUID.randomUUID();
+        jdbc.update("INSERT INTO agent_usage_ledger(user_id,request_id,automation_run_id,usage_kind,amount) VALUES (?,?,?,'MODEL_CALL',1)",user,ledgerRequest,run.id());
+        assertThatThrownBy(()->tx.executeWithoutResult(s->service.delete(user,plan.id(),plan.version())))
+                .isInstanceOf(BusinessException.class).hasMessage("任务正在执行，请稍后重试");
+        jdbc.update("UPDATE automation_run SET state='SUCCEEDED',completed_at=now() WHERE id=?",run.id());
+        tx.executeWithoutResult(s->service.delete(user,plan.id(),plan.version()));
+        assertThat(jdbc.queryForList("SELECT id FROM automation WHERE id=?",plan.id())).isEmpty();
+        assertThat(jdbc.queryForList("SELECT id FROM automation_run WHERE id=?",run.id())).isEmpty();
+        assertThat(jdbc.queryForList("SELECT automation_run_id FROM agent_usage_ledger WHERE request_id=?",ledgerRequest))
+                .hasSize(1).allMatch(row->row.get("automation_run_id")==null);
+    }
+    @Test void unexecutedPlanCanBeDeletedSoItNeverTriggers() {
+        var plan=plan();
+        tx.executeWithoutResult(s->service.delete(user,plan.id(),plan.version()));
+        due(plan);tx.executeWithoutResult(s->service.materializeDue());
+        assertThat(jdbc.queryForList("SELECT id FROM automation WHERE id=?",plan.id())).isEmpty();
+        assertThat(jdbc.queryForList("SELECT id FROM automation_run WHERE automation_id=?",plan.id())).isEmpty();
+    }
+    @Test void notificationsCanBeDeletedIndividuallyOrCleared() {
+        var run=immediate(plan());
+        tx.executeWithoutResult(s->store.notify(run,"DONE","第一条通知"));
+        tx.executeWithoutResult(s->store.notify(run,"FAILED","第二条通知"));
+        assertThat(service.notifications(user)).hasSize(2);
+        assertThat(service.markAllRead(user)).isEqualTo(2);
+        assertThat(service.notifications(user)).allMatch(item->(Boolean)item.get("read"));
+        assertThat(service.markAllRead(user)).isZero();
+        long first=((Number)service.notifications(user).getFirst().get("id")).longValue();
+        service.deleteNotification(user,first);
+        assertThat(service.notifications(user)).hasSize(1);
+        assertThatThrownBy(()->service.deleteNotification(user+100000,first)).isInstanceOf(BusinessException.class);
+        assertThat(service.clearNotifications(user)).isEqualTo(1);
+        assertThat(service.notifications(user)).isEmpty();
     }
     @Test void cancelledQueuedRunNeverCallsExecutor() {
         var run=immediate(plan());

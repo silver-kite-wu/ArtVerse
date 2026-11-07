@@ -321,8 +321,8 @@ export default function App() {
           }
         >
           <div className={'studio-brand flex h-24 items-center gap-3 ' + (sidebarOpen ? 'px-5' : 'flex-col justify-center gap-1 px-2')}>
-            <div className="studio-logo flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
-              <BookOpenText size={22} strokeWidth={1.6} />
+            <div className="studio-logo flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+              <img src="/favicon.svg" alt="ArtVerse" className="h-full w-full scale-[1.9] object-contain" />
             </div>
             {sidebarOpen && (
               <div className="min-w-0 flex-1">
@@ -392,7 +392,7 @@ export default function App() {
         {view === 'myworks' && <MyWorksPage />}
         {view === 'settings' && <ApiSettingsPage />}
         {view === 'profile' && user && <ProfilePage user={user} onPasswordChanged={handlePasswordChanged} onBack={() => goView('workspace')} />}
-        {visibleRoute?.view === 'automations' && <AutomationCenterPage key={visibleRoute.automationId ?? 'all'} automationId={visibleRoute.automationId} runId={visibleRoute.runId} />}
+        {visibleRoute?.view === 'automations' && <AutomationCenterPage automationId={visibleRoute.automationId} runId={visibleRoute.runId} />}
       </div>
 
       {isMobile && view !== 'editor' && !isSquareStoryRoute && (

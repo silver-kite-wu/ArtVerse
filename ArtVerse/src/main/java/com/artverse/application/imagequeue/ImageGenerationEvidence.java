@@ -1,9 +1,9 @@
 package com.artverse.application.imagequeue;
 
 import com.artverse.application.AiConversationService;
-import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.*;
 import com.artverse.persistence.*;
+import com.artverse.storage.ObjectStorageService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +27,7 @@ public class ImageGenerationEvidence {
     private final EntityManager em;
     private final JdbcTemplate jdbc;
     private final ImageQueueProperties props;
-    private final ArtVerseProperties app;
+    private final ObjectStorageService storage;
     private final ImageRequestInputs inputs;
 
     public ImageGenRecord find(Manifest m,Panel p) { return records.findByUserIdAndRequestId(m.userId(),p.operationId()).orElse(null); }
@@ -86,7 +86,7 @@ public class ImageGenerationEvidence {
                 MangaImage image=images.findByChapterIdAndImageNumber(m.chapterId(),p.imageNumber()).orElseGet(MangaImage::new);
                 if(image.getId()!=null)em.lock(image,LockModeType.PESSIMISTIC_WRITE);
                 if(image.getId()==null) { image.setChapter(chapters.getReferenceById(m.chapterId()));image.setImageNumber(p.imageNumber()); }
-                image.setImagePath(r.getCandidateObjectKey());image.setObjectKey(r.getCandidateObjectKey());image.setBucket(app.getMinio().getBucket());image.setStorageProvider(StorageProvider.MINIO);
+                image.setImagePath(r.getCandidateObjectKey());image.setObjectKey(r.getCandidateObjectKey());image.setBucket(storage.defaultBucket());image.setStorageProvider(StorageProvider.OSS);
                 image.setContentType(r.getCandidateContentType());image.setSizeBytes(r.getCandidateSize());image.setPrompt(p.prompt());
                 images.saveAndFlush(image);r.setMangaImageId(image.getId());r.setResultImageVersion(image.getVersion());
                 // Old objects are retained for the documented audited cleanup, never deleted before commit.

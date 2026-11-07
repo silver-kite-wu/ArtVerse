@@ -20,12 +20,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 class StaticMediaControllerTest {
 
     @Test
-    void servesImageFromMinioObjectKey() throws Exception {
+    void servesImageFromObjectStorageKey() throws Exception {
         ArtVerseProperties properties = new ArtVerseProperties();
-        properties.getMinio().setBucket("artverse-test");
+        properties.getOss().setBucket("artverse-test");
         ObjectStorageService storage = new ObjectStorageService() {
             @Override
+            public String defaultBucket() {
+                return "artverse-test";
+            }
+
+            @Override
+            public String privateBucket() {
+                return "artverse-test-private";
+            }
+
+            @Override
             public com.artverse.storage.StoredObject put(String objectKey, java.io.InputStream content, long sizeBytes, String contentType) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public java.util.Optional<com.artverse.storage.StoredObject> putIfAbsent(String bucket, String objectKey, java.io.InputStream content, long sizeBytes, String contentType, java.util.Map<String, String> metadata) {
                 throw new UnsupportedOperationException();
             }
 
@@ -42,6 +57,11 @@ class StaticMediaControllerTest {
             }
 
             @Override
+            public java.util.Optional<java.io.InputStream> openIfPresent(String bucket, String objectKey) {
+                return java.util.Optional.of(get(bucket, objectKey));
+            }
+
+            @Override
             public List<com.artverse.storage.StoredObject> list(String bucket, String prefix, int limit) {
                 return List.of();
             }
@@ -55,7 +75,7 @@ class StaticMediaControllerTest {
             public void deleteBestEffort(String bucket, String objectKey) {
             }
         };
-        StaticMediaController controller = new StaticMediaController(new MediaStorageService(properties), storage, properties);
+        StaticMediaController controller = new StaticMediaController(new MediaStorageService(properties), storage);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/static/manga/stories/1/chapters/2/panels/panel.png");
         MockHttpServletResponse response = new MockHttpServletResponse();
 

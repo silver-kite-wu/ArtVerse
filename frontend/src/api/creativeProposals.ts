@@ -12,7 +12,7 @@ export interface CreativeProposal {
   model_calls?: number; execution_lane?: string; estimated_cost?: string; quota_availability?: string;
   receipt: { approved?: boolean; accepted?: boolean; candidate_id?: string; character_id?: string; saved_version?: string; accepted_requests?: string[] };
 }
-export interface CreativeProposalPage { items: CreativeProposal[]; hasMore: boolean; nextCursor: string }
+interface CreativeProposalPage { items: CreativeProposal[]; hasMore: boolean; nextCursor: string }
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const res = await authFetch(`/api/creative-proposals${path}`, body === undefined ? {} : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

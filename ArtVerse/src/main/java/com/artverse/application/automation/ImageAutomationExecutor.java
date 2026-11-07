@@ -70,7 +70,7 @@ public class ImageAutomationExecutor implements AutomationExecutor {
             userHeld=slots.acquireScoped(userPermit,slotOwner);providerHeld=userHeld&&slots.acquireScoped(providerPermit,slotOwner);
             if(!userHeld||!providerHeld)throw new BusinessException(429,"当前用户或模型正在执行其他生图任务");
             for(var key:run.definition().payload().path("referenceImageKeys")) {
-                try(var stream=storage.get(properties.getMinio().getBucket(),key.asText())) {
+                try(var stream=storage.get(storage.defaultBucket(),key.asText())) {
                     byte[] data=stream.readNBytes(Math.toIntExact(properties.getUpload().getMaxImageBytes()+1));
                     media.validateImageBytes(data,properties.getUpload().getMaxImageBytes());
                     Path path=Files.createTempFile("automation-ref-",".png");references.add(path);media.savePng(data,path);

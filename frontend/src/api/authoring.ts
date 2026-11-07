@@ -1,6 +1,6 @@
 import { submitImageRequest, watchImageRequest, isImageRequestTerminal, IMAGE_STATUS_LABELS, type ImageRequestSnapshot } from './imageRequests';
 import { readApiData, unwrapApiData, BASE, apiHeaders, authFetch, parseApiError, refreshAuthSession } from './auth';
-import { getImageGenerationProviderPayload, getProviderRequestPayload } from './providerSettings';
+import { getImageGenerationProviderPayload } from './providerSettings';
 
 export interface Story {
   id: number;
@@ -106,7 +106,7 @@ export async function exportStory(story: Story): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-export interface ImportStoryProgress {
+interface ImportStoryProgress {
   phase: 'uploading' | 'processing';
   percent?: number;
   message: string;
@@ -132,16 +132,16 @@ export function importStoryPackage(
 
       xhr.upload.onprogress = (event) => {
         if (!event.lengthComputable) {
-          onProgress?.({ phase: 'uploading', message: '...' });
+          onProgress?.({ phase: 'uploading', message: '正在上传作品包…' });
           return;
         }
         const percent = Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100)));
-        onProgress?.({ phase: 'uploading', percent, message: `婵犳鍠楃换鎰緤閽樺鑰挎い蹇撴噽閳绘柨鈹戦悩杈厡闁绘劕锕ら湁闁挎繂妫涢惌濠囨煙娴ｅ啿娲ょ粈?${percent}%` });
+        onProgress?.({ phase: 'uploading', percent, message: `正在上传作品包…${percent}%` });
       };
 
       xhr.onload = async () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          onProgress?.({ phase: 'processing', percent: 100, message: '...' });
+          onProgress?.({ phase: 'processing', percent: 100, message: '正在解析作品包…' });
           try {
             resolve(unwrapApiData(JSON.parse(xhr.responseText)));
           } catch {
@@ -165,10 +165,10 @@ export function importStoryPackage(
       xhr.onabort = () => reject(new Error('Cancelled'));
       xhr.ontimeout = () => reject(new Error('Timeout'));
 
-      onProgress?.({ phase: 'uploading', percent: 0, message: '...' });
+      onProgress?.({ phase: 'uploading', percent: 0, message: '正在上传作品包…' });
       xhr.send(formData);
       xhr.upload.onload = () => {
-        onProgress?.({ phase: 'processing', percent: 100, message: '...' });
+        onProgress?.({ phase: 'processing', percent: 100, message: '正在解析作品包…' });
       };
     };
     doSend();
@@ -230,104 +230,6 @@ export async function deleteChapter(chapterId: number): Promise<void> {
 }
 
 
-export function chatStream(
-  chapterId: number,
-  content: string,
-  onToken: (token: string) => void,
-  _onDone: (message: ChatMessage) => void,
-  onError: (err: string) => void,
-  model?: string,
-): AbortController {
-  const controller = new AbortController();
-
-  authFetch(`${BASE}/api/chapters/${chapterId}/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: content, ...getProviderRequestPayload('llm', model) }),
-    signal: controller.signal,
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        onError(await res.text());
-        return;
-      }
-      const reader = res.body?.getReader();
-      if (!reader) return;
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let currentEvent = 'message';
-      const handleLine = (line: string) => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith(':')) return;
-        if (trimmed.startsWith('event:')) {
-          currentEvent = trimmed.slice(6).trim();
-        } else if (trimmed.startsWith('data:')) {
-          const dataStr = trimmed.slice(5).trim();
-          try {
-            const data = JSON.parse(dataStr);
-            if (currentEvent === 'token' && data.content !== undefined) {
-              onToken(data.content);
-            } else if (currentEvent === 'done' && data.content !== undefined) {
-              _onDone(data.message || {
-                id: Date.now(),
-                role: 'assistant',
-                content: data.content,
-                completion_status: 'complete',
-                created_at: new Date().toISOString(),
-              });
-            } else if (currentEvent === 'error' || data.error) {
-              onError(data.error);
-            }
-          } catch {
-            // ignore
-          }
-          currentEvent = 'message';
-        }
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          handleLine(line);
-        }
-      }
-      if (buffer.trim()) handleLine(buffer);
-
-      // If stream ended without a done event, call onDone with empty
-      // This handles edge cases where connection closes unexpectedly
-    })
-    .catch((err) => {
-      if (err.name !== 'AbortError') {
-        onError(err.message);
-      }
-    });
-
-  return controller;
-}
-
-
-export async function generateNovel(chapterId: number): Promise<Chapter> {
-  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/generate-novel`, { method: 'POST' });
-  if (!res.ok) throw new Error(await res.text());
-  return readApiData(res);
-}
-
-export async function importNovel(chapterId: number, content: string): Promise<Chapter> {
-  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/import-novel`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return readApiData(res);
-}
-
-
 export async function generateScenes(chapterId: number, signal?: AbortSignal): Promise<string[]> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/generate-scenes`, {
     method: 'POST',
@@ -353,47 +255,6 @@ export async function updateScenes(chapterId: number, scenes: string[]): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(scenes),
   });
-  if (!res.ok) throw new Error(await res.text());
-}
-
-
-// Story-level (global)
-export async function getStoryCharacters(storyId: number): Promise<string> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/characters`);
-  if (!res.ok) throw new Error(await res.text());
-  const data = await readApiData(res);
-  return data.characters;
-}
-
-export async function saveStoryCharacters(storyId: number, characters: string): Promise<void> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/characters`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ characters }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
-// Chapter-level (with source info)
-export type CharacterSource = 'chapter' | 'asset_group' | 'story' | 'none';
-
-export async function getCharacters(chapterId: number): Promise<{ characters: string; source: CharacterSource; group_id?: number; group_name?: string }> {
-  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/characters`);
-  if (!res.ok) throw new Error(await res.text());
-  return await readApiData(res);
-}
-
-export async function saveCharacters(chapterId: number, characters: string): Promise<void> {
-  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/characters`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ characters }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
-export async function resetChapterCharacters(chapterId: number): Promise<void> {
-  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/characters`, { method: 'DELETE' });
   if (!res.ok) throw new Error(await res.text());
 }
 
@@ -465,7 +326,7 @@ export async function deleteCharRefImage(storyId: number, characterId: number, f
   if (!res.ok) throw new Error(parseApiError(await res.text()));
 }
 
-export type RefSource = 'chapter' | 'asset_group' | 'story' | 'none';
+type RefSource = 'chapter' | 'asset_group' | 'story' | 'none';
 
 export interface RefImage {
   filename: string;
@@ -473,7 +334,7 @@ export interface RefImage {
   size_kb: number;
 }
 
-export interface RefImagesPayload {
+interface RefImagesPayload {
   images: RefImage[];
   max: number;
   source?: RefSource;
@@ -499,15 +360,10 @@ export interface AssetGroup {
   characters: AssetGroupCharacter[];
 }
 
-export interface AssetGroupsPayload {
+interface AssetGroupsPayload {
   groups: AssetGroup[];
   max: number;
   selected_group_id?: number | null;
-}
-
-export interface AssetGroupSinglePayload {
-  group: AssetGroup;
-  groups: AssetGroup[];
 }
 
 export async function getStoryAssetGroups(storyId: number): Promise<AssetGroup[]> {
@@ -542,25 +398,6 @@ export async function deleteStoryAssetGroup(storyId: number, groupId: number): P
   return getStoryAssetGroups(storyId);
 }
 
-export async function addStoryAssetGroupRefImage(storyId: number, groupId: number, base64: string): Promise<RefImagesPayload> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/asset-groups/${groupId}/ref-images`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: base64 }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return readApiData(res);
-}
-
-export async function deleteStoryAssetGroupRefImage(storyId: number, groupId: number, filename: string): Promise<RefImagesPayload> {
-  const res = await authFetch(
-    `${BASE}/api/stories/${storyId}/asset-groups/${groupId}/ref-images/${encodeURIComponent(filename)}`,
-    { method: 'DELETE' },
-  );
-  if (!res.ok) throw new Error(await res.text());
-  return readApiData(res);
-}
-
 export async function getChapterAssetGroup(chapterId: number): Promise<AssetGroupsPayload> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/asset-group`);
   if (!res.ok) throw new Error(await res.text());
@@ -578,12 +415,6 @@ export async function setChapterAssetGroup(chapterId: number, groupId: number | 
 }
 
 // Story-level
-export async function getStoryRefImages(storyId: number): Promise<RefImagesPayload> {
-  const res = await authFetch(`${BASE}/api/stories/${storyId}/ref-images`);
-  if (!res.ok) throw new Error(await res.text());
-  return readApiData(res);
-}
-
 export async function addStoryRefImage(storyId: number, base64: string): Promise<RefImagesPayload> {
   const res = await authFetch(`${BASE}/api/stories/${storyId}/ref-images`, {
     method: 'POST',
@@ -602,33 +433,6 @@ export async function deleteStoryRefImage(storyId: number, filename: string): Pr
   if (!res.ok) throw new Error(await res.text());
   return readApiData(res);
 }
-
-// Chapter-level (with story fallback)
-export async function getChapterRefImages(chapterId: number): Promise<RefImagesPayload> {
-  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/ref-images`);
-  if (!res.ok) throw new Error(await res.text());
-  return readApiData(res);
-}
-
-export async function addChapterRefImage(chapterId: number, base64: string): Promise<RefImagesPayload> {
-  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/ref-images`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: base64 }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return readApiData(res);
-}
-
-export async function deleteChapterRefImage(chapterId: number, filename: string): Promise<RefImagesPayload> {
-  const res = await authFetch(
-    `${BASE}/api/chapters/${chapterId}/ref-images/${encodeURIComponent(filename)}`,
-    { method: 'DELETE' },
-  );
-  if (!res.ok) throw new Error(await res.text());
-  return readApiData(res);
-}
-
 
 export type MangaStyle = 'japanese_manga' | 'korean_webtoon' | 'american_comic' | 'ligne_claire' | 'chinese_ink' | 'semi_realistic' | 'realistic' | 'oil_painting' | 'flat_design' | 'pixel_art' | 'watercolor' | 'cyberpunk';
 

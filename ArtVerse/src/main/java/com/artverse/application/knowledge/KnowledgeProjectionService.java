@@ -1,7 +1,6 @@
 package com.artverse.application.knowledge;
 
 import com.artverse.common.BusinessException;
-import com.artverse.config.ArtVerseProperties;
 import com.artverse.storage.ObjectStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,7 +19,6 @@ public class KnowledgeProjectionService {
     private final KnowledgeSchema schema;
     private final JdbcTemplate jdbc;
     private final ObjectStorageService storage;
-    private final ArtVerseProperties properties;
     private final Map<Long,Long> imageScans=new ConcurrentHashMap<>();
     public record ImageMetadata(String objectKey,boolean cover,int order,String caption,String appearanceVersion,
                                 Long revealChapterId,Long fromChapterId,Long toChapterId) {}
@@ -111,7 +109,7 @@ public class KnowledgeProjectionService {
         String prefix="stories/"+storyId+"/characters/";
         try {
             Set<String> keys=new HashSet<>();
-            for(var object:storage.list(properties.getMinio().getBucket(),prefix,20_000)) {
+            for(var object:storage.list(storage.defaultBucket(),prefix,20_000)) {
                 String key=object.objectKey();if(!key.matches("stories/"+storyId+"/characters/\\d+/ref_images/[^/]+\\.(png|jpe?g|webp)")) continue;
                 long cid=Long.parseLong(key.substring(prefix.length()).split("/")[0]);
                 if(jdbc.queryForObject("SELECT count(*) FROM character_profiles WHERE id=? AND story_id=?",Integer.class,cid,storyId)!=1) continue;
@@ -126,7 +124,7 @@ public class KnowledgeProjectionService {
         facts.requireStory(storyId,userId);facts.characterEntity(storyId,character);
         if(images.size()>5||images.stream().filter(ImageMetadata::cover).count()>1) throw new BusinessException(400,"最多 5 张参考图且只能有一张默认封面");
         String prefix="stories/"+storyId+"/characters/"+character+"/ref_images/";
-        Set<String> available=new HashSet<>();storage.list(properties.getMinio().getBucket(),prefix,100).forEach(o->available.add(o.objectKey()));
+        Set<String> available=new HashSet<>();storage.list(storage.defaultBucket(),prefix,100).forEach(o->available.add(o.objectKey()));
         jdbc.queryForList("SELECT id FROM character_profiles WHERE id=? FOR UPDATE",character);
         jdbc.update("UPDATE character_reference_images SET is_cover=false WHERE character_profile_id=?",character);
         for(var image:images) {

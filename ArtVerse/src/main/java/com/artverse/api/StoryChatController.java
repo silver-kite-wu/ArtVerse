@@ -46,12 +46,6 @@ public class StoryChatController {
                 body.decision(), body.content(), body.baseVersion(), body.expectedContentHash());
     }
 
-    @GetMapping("/messages")
-    public List<ChatMessage> messages(@PathVariable Long chapterId) {
-        User user = currentUserService.requireCurrentUser();
-        return storyChatAgentService.listMessages(chapterId, user);
-    }
-
     @GetMapping("/conversations/{conversationId}/messages")
     public List<ChatMessage> conversationMessages(@PathVariable Long chapterId,
                                                   @PathVariable UUID conversationId) {

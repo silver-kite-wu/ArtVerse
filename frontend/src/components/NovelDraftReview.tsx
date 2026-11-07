@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Check, FileDiff, Undo2 } from 'lucide-react';
 import { buildNovelDiff, inlineNovelDiff, mergeNovelDiff, textLines, type NovelDiffBlock } from './novelDiff';
+import { useConfirm } from '../ui/confirm/useConfirm';
 
 export interface NovelReviewDraft {
   requestId: string;
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export default function NovelDraftReview({ draft, stale, onDecision }: Props) {
+  const confirm = useConfirm();
   const blocks = useMemo(() => buildNovelDiff(draft.originalContent, draft.content), [draft.originalContent, draft.content]);
   const changes = blocks.filter(block => block.changed);
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
@@ -42,7 +44,7 @@ export default function NovelDraftReview({ draft, stale, onDecision }: Props) {
     <header className="novel-review-heading"><div><h2><FileDiff size={17} aria-hidden="true" />审阅本章修改</h2><p>基于版本 {draft.baseVersion} · {changes.length} 处修改 · 正文在确认后更新</p></div><div className="novel-review-tabs" role="group" aria-label="审阅方式"><button type="button" aria-pressed={mode === 'diff'} onClick={() => setMode('diff')}>修改对比</button><button type="button" aria-pressed={mode === 'edit'} onClick={() => setMode('edit')}>编辑最终稿</button></div></header>
     <div className="novel-review-controls"><span><i className="novel-review-delete-key" />删除 <i className="novel-review-insert-key" />新增</span><div><button type="button" disabled={draft.busy || manualText !== null} onClick={() => setExcluded(new Set())}>全部采纳</button><button type="button" disabled={draft.busy || manualText !== null} onClick={() => setExcluded(new Set(changes.map(block => block.id)))}>全部保留原文</button><button type="button" aria-label="上一处修改" disabled={!changes.length || mode !== 'diff'} onClick={() => navigate(-1)}><ArrowUp size={14} /></button><button type="button" aria-label="下一处修改" disabled={!changes.length || mode !== 'diff'} onClick={() => navigate(1)}><ArrowDown size={14} /></button></div></div>
     {stale && <p role="alert" className="novel-review-warning">正文已有新版本。这份建议仍可查看，请放弃后基于最新正文重新生成。</p>}
-    {manualText !== null && <p className="novel-review-warning">最终稿已手工编辑，对比仍展示 AI 的原始建议。<button type="button" disabled={draft.busy} onClick={() => { if (window.confirm('重新选择修改会清除最终稿中的手工编辑，是否继续？')) setManualText(null); }}>回到逐处选择</button></p>}
+    {manualText !== null && <p className="novel-review-warning">最终稿已手工编辑，对比仍展示 AI 的原始建议。<button type="button" disabled={draft.busy} onClick={async () => { if (await confirm({ title: '回到逐处选择', message: '重新选择修改会清除最终稿中的手工编辑，是否继续？', confirmText: '继续' })) setManualText(null); }}>回到逐处选择</button></p>}
     {mode === 'diff' ? <div className="novel-review-body" tabIndex={0} aria-label="正文差异">
       {!changes.length && <p className="novel-review-empty">AI 草稿与原文相同，无需写入。</p>}
       {blocks.map(block => block.changed ? <ChangeBlock key={block.id} block={block} included={!excluded.has(block.id)} disabled={draft.busy || manualText !== null} onToggle={() => setExcluded(current => { const next = new Set(current); if (next.has(block.id)) next.delete(block.id); else next.add(block.id); return next; })} /> : <ContextBlock key={block.id} text={block.original} line={block.oldLine} />)}

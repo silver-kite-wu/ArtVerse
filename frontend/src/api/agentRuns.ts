@@ -3,7 +3,7 @@ import { readApiData, BASE, apiHeaders, authFetch, parseApiError } from './auth'
 import { getProviderRequestPayload } from './providerSettings';
 import { randomUUID } from '../utils/browserSecurity';
 
-export type MangaWorkflowRoute = 'CONVERSATION' | 'CREATIVE' | 'STORYBOARD' | 'REVIEW' | 'DIRECTOR';
+type MangaWorkflowRoute = 'CONVERSATION' | 'CREATIVE' | 'STORYBOARD' | 'REVIEW' | 'DIRECTOR';
 
 export type MangaAgentRunEvent =
   | { type: 'status'; data: { message?: string; requestId?: string; request_id?: string } }
@@ -60,9 +60,9 @@ export interface AgentRunTimelineEvent {
   createdAt?: string;
 }
 
-export type MangaAgentRunStatus = 'RUNNING' | 'WAITING_USER' | 'SUCCEEDED' | 'DEGRADED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED';
+type MangaAgentRunStatus = 'RUNNING' | 'WAITING_USER' | 'SUCCEEDED' | 'DEGRADED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED';
 
-export interface AgentRunPersistedEvent {
+interface AgentRunPersistedEvent {
   eventId?: number;
   eventName: MangaAgentRunEvent['type'] | 'phase';
   data: MangaAgentRunEvent['data'];
@@ -110,7 +110,7 @@ export interface MangaAgentRunSnapshot {
   artifacts?: MangaAgentArtifactSummary[];
 }
 
-export interface MangaAgentRunStep {
+interface MangaAgentRunStep {
   planId: string;
   sequence: number;
   route: MangaWorkflowRoute;
@@ -124,7 +124,7 @@ export interface MangaAgentRunStep {
   completedAt?: string | null;
 }
 
-export interface MangaAgentArtifactSummary {
+interface MangaAgentArtifactSummary {
   artifactId: string;
   type: string;
   status: 'DRAFT' | 'VALIDATED' | 'REJECTED' | 'COMMITTED' | 'SUPERSEDED';
@@ -133,29 +133,12 @@ export interface MangaAgentArtifactSummary {
   checksum: string;
 }
 
-export interface MangaAgentArtifact extends MangaAgentArtifactSummary {
+interface MangaAgentArtifact extends MangaAgentArtifactSummary {
   requestId: string;
   payload: Record<string, unknown>;
 }
 
-export interface AgentSkillManifest {
-  skillKey: string;
-  semanticVersion: string;
-  checksum: string;
-  status: string;
-  supportedRoutes: string[];
-  capabilities: string[];
-  promptVersion: string;
-  allowedToolGroups: string[];
-  budgetPolicy: Record<string, unknown>;
-  evaluatorKey?: string | null;
-  hitlPolicy: string;
-  userConfigurable: boolean;
-}
-
-export interface UserAgentSkill { manifest: AgentSkillManifest; enabled: boolean; }
-
-export interface AgentUserInputOption {
+interface AgentUserInputOption {
   id: string;
   label: string;
   description?: string;
@@ -175,9 +158,9 @@ export interface AgentUserInputRequest {
 }
 
 export type AgentAnswer = { answer: string; selectedOptionId?: never } | { selectedOptionId: string; answer?: never };
-export type StoryChatResume = { decision: 'reviewed'; artifactId: string }
+type StoryChatResume = { decision: 'reviewed'; artifactId: string }
   | ({ decision: 'answer'; toolCallId: string; pendingVersion: number } & AgentAnswer);
-export type MangaAgentResume = ({ toolCallId: string; pendingVersion: number } & AgentAnswer)
+type MangaAgentResume = ({ toolCallId: string; pendingVersion: number } & AgentAnswer)
   | { answer: string; toolCallId?: never; pendingVersion?: never; selectedOptionId?: never };
 
 class ArtVerseMangaAgentHttpAgent extends HttpAgent {
@@ -297,17 +280,6 @@ export function resumeStoryChatAgUiStream(
   model?: string,
 ): AbortController {
   return resumeAgentAgUiStream(chapterId, conversationId, requestId, 'story-chat', response, onEvent, model);
-}
-
-export function resumeMangaAgentAgUiStream(
-  chapterId: number,
-  conversationId: string,
-  requestId: string,
-  response: MangaAgentResume,
-  onEvent: (event: MangaAgentRunEvent) => void,
-  model?: string,
-): AbortController {
-  return resumeAgentAgUiStream(chapterId, conversationId, requestId, 'manga-agent', response, onEvent, model);
 }
 
 function resumeAgentAgUiStream(

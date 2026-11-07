@@ -1,33 +1,37 @@
-import { Moon, Sun } from 'lucide-react';
+import { Moon } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
+import Switch from '../ui/Switch';
 
 interface Props {
   compact?: boolean;
 }
 
 export default function ThemeToggle({ compact = false }: Props) {
-  const { mode, toggleMode } = useTheme();
+  const { mode, setMode } = useTheme();
   const isDark = mode === 'dark';
+  const hint = isDark ? '关闭深色模式' : '开启深色模式';
 
   return (
-    <button
-      type="button"
-      onClick={toggleMode}
-      title={isDark ? '切换浅色模式' : '切换深色模式'}
-      aria-label={isDark ? '切换浅色模式' : '切换深色模式'}
+    <div
+      title={hint}
       className={
-        'group flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-200 '
-        + 'text-text-secondary hover:text-accent hover:bg-accent-soft '
-        + (compact ? 'justify-center h-9 w-9 p-0' : 'min-h-10 w-full px-3')
+        'flex items-center rounded-lg '
+        + (compact ? 'h-10 w-10 justify-center' : 'min-h-10 w-full gap-3 px-3')
       }
     >
-      {isDark
-        ? <Sun size={18} className="shrink-0 transition-transform group-hover:rotate-12" />
-        : <Moon size={18} className="shrink-0 transition-transform group-hover:-rotate-12" />
-      }
       {!compact && (
-        <span className="flex-1 text-left">{isDark ? '浅色模式' : '深色模式'}</span>
+        <>
+          <Moon size={18} className={'shrink-0 transition-colors ' + (isDark ? 'text-accent' : 'text-text-muted')} />
+          <span className={'flex-1 text-left text-sm font-medium transition-colors ' + (isDark ? 'text-text-primary' : 'text-text-secondary')}>
+            深色模式
+          </span>
+        </>
       )}
-    </button>
+      <Switch
+        checked={isDark}
+        onChange={(checked, origin) => setMode(checked ? 'dark' : 'light', origin)}
+        ariaLabel={hint}
+      />
+    </div>
   );
 }

@@ -4,7 +4,7 @@ import type { KnowledgeUnitInput, KnowledgeUnitType } from './knowledgeAndImage'
 export type Data = Record<string, unknown>;
 export interface KnowledgeField { key: string; label: string; type: string; required: boolean; options: string[] }
 export interface KnowledgeSchema { type: KnowledgeUnitType; version: number; fields: KnowledgeField[] }
-export interface ValidationIssue { path: string; code: string; message: string; severity: string }
+interface ValidationIssue { path: string; code: string; message: string; severity: string }
 export interface KnowledgeFact {
   id: number; unitId: number; revisionId: number; revision: number; kind: string; payload: Data;
   revealChapterId: number | null; fromChapterId: number | null; toChapterId: number | null;
@@ -48,7 +48,7 @@ export async function knowledgeRequest<T>(story: number, path: string, method = 
   return readApiData<T>(response);
 }
 const field = (data: Data, camel: string, snake: string) => data[camel] ?? data[snake];
-export function factFromResponse(data: Data): KnowledgeFact {
+function factFromResponse(data: Data): KnowledgeFact {
   return { id: Number(data.id), unitId: Number(field(data, 'unitId', 'unit_id')), revisionId: Number(field(data, 'revisionId', 'revision_id')), revision: Number(data.revision), kind: String(data.kind), payload: data.payload as Data,
     revealChapterId: (field(data, 'revealChapterId', 'reveal_chapter_id') ?? null) as number | null,
     fromChapterId: (field(data, 'fromChapterId', 'from_chapter_id') ?? null) as number | null,
@@ -96,7 +96,7 @@ export async function knowledgeGraph(story: number, asOf: number | null, pending
 export async function getCandidateDetail(story: number, id: number): Promise<KnowledgeCandidateDetail> {
   return candidateFromResponse(await knowledgeRequest<Data>(story, `/candidates/${id}`));
 }
-export function knowledgePayload(input: KnowledgeUnitInput) {
+function knowledgePayload(input: KnowledgeUnitInput) {
   return { type: input.type, title: input.title, body: input.body, summary: input.summary, structured_data: input.structuredData, importance: input.importance,
     effective_from_chapter: input.effectiveFromChapter ?? null, effective_to_chapter: input.effectiveToChapter ?? null };
 }

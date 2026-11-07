@@ -321,6 +321,19 @@ public class AutomationService {
         return store.plan(id,userId,false);
     }
 
+    /** 删除计划：运行中的任务禁止删除；未执行或已结束的任务直接物理删除，历史运行与通知随库级联清理。 */
+    @Transactional
+    public void delete(long userId,UUID id,Long expectedVersion) {
+        lockUser(userId);
+        Plan current=store.plan(id,userId,true);
+        version(current,expectedVersion);
+        if(store.blocking(id))throw conflict("任务正在执行，请稍后重试");
+        // 用量台账保留计费与审计证据，仅解除运行关联，不随任务删除。
+        store.jdbc().update("UPDATE agent_usage_ledger SET automation_run_id=NULL WHERE automation_run_id IN (SELECT id FROM automation_run WHERE automation_id=?)",id);
+        if(store.jdbc().update("DELETE FROM automation WHERE id=? AND user_id=? AND version=?",id,userId,current.version())!=1)
+            throw conflict("任务版本已变化");
+    }
+
     @Transactional
     public Run runNow(long userId,UUID id,String key) {
         requireKey(key);
@@ -389,10 +402,12 @@ public class AutomationService {
         binding.put("response_kind","RETRY");
         if("STORY_CHAT".equals(current.definition().executorKey())) {
             var child=storyInput(current);
-            UUID artifactId=reviewedArtifact(current,child);
-            JsonNode receipt=requireStoryReceipt(current,child,artifactId);
-            binding.putAll(reviewBinding(current,child,artifactId,receipt));
-            retryResponse=store.node(store.json(Map.of("decision","reviewed","artifactId",artifactId)));
+            var artifactId=reviewedArtifact(current,child);
+            if(artifactId.isPresent()) {
+                JsonNode receipt=requireStoryReceipt(current,child,artifactId.get());
+                binding.putAll(reviewBinding(current,child,artifactId.get(),receipt));
+                retryResponse=store.node(store.json(Map.of("decision","reviewed","artifactId",artifactId.get())));
+            }
         }
         // A failed summary retains its original response; retry never overwrites that slot.
         String responseKey=key;
@@ -408,7 +423,8 @@ public class AutomationService {
             responseHash=current.responseHash();
             registerAction(current,key,"RETRY",retryPayload,binding,retryResponse);
         } else responseHash=registerAction(current,key,"RETRY",retryPayload,binding,retryResponse);
-        store.jdbc().update("UPDATE automation_run SET state='QUEUED',completed_at=NULL,error_code=NULL,error_message=NULL,waiting_reason=NULL,next_attempt_at=now(),lease_owner=NULL,lease_until=NULL,response=?::jsonb,response_key=?,response_hash=? WHERE id=?",
+        // 重试是新的执行尝试：清空 started_at，避免 Worker 以旧尝试的开始时间判定时长超限而直接取消。
+        store.jdbc().update("UPDATE automation_run SET state='QUEUED',started_at=NULL,cancel_requested_at=NULL,completed_at=NULL,error_code=NULL,error_message=NULL,waiting_reason=NULL,next_attempt_at=now(),lease_owner=NULL,lease_until=NULL,response=?::jsonb,response_key=?,response_hash=? WHERE id=?",
                 store.json(retryResponse),responseKey,responseHash,id);
         store.jdbc().update("UPDATE automation SET status=CASE WHEN status='COMPLETED' THEN 'ACTIVE' ELSE status END WHERE id=?",current.automationId());
         store.event(id,"RETRY_REQUESTED",Map.of("summary","仅重试明确失败项"));
@@ -452,7 +468,8 @@ public class AutomationService {
                 binding.put("response_kind","REFRESH_INPUT");
             }
             String digest=registerAction(current,key,"RESPOND",response,binding,response);
-            store.jdbc().update("UPDATE automation_run SET state='QUEUED',next_attempt_at=now(),response=?::jsonb,response_key=?,response_hash=?,lease_owner=NULL,lease_until=NULL WHERE id=?",store.json(response),key,digest,id);
+            // 人工确认可能跨越时长上限，恢复执行同样按新尝试计时。
+            store.jdbc().update("UPDATE automation_run SET state='QUEUED',started_at=NULL,cancel_requested_at=NULL,next_attempt_at=now(),response=?::jsonb,response_key=?,response_hash=?,lease_owner=NULL,lease_until=NULL WHERE id=?",store.json(response),key,digest,id);
             store.event(id,"USER_RESPONDED",Map.of("summary","已收到用户响应，等待重新校验"));
         }
         return store.run(id,userId);
@@ -555,16 +572,17 @@ public class AutomationService {
         return binding;
     }
 
-    private UUID reviewedArtifact(Run run,Map<String,Object> child) {
+    private Optional<UUID> reviewedArtifact(Run run,Map<String,Object> child) {
         var receipt=store.node(String.valueOf(child.get("attributes"))).path("review_result");
-        if(receipt.isObject())return uuid(receipt.path("artifact_id").asText());
+        if(receipt.isObject())return Optional.of(uuid(receipt.path("artifact_id").asText()));
         var reviewed=store.jdbc().queryForList("""
                 SELECT artifact_uuid FROM manga_agent_run_artifacts
                 WHERE run_id=? AND artifact_type='NOVEL_CONTENT_DRAFT' AND status IN ('COMMITTED','REJECTED')
                 ORDER BY id LIMIT 2
                 """,child.get("id"));
-        if(reviewed.size()!=1)throw conflict("无法唯一确定已审核产物，请选择具体审阅结果后继续");
-        return (UUID)reviewed.getFirst().get("artifact_uuid");
+        if(reviewed.size()>1)throw conflict("无法唯一确定已审核产物，请选择具体审阅结果后继续");
+        if(reviewed.isEmpty())return Optional.empty();
+        return Optional.of((UUID)reviewed.getFirst().get("artifact_uuid"));
     }
 
     private static UUID uuid(String value) {
@@ -656,6 +674,9 @@ public class AutomationService {
         },userId);
     }
     public void markRead(long userId,long id) { if(store.jdbc().update("UPDATE automation_notification SET read_at=COALESCE(read_at,now()) WHERE id=? AND user_id=?",id,userId)==0)throw new BusinessException(404,"通知不存在"); }
+    public int markAllRead(long userId) { return store.jdbc().update("UPDATE automation_notification SET read_at=now() WHERE user_id=? AND read_at IS NULL",userId); }
+    public void deleteNotification(long userId,long id) { if(store.jdbc().update("DELETE FROM automation_notification WHERE id=? AND user_id=?",id,userId)==0)throw new BusinessException(404,"通知不存在"); }
+    public int clearNotifications(long userId) { return store.jdbc().update("DELETE FROM automation_notification WHERE user_id=?",userId); }
 
     private AutomationDefinition normalize(long userId,AutomationDefinition input) {
         if(input==null)throw bad("缺少任务设置");

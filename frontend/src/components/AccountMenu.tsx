@@ -1,19 +1,22 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, KeyRound, LogOut, Monitor, Moon, Sun, UserRound } from 'lucide-react';
+import { ChevronDown, ChevronUp, KeyRound, LogOut, Monitor, Moon, UserRound } from 'lucide-react';
 import type { UserInfo } from '../api/auth';
 import { useTheme } from '../hooks/useTheme';
 import OverlayPortal from '../ui/OverlayPortal';
+import Switch from '../ui/Switch';
+import { useConfirm } from '../ui/confirm/useConfirm';
 import UserAvatar from './UserAvatar';
 
 interface Props { user: UserInfo; compact?: boolean; mobile?: boolean; onProfile: () => void; onSettings: () => void; onLogout: () => Promise<void> }
 export default function AccountMenu({ user, compact, mobile, onProfile, onSettings, onLogout }: Props) {
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [position, setPosition] = useState({ left: 12, top: 12 });
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const id = useId();
-  const { preference, setPreference } = useTheme();
+  const { preference, mode, setPreference, setMode } = useTheme();
   const close = () => { setOpen(false); trigger.current?.focus(); };
   useLayoutEffect(() => {
     if (!open) return;
@@ -66,11 +69,19 @@ export default function AccountMenu({ user, compact, mobile, onProfile, onSettin
         <button type="button" onClick={() => { close(); onProfile(); }}><UserRound size={17} /><span>个人资料</span></button>
         <button type="button" onClick={() => { close(); onSettings(); }}><KeyRound size={17} /><span>API 设置</span></button>
       </div>
-      <fieldset className="account-appearance"><legend>颜色模式</legend><div>
-        {([{ value: 'light', label: '浅色', Icon: Sun }, { value: 'dark', label: '深色', Icon: Moon }, { value: 'system', label: '跟随系统', Icon: Monitor }] as const).map(({ value, label, Icon }) => <button key={value} type="button" aria-pressed={preference === value} onClick={() => setPreference(value)}><Icon size={16} /><span>{label}</span></button>)}
-      </div></fieldset>
+      <fieldset className="account-appearance"><legend>颜色模式</legend>
+        <div className="account-appearance-row">
+          <Moon size={16} aria-hidden="true" />
+          <span>深色模式</span>
+          <Switch checked={mode === 'dark'} onChange={(checked, origin) => setMode(checked ? 'dark' : 'light', origin)} ariaLabel="深色模式" size="sm" />
+        </div>
+        <button type="button" className="account-appearance-system" aria-pressed={preference === 'system'} onClick={() => setPreference('system')}>
+          <Monitor size={14} aria-hidden="true" /><span>跟随系统</span>
+        </button>
+      </fieldset>
       <div className="account-menu-links account-logout"><button type="button" disabled={loggingOut} onClick={async () => {
-        if (loggingOut || !window.confirm('确定退出当前账号吗？')) return;
+        if (loggingOut) return;
+        if (!(await confirm({ title: '退出登录', message: '确定退出当前账号吗？', confirmText: '退出登录', tone: 'danger' }))) return;
         setLoggingOut(true);
         try { await onLogout(); setOpen(false); } finally { setLoggingOut(false); }
       }}><LogOut size={17} /><span>{loggingOut ? '正在退出…' : '退出登录'}</span></button></div>

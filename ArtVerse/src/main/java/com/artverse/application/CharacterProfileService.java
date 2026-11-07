@@ -92,16 +92,16 @@ public class CharacterProfileService {
         Integer references=jdbcTemplate.queryForObject("SELECT count(*) FROM knowledge_fact_entity_links l JOIN knowledge_entities e ON e.id=l.entity_id WHERE e.character_profile_id=?",Integer.class,id);
         if(references!=null&&references>0) throw new BusinessException(409,"人物已有知识实体或历史引用，请先归档人物知识并处理引用，不能直接删除");
         jdbcTemplate.update("DELETE FROM knowledge_entities WHERE character_profile_id=?",id);
-        // Delete all ref images from MinIO
+        // Delete all ref images from object storage
         String prefix = refImagePrefix(storyId, id);
-        objectStorageService.list(properties.getMinio().getBucket(), prefix, 100).stream()
+        objectStorageService.list(objectStorageService.defaultBucket(), prefix, 100).stream()
                 .filter(o -> isImageObject(o.objectKey()))
-                .forEach(o -> objectStorageService.deleteBestEffort(properties.getMinio().getBucket(), o.objectKey()));
+                .forEach(o -> objectStorageService.deleteBestEffort(objectStorageService.defaultBucket(), o.objectKey()));
         knowledgeService.archiveCharacterProfile(profile.getId());
         profileRepository.delete(profile);
     }
 
-    // --- Ref images (stored in MinIO) ---
+    // --- Ref images (stored in object storage) ---
     @Transactional(readOnly = true)
     public List<Map<String, Object>> listRefImages(Long storyId, Long characterId) {
         CharacterProfile profile = getRequired(characterId);
@@ -109,7 +109,7 @@ public class CharacterProfileService {
             throw new BusinessException(400, "Character does not belong to this story");
         }
         String prefix = refImagePrefix(storyId, characterId);
-        return objectStorageService.list(properties.getMinio().getBucket(), prefix, 100).stream()
+        return objectStorageService.list(objectStorageService.defaultBucket(), prefix, 100).stream()
                 .filter(o -> isImageObject(o.objectKey()))
                 .sorted(Comparator.comparing(StoredObject::objectKey))
                 .map(o -> Map.<String, Object>of(
@@ -129,7 +129,7 @@ public class CharacterProfileService {
 
         // Max 5 ref images per character
         String prefix = refImagePrefix(storyId, characterId);
-        long count = objectStorageService.list(properties.getMinio().getBucket(), prefix, 100).stream()
+        long count = objectStorageService.list(objectStorageService.defaultBucket(), prefix, 100).stream()
                 .filter(o -> {
                     String name = o.objectKey().toLowerCase();
                     return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
@@ -172,7 +172,7 @@ public class CharacterProfileService {
         String safeFilename = Path.of(filename).getFileName().toString();
         String objectKey = refImagePrefix(storyId, characterId) + safeFilename;
         jdbcTemplate.update("DELETE FROM character_reference_images WHERE object_key=? AND character_profile_id=?",objectKey,characterId);
-        objectStorageService.deleteBestEffort(properties.getMinio().getBucket(), objectKey);
+        objectStorageService.deleteBestEffort(objectStorageService.defaultBucket(), objectKey);
     }
 
     private String refImagePrefix(Long storyId, Long characterId) {

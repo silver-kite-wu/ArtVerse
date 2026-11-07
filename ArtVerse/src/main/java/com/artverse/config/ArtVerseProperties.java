@@ -1,16 +1,26 @@
 package com.artverse.config;
 
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Data
 @Component
 @ConfigurationProperties(prefix = "artverse")
 public class ArtVerseProperties {
 
+    /** 本地开发模式下固定放行的前端来源，避免本地 .env 里的线上域名配置拦截本地测试 */
+    private static final List<String> LOCAL_DEV_CORS_ORIGINS =
+            List.of("http://localhost:5173", "http://127.0.0.1:5173");
+
+    /** true = 本地开发模式；false = 线上模式 */
+    private boolean devMode = false;
     private List<String> corsOrigins = List.of("http://localhost:5173", "http://127.0.0.1:5173");
     private Storage storage = new Storage();
     private Upload upload = new Upload();
@@ -21,7 +31,7 @@ public class ArtVerseProperties {
     private MangaGeneration mangaGeneration = new MangaGeneration();
     private DeepSeek deepseek = new DeepSeek();
     private Image image = new Image();
-    private Minio minio = new Minio();
+    private Oss oss = new Oss();
     private Coze coze = new Coze();
     private Flyway flyway = new Flyway();
     private RateLimit rateLimit = new RateLimit();
@@ -30,6 +40,30 @@ public class ArtVerseProperties {
     private Agent agent = new Agent();
     private Secrets secrets = new Secrets();
     private Auth auth = new Auth();
+
+    /**
+     * 模式开关（ARTVERSE_DEV_MODE）：true = 本地开发，false = 线上。
+     * 本地开发下强制追加 localhost 来源并关闭 Secure Cookie，避免线上 .env 配置拦截本地测试；
+     * 线上模式保持 .env 中显式配置的来源与 Cookie 安全策略。
+     */
+    @PostConstruct
+    void applyDevModeSettings() {
+        if (!devMode) {
+            log.info("ArtVerse running in online mode (ARTVERSE_DEV_MODE=false): origins={}, secureCookie={}",
+                    corsOrigins, auth.getCookie().isSecure());
+            return;
+        }
+        List<String> merged = new ArrayList<>(corsOrigins == null ? List.of() : corsOrigins);
+        for (String origin : LOCAL_DEV_CORS_ORIGINS) {
+            if (!merged.contains(origin)) {
+                merged.add(origin);
+            }
+        }
+        corsOrigins = List.copyOf(merged);
+        auth.getCookie().setSecure(false);
+        log.warn("ArtVerse running in local development mode (ARTVERSE_DEV_MODE=true): origins={}, secureCookie=false. "
+                + "Set ARTVERSE_DEV_MODE=false before deploying to the server.", corsOrigins);
+    }
 
     @Data
     public static class Storage {
@@ -149,15 +183,21 @@ public class ArtVerseProperties {
     }
 
     @Data
-    public static class Minio {
-        private String endpoint = "http://localhost:9000";
+    public static class Oss {
+        private boolean enabled = true;
+        private String endpoint = "";
+        /** V4 签名必需；留空时从标准 endpoint（oss-cn-beijing.aliyuncs.com）推导 */
+        private String region = "";
         private String bucket = "artverse-manga";
-        private String region = "us-east-1";
+        private String privateBucket = "artverse-generation-private";
         private String accessKey = "";
         private String secretKey = "";
-        private boolean secure = false;
         private String publicBaseUrl = "";
         private int presignedUrlExpireSeconds = 3600;
+        private int connectTimeoutSeconds = 10;
+        private int readTimeoutSeconds = 30;
+        private int maxConnections = 128;
+        private boolean autoCreateBucket = true;
     }
 
     @Data
@@ -215,8 +255,8 @@ public class ArtVerseProperties {
         private int directorRootMaxToolCalls = 64;
         private int textMaxModelCalls = 4;
         private int textMaxToolCalls = 2;
-        private int storyChatReadMaxModelCalls = 4;
-        private int storyChatReadMaxToolCalls = 8;
+        private int storyChatReadMaxModelCalls = 8;
+        private int storyChatReadMaxToolCalls = 16;
         private int storyChatWriteMaxModelCalls = 8;
         private int storyChatWriteMaxToolCalls = 12;
         private int maxInputTokens = 224_000;

@@ -1,5 +1,5 @@
 import type { AiConversationSummary, ImageGenRecord } from '../api';
-import { randomUUID } from '../utils/browserSecurity';
+import { randomUUID } from '../utils/browserSecurity.ts';
 
 export interface Message {
   id: string;
@@ -27,11 +27,11 @@ export interface GenConfig {
 }
 
 export const LS_THEMES_KEY = 'artverse.genThemes';
-export const LS_ACTIVE_THEME_KEY = 'artverse.activeGenTheme';
-export const LS_GEN_CONFIG_KEY = 'artverse.genConfig';
+const LS_ACTIVE_THEME_KEY = 'artverse.activeGenTheme';
+const LS_GEN_CONFIG_KEY = 'artverse.genConfig';
 export const LS_CANVAS_OPEN_KEY = 'artverse.genCanvasOpen';
 export const LS_CANVAS_WIDTH_KEY = 'artverse.genCanvasWidth';
-export const DEFAULT_CONFIG: GenConfig = { resolution: '1024x1024', aspectRatio: '1:1' };
+const DEFAULT_CONFIG: GenConfig = { resolution: '1024x1024', aspectRatio: '1:1' };
 
 export const RESOLUTIONS = [
   { label: '1024×1024', value: '1024x1024', ratio: '1:1' },

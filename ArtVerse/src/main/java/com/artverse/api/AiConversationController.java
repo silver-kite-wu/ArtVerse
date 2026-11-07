@@ -52,6 +52,7 @@ public class AiConversationController {
         value.put("title", c.getTitle()); value.put("titleSource", c.getTitleSource()); value.put("titleState", c.getTitleState());
         value.put("status", c.getStatus()); value.put("storyId", c.getStory() == null ? null : c.getStory().getId());
         value.put("chapterId", c.getChapter() == null ? null : c.getChapter().getId()); value.put("lastActivityAt", c.getLastActivityAt());
+        value.put("automationRun", AiConversationService.isAutomationRun(c));
         return value;
     }
 }

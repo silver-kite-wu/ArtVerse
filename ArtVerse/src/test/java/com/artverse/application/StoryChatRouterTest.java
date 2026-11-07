@@ -44,6 +44,13 @@ class StoryChatRouterTest {
         assertThat(new NovelBusinessSkillRouter().classify(advice).mode()).isEqualTo(NovelBusinessSkillMode.REVIEW);
     }
 
+    @Test
+    void reviewAdviceRequestsStayReviewAndRealEditsRemainPolish() {
+        assertThat(router.classify("审核章节质量并给出修改意见，并审核前后人物一致性问题"))
+                .isEqualTo(StoryChatRoute.REVIEW);
+        assertThat(router.classify("帮我修改这一章")).isEqualTo(StoryChatRoute.POLISH);
+    }
+
     @Test void historicalRestorePreparesReviewWhileHistoryQuestionsRemainReadOnly() {
         assertThat(router.classify("请恢复本章正文到历史版本 3")).isEqualTo(StoryChatRoute.WRITE);
         assertThat(router.classify("Restore the prose from revision 3")).isEqualTo(StoryChatRoute.WRITE);

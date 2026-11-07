@@ -1,5 +1,7 @@
 # 生成图片直接上传 MinIO
 
+> 历史实施记录：2026-06-06 的 MinIO 图床已被 2026-11-06 的阿里云 OSS 迁移取代，运行时对象存储实现见 [minio-to-oss-migration-design.md](minio-to-oss-migration-design.md)。本文中的 MinIO/SDK/测试描述仅代表当时实现。
+
 日期：2026-10-25；2026-10-26 增补 MQ 复用状态。原存储链路为独立授权改造；即时 RabbitMQ 链路现已接入，见 [实施记录](image-generation-implementation.md)。下文原验证记录保留其当时范围。
 
 ## 已实现的链路

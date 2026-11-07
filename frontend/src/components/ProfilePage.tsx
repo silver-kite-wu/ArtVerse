@@ -4,11 +4,13 @@ import { errorMessage, type UserInfo } from '../api/auth';
 import { changePassword, deleteAvatar, saveAvatar, updateProfile } from '../api/profile';
 import { setRouteLeaveGuard } from '../appRouting';
 import { useToast } from '../ui/toast/useToast';
+import { useConfirm } from '../ui/confirm/useConfirm';
 import { prepareAvatar } from '../utils/profileAvatar';
 import UserAvatar from './UserAvatar';
 
 export default function ProfilePage({ user, onPasswordChanged, onBack }: { user: UserInfo; onPasswordChanged: () => void; onBack: () => void }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [username, setUsername] = useState(user.username);
   const [avatar, setAvatar] = useState<{ blob: Blob; url: string } | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -64,13 +66,13 @@ export default function ProfilePage({ user, onPasswordChanged, onBack }: { user:
       if (mounted.current) { setUsername(updated.username); toast.success('用户名已更新'); }
     });
   };
-  const submitPassword = (event: FormEvent) => {
+  const submitPassword = async (event: FormEvent) => {
     event.preventDefault();
     const length = Array.from(newPassword).length;
     if (length < 8 || length > 16 || !newPassword.trim()) { setError('新密码需要 8–16 个字符'); return; }
     if (newPassword !== confirmation) { setError('两次输入的新密码不一致'); return; }
     if (newPassword === currentPassword) { setError('新密码不能与当前密码相同'); return; }
-    if ((nameDirty || avatarDirty) && !window.confirm('修改密码后需要重新登录，其他未保存的资料将丢失，确定继续吗？')) return;
+    if ((nameDirty || avatarDirty) && !(await confirm({ title: '修改密码', message: '修改密码后需要重新登录，其他未保存的资料将丢失，确定继续吗？', confirmText: '继续', tone: 'danger' }))) return;
     void run('password', async () => {
       await changePassword(currentPassword, newPassword, confirmation);
       setRouteLeaveGuard(null);

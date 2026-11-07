@@ -14,6 +14,7 @@ import {
   type CharacterProfile,
 } from '../api';
 import { useToast } from '../ui/toast/useToast';
+import { useConfirm } from '../ui/confirm/useConfirm';
 
 interface Props {
   storyId: number;
@@ -23,6 +24,7 @@ interface Props {
 
 export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChange }: Props) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [groups, setGroups] = useState<AssetGroup[]>([]);
   const [selectedKey, setSelectedKey] = useState('');
   const [draftName, setDraftName] = useState('');
@@ -135,7 +137,7 @@ export default function AssetGroupManagerModal({ storyId, onClose, onGroupsChang
 
   const removeGroup = async () => {
     if (!activeGroup?.id) return;
-    if (!confirm(`删除"${activeGroup.name}"? 已选择该组的章节会恢复为未选择状态。`)) return;
+    if (!(await confirm({ title: '删除设定组', message: `删除“${activeGroup.name}”？已选择该组的章节会恢复为未选择状态。`, confirmText: '删除', tone: 'danger' }))) return;
     setSaving(true);
     try {
       await deleteStoryAssetGroup(storyId, activeGroup.id);

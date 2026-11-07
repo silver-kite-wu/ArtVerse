@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useImageGenerationRequest } from '../hooks/useImageGenerationRequest';
 import { IMAGE_REQUEST_CHANGE, IMAGE_STATUS_LABELS, imageRecovery, replaceImageRequest, trackedImageRequest, trackImageRequest, type ImageRequestSnapshot } from '../api/imageRequests';
 import { useToast } from '../ui/toast/useToast';
+import { useConfirm } from '../ui/confirm/useConfirm';
 
 export default function ImageRequestStatusPanel({ scope, requestId, onSnapshot }: { scope?: string; requestId?: string; onSnapshot?: (snapshot: ImageRequestSnapshot) => void }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [tracked, setTracked] = useState(() => requestId || (scope ? trackedImageRequest(scope) : null));
   const [busy, setBusy] = useState(false);
   const { snapshot, error } = useImageGenerationRequest(tracked || requestId || null);
@@ -28,9 +30,9 @@ export default function ImageRequestStatusPanel({ scope, requestId, onSnapshot }
       {item.status === 'NEEDS_REVIEW' && <p className="break-all">关联 ID：{snapshot.request_id} / {item.operation_id}</p>}
       {item.review_requested_at && <p>已申请人工核实</p>}
       {item.recovery_in_progress && <p>正在核实原请求，请等待结果。</p>}
-      {item.recovery_actions.map(action => <button key={action} disabled={busy || item.recovery_in_progress} className="mr-3 underline disabled:opacity-50" onClick={() => {
+      {item.recovery_actions.map(action => <button key={action} disabled={busy || item.recovery_in_progress} className="mr-3 underline disabled:opacity-50" onClick={async () => {
         if (action === 'ABANDON_AND_REGENERATE') {
-          if (!window.confirm(`原操作 ${item.operation_id} 已核实结束。继续会建立一次新的付费生成请求；我确认新的费用并放弃旧结果。`)) return;
+          if (!(await confirm({ title: '重新生成', message: `原操作 ${item.operation_id} 已核实结束。继续会建立一次新的付费生成请求；我确认新的费用并放弃旧结果。`, confirmText: '继续生成', tone: 'danger' }))) return;
           setBusy(true);
           void replaceImageRequest(snapshot.request_id, item).then(id => { setTracked(id);if (scope) trackImageRequest(scope, id); toast.success('已创建新的生图请求'); }).catch(error => toast.error(error.message)).finally(() => setBusy(false));
           return;

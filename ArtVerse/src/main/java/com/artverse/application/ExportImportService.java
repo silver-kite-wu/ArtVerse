@@ -296,7 +296,7 @@ public class ExportImportService {
     }
 
     private void addImageToZip(ZipOutputStream zos, MangaImage img, String zipEntryName) throws IOException {
-        if (img.getStorageProvider() == StorageProvider.MINIO && img.getBucket() != null && img.getObjectKey() != null) {
+        if (img.getStorageProvider() == StorageProvider.OSS && img.getBucket() != null && img.getObjectKey() != null) {
             try (InputStream is = objectStorageService.get(img.getBucket(), img.getObjectKey())) {
                 zos.putNextEntry(new ZipEntry(zipEntryName));
                 is.transferTo(zos);

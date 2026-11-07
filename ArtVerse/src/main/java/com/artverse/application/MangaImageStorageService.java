@@ -1,7 +1,6 @@
 package com.artverse.application;
 
 import com.artverse.ai.GeneratedImage;
-import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.MangaImage;
 import com.artverse.domain.StorageProvider;
 import com.artverse.media.MediaStorageService;
@@ -29,7 +28,6 @@ public class MangaImageStorageService {
     private final ChapterRepository chapterRepository;
     private final ObjectStorageService objectStorageService;
     private final MediaStorageService mediaStorageService;
-    private final ArtVerseProperties properties;
     @org.springframework.beans.factory.annotation.Autowired(required=false)
     private org.springframework.transaction.support.TransactionTemplate transactions;
 
@@ -37,14 +35,14 @@ public class MangaImageStorageService {
                                                    Long assetGroupId, String storyRefImage) {
         List<Path> refs = computeEffectiveRefImages(storyId, chapterId, chapterRefImage, assetGroupId, storyRefImage);
         List<Path> tempRefs = new ArrayList<>();
-        List<Path> materialized = materializeMinioRefs(refs, tempRefs);
+        List<Path> materialized = materializeRefs(refs, tempRefs);
         return new ReferenceImages(materialized, tempRefs);
     }
 
     public ReferenceImages prepareReferenceImagesFromSnapshot(List<String> objectKeys) {
         List<Path> refs = objectKeys == null ? List.of() : objectKeys.stream().map(Path::of).toList();
         List<Path> tempRefs = new ArrayList<>();
-        return new ReferenceImages(materializeMinioRefs(refs, tempRefs), tempRefs);
+        return new ReferenceImages(materializeRefs(refs, tempRefs), tempRefs);
     }
 
     public List<String> previewReferenceImageKeys(Long storyId, Long chapterId, String chapterRefImage,
@@ -142,7 +140,7 @@ public class MangaImageStorageService {
 
     private void applyStoredObject(MangaImage mangaImage, StoredObject stored, String prompt) {
         mangaImage.setImagePath(stored.objectKey());
-        mangaImage.setStorageProvider(StorageProvider.MINIO);
+        mangaImage.setStorageProvider(StorageProvider.OSS);
         mangaImage.setBucket(stored.bucket());
         mangaImage.setObjectKey(stored.objectKey());
         mangaImage.setContentType(stored.contentType());
@@ -155,7 +153,7 @@ public class MangaImageStorageService {
             try {
                 objectStorageService.deleteBestEffort(bucket, objectKey);
             } catch (Exception e) {
-                log.warn("Failed to delete old MinIO object {}/{}: {}", bucket, objectKey, e.getMessage());
+                log.warn("Failed to delete old object storage object {}/{}: {}", bucket, objectKey, e.getMessage());
             }
         }
     }
@@ -164,7 +162,7 @@ public class MangaImageStorageService {
                                                  Long assetGroupId, String storyRefImage) {
         List<Path> refs = new ArrayList<>();
 
-        addMinioRefs(refs, "stories/" + storyId + "/chapters/" + chapterId + "/ref_images/");
+        addObjectRefs(refs, "stories/" + storyId + "/chapters/" + chapterId + "/ref_images/");
 
         if (refs.isEmpty() && chapterRefImage != null && !chapterRefImage.isBlank()) {
             Path ref = mediaStorageService.resolveRelativePath(chapterRefImage);
@@ -172,11 +170,11 @@ public class MangaImageStorageService {
         }
 
         if (refs.isEmpty() && assetGroupId != null) {
-            addMinioRefs(refs, "stories/" + storyId + "/asset_groups/" + assetGroupId + "/ref_images/");
+            addObjectRefs(refs, "stories/" + storyId + "/asset_groups/" + assetGroupId + "/ref_images/");
         }
 
         if (refs.isEmpty()) {
-            addMinioRefs(refs, "stories/" + storyId + "/ref_images/");
+            addObjectRefs(refs, "stories/" + storyId + "/ref_images/");
         }
 
         if (refs.isEmpty() && storyRefImage != null && !storyRefImage.isBlank()) {
@@ -187,15 +185,15 @@ public class MangaImageStorageService {
         return refs;
     }
 
-    private void addMinioRefs(List<Path> refs, String prefix) {
-        objectStorageService.list(properties.getMinio().getBucket(), prefix, 4).stream()
+    private void addObjectRefs(List<Path> refs, String prefix) {
+        objectStorageService.list(objectStorageService.defaultBucket(), prefix, 4).stream()
                 .map(stored -> Path.of(stored.objectKey()))
                 .filter(this::isImageFile)
                 .limit(4L - refs.size())
                 .forEach(refs::add);
     }
 
-    private List<Path> materializeMinioRefs(List<Path> refs, List<Path> tempRefs) {
+    private List<Path> materializeRefs(List<Path> refs, List<Path> tempRefs) {
         List<Path> materialized = new ArrayList<>();
         for (Path ref : refs) {
             if (Files.exists(ref)) {
@@ -210,7 +208,7 @@ public class MangaImageStorageService {
     }
 
     private Path downloadRefObject(String objectKey) {
-        try (var in = objectStorageService.get(properties.getMinio().getBucket(), objectKey)) {
+        try (var in = objectStorageService.get(objectStorageService.defaultBucket(), objectKey)) {
             Path temp = Files.createTempFile("artverse-ref-", suffixFor(objectKey));
             Files.copy(in, temp, StandardCopyOption.REPLACE_EXISTING);
             return temp;

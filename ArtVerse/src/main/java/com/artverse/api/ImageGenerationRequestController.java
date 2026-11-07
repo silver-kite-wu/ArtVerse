@@ -26,10 +26,7 @@ public class ImageGenerationRequestController {
         snapshot.put("joined_existing",accepted.joined());
         return ResponseEntity.status(ImageProtocol.terminal((String)snapshot.get("status"))?200:202).body(snapshot);
     }
-    @PostMapping("/image-gen/requests") public ResponseEntity<Map<String,Object>> standalone(@RequestBody Map<String,Object> body,@RequestHeader(value="Idempotency-Key",required=false) String key) { return submit(user(),null,null,"STANDALONE",body,key); }
-    @PostMapping("/chapters/{chapterId}/manga-requests") public ResponseEntity<Map<String,Object>> chapter(@PathVariable long chapterId,@RequestBody Map<String,Object> body,@RequestHeader(value="Idempotency-Key",required=false) String key) { return submit(user(),chapterId,null,"MANGA_GENERATE",body,key); }
     @PostMapping("/chapters/{chapterId}/manga-images/{number}/generation-requests") public ResponseEntity<Map<String,Object>> single(@PathVariable long chapterId,@PathVariable int number,@RequestBody Map<String,Object> body,@RequestHeader(value="Idempotency-Key",required=false) String key) { return submit(user(),chapterId,number,"MANGA_SINGLE_GENERATE",body,key); }
-    @PostMapping("/chapters/{chapterId}/manga-images/{number}/regeneration-requests") public ResponseEntity<Map<String,Object>> regenerate(@PathVariable long chapterId,@PathVariable int number,@RequestBody Map<String,Object> body,@RequestHeader(value="Idempotency-Key",required=false) String key) { return submit(user(),chapterId,number,"MANGA_REGENERATE",body,key); }
     @GetMapping("/image-generation/requests/{id}") public Map<String,Object> get(@PathVariable UUID id) { return queries.get(user(),id); }
     @GetMapping(value="/image-generation/requests/{id}/events",produces=MediaType.TEXT_EVENT_STREAM_VALUE) public SseEmitter stream(@PathVariable UUID id) { return events.open(user(),id); }
     @PostMapping("/image-generation/requests/{id}/operations/{operation}/recovery-actions") public ResponseEntity<Map<String,Object>> action(@PathVariable UUID id,@PathVariable UUID operation,@RequestBody Map<String,Object> body) {

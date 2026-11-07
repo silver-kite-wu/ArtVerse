@@ -68,6 +68,10 @@ spring:
           writetimeout: 5000
 
 artverse:
+  # 运行模式总开关：true = 本地开发，false = 线上
+  # 本地开发：自动放行 localhost:5173 / 127.0.0.1:5173 来源，并强制关闭 Secure Cookie
+  # 线上：仅使用 ARTVERSE_CORS_ORIGINS 白名单与 ARTVERSE_AUTH_COOKIE_SECURE 配置
+  dev-mode: ${ARTVERSE_DEV_MODE:false}
   image-queue:
     producer-enabled: ${ARTVERSE_IMAGE_PRODUCER_ENABLED:false}
     worker-enabled: ${ARTVERSE_IMAGE_WORKER_ENABLED:false}
@@ -144,15 +148,22 @@ artverse:
     workflow-id: "7645642109203103763"
   flyway:
     auto-repair-checksum-mismatch: false
-  minio:
-    endpoint: http://localhost:9000
-    bucket: artverse-manga
-    region: us-east-1
-    access-key: ${MINIO_ACCESS_KEY:}
-    secret-key: ${MINIO_SECRET_KEY:}
-    secure: false
-    public-base-url: ""
+  oss:
+    # 生产环境必须显式配置 endpoint 与 AK/SK；缺一即启动失败，避免静默降级为不可用存储。
+    enabled: ${ARTVERSE_OSS_ENABLED:true}
+    endpoint: ${ARTVERSE_OSS_ENDPOINT:}
+    # V4 签名必需的 region；留空时从标准 endpoint 推导（如 oss-cn-beijing.aliyuncs.com -> cn-beijing）
+    region: ${ARTVERSE_OSS_REGION:}
+    bucket: ${ARTVERSE_OSS_BUCKET:artverse-manga}
+    private-bucket: ${ARTVERSE_OSS_PRIVATE_BUCKET:artverse-generation-private}
+    access-key: ${ARTVERSE_OSS_ACCESS_KEY:}
+    secret-key: ${ARTVERSE_OSS_SECRET_KEY:}
+    public-base-url: ${ARTVERSE_OSS_PUBLIC_BASE_URL:}
     presigned-url-expire-seconds: 3600
+    connect-timeout-seconds: 10
+    read-timeout-seconds: 30
+    max-connections: 128
+    auto-create-bucket: ${ARTVERSE_OSS_AUTO_CREATE_BUCKET:true}
   rate-limit:
     # 限流默认值（可被 @RateLimit 注解覆盖）
     enabled: true
@@ -191,8 +202,8 @@ artverse:
     director-root-max-tool-calls: 64
     text-max-model-calls: 4
     text-max-tool-calls: 2
-    story-chat-read-max-model-calls: 4
-    story-chat-read-max-tool-calls: 8
+    story-chat-read-max-model-calls: 8
+    story-chat-read-max-tool-calls: 16
     story-chat-write-max-model-calls: 8
     story-chat-write-max-tool-calls: 12
     # 256K total context: max-input-tokens + max-output-tokens.

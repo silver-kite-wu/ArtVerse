@@ -18,8 +18,9 @@
 - Detailed RabbitMQ / Redis specification (single status, post-ACK results, reliable serial chapter coordination): `docs/image-generation-rabbitmq-development-plan.md`.
 - Single manga-image lifecycle, admission and recovery requirements: `docs/single-manga-image-request-lifecycle.md`.
 - Image-generation H/M/L review decisions and concrete recovery/version/quota specifications: `docs/image-generation-review-revisions.md`; original review background: `docs/image-generation-design-review.md`. The implementation record, not the complete design matrix, states verified behavior.
-- Generated-image direct MinIO upload implementation and validation boundaries: `docs/generated-image-direct-upload.md`.
-- Small-server RabbitMQ / PostgreSQL task and MinIO / OSS selection assessment (2 CPU / 2 GB; recommendations, not implemented migration): `docs/small-server-image-infrastructure-assessment.md`.
+- Generated-image direct object-storage upload implementation and validation boundaries (historical MinIO record; runtime storage is now Aliyun OSS): `docs/generated-image-direct-upload.md`.
+- Small-server RabbitMQ / PostgreSQL task and MinIO / OSS selection assessment (2 CPU / 2 GB; OSS migration since implemented): `docs/small-server-image-infrastructure-assessment.md`.
+- MinIO → Alibaba Cloud OSS replacement design and implementation record (coupling inventory, interface extension, buckets, migration and rollback): `docs/minio-to-oss-migration-design.md`.
 - Reader-to-character chat design, chapter knowledge boundaries, and MVP implementation notes: `docs/reader-character-chat-plan.md`.
 - Knowledge base schemas, temporal facts, review and validation record: `docs/knowledge-base-implementation.md`.
 - Novel text diff review, deterministic author confirmation, version checks and validation boundaries: `docs/novel-text-review.md`.

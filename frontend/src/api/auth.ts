@@ -335,7 +335,7 @@ export async function logoutUser(): Promise<void> {
 }
 
 
-export function requestHeaders(method = 'GET', json = false, existing?: HeadersInit): Headers {
+function requestHeaders(method = 'GET', json = false, existing?: HeadersInit): Headers {
   const headers = new Headers(existing || undefined);
   if (json && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');

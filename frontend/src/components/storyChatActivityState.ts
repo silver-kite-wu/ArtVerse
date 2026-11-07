@@ -1,7 +1,7 @@
 import type { AgentRunTimelineEvent, MangaAgentRunEvent, MangaAgentRunSnapshot } from '../api/agentRuns';
 
-export type ActivityStatus = 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled';
-export interface StoryChatActivityStep {
+type ActivityStatus = 'running' | 'waiting' | 'succeeded' | 'failed' | 'cancelled';
+interface StoryChatActivityStep {
   id: string; label: string; status: ActivityStatus; toolName?: string;
   detail?: string; durationMs?: number; startedAt: number; finishedAt?: number;
 }

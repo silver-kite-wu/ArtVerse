@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { FileText, History, Save } from 'lucide-react';
 import { errorMessage, listNovelRevisions, restoreNovelRevision, saveNovelContent, type Chapter, type NovelRevision } from '../api';
 import { useToast } from '../ui/toast/useToast';
+import { useConfirm } from '../ui/confirm/useConfirm';
 
 const MAX_CHARS = 50000;
 const sourceLabels = { manual: '手工保存', ai: 'AI 修改', restore: '恢复版本', legacy_import: '导入', generated: '生成' };
@@ -21,6 +22,7 @@ interface Props {
 
 const NovelEditor = forwardRef<NovelEditorHandle, Props>(function NovelEditor({ chapter, onChapterRefresh, reviewOpen = false }, ref) {
   const toast = useToast();
+  const confirm = useConfirm();
   const content = chapter?.novel_content ?? '';
   const [document, setDocument] = useState(() => ({ text: content, baseText: content, baseVersion: chapter?.version, seenText: content, seenVersion: chapter?.version }));
   const [writeBusy, setWriteBusy] = useState(false);
@@ -98,7 +100,7 @@ const NovelEditor = forwardRef<NovelEditorHandle, Props>(function NovelEditor({ 
 
   const restore = async (revision: NovelRevision) => {
     if (!chapter || busy || chapter.version === undefined) return;
-    if (!window.confirm(`确定恢复版本 ${revision.revision_number} 吗？${dirty ? '当前未保存修改将被替换。' : ''}`)) return;
+    if (!(await confirm({ title: '恢复历史版本', message: `确定恢复版本 ${revision.revision_number} 吗？${dirty ? '当前未保存修改将被替换。' : ''}`, confirmText: '恢复' }))) return;
     setWriteBusy(true);
     try {
       const result = await restoreNovelRevision(chapter.id, revision.id, chapter.version);
@@ -120,7 +122,7 @@ const NovelEditor = forwardRef<NovelEditorHandle, Props>(function NovelEditor({ 
     {showHistory && <div id="novel-revision-history" className="novel-history" aria-label="正文历史版本">
       {historyError ? <p role="alert">{historyError}</p> : revisions.length === 0 ? <p className="text-text-muted">暂无历史版本。</p> : revisions.map(revision => <div key={revision.id} className="novel-history-row"><span>v{revision.revision_number} · {sourceLabels[revision.source]}</span><time className="text-text-muted">{new Date(revision.created_at).toLocaleString()}</time><button type="button" onClick={() => void restore(revision)} disabled={busy} className="text-accent disabled:opacity-40">恢复</button></div>)}
     </div>}
-    {conflict && <div className="novel-editor-warning" role="alert">正文已有新版本，本地草稿已保留。<button type="button" className="ml-2 underline" disabled={busy} onClick={() => { if (window.confirm('载入最新正文会替换当前未保存草稿，确定继续吗？')) { setDocument({ text: content, baseText: content, baseVersion: chapter?.version, seenText: content, seenVersion: chapter?.version }); } }}>载入最新正文</button></div>}
+    {conflict && <div className="novel-editor-warning" role="alert">正文已有新版本，本地草稿已保留。<button type="button" className="ml-2 underline" disabled={busy} onClick={async () => { if (await confirm({ title: '载入最新正文', message: '载入最新正文会替换当前未保存草稿，确定继续吗？', confirmText: '载入' })) { setDocument({ text: content, baseText: content, baseVersion: chapter?.version, seenText: content, seenVersion: chapter?.version }); } }}>载入最新正文</button></div>}
     <div className="novel-editor-page" hidden={reviewOpen}>
       <div className="novel-editor-page-heading">第 {chapter?.chapter_number ?? '–'} 章</div>
       <textarea aria-label="小说原文" value={document.text} disabled={!chapter || busy} onChange={event => { setDocument(current => ({ ...current, text: event.target.value })); }} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (dirty) void save(); } }} placeholder="在这里开始你的故事，或粘贴已有正文。需要协助时，打开右侧 AI 助手。" className="novel-editor-textarea" />

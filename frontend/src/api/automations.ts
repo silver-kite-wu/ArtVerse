@@ -10,7 +10,7 @@ export interface AutomationSchedule {
   timezone: string;
   weekdays?: number[] | null;
 }
-export interface AutomationPayload {
+interface AutomationPayload {
   version?: number;
   storyId?: number;
   chapterId?: number;
@@ -48,7 +48,7 @@ export interface AutomationCommandProposal {
   expectedVersion: number | null; definition: AutomationDefinition; result: AutomationPlan | null;
   applied: boolean; expiresAt: string; reviewUrl: string;
 }
-export interface AutomationCommandPage { items: AutomationCommandProposal[]; nextCursor: string | null; hasMore: boolean }
+interface AutomationCommandPage { items: AutomationCommandProposal[]; nextCursor: string | null; hasMore: boolean }
 export interface AutomationRun {
   id: string; automationId: string; automationVersion: number; triggerKind: 'SCHEDULED' | 'MANUAL';
   scheduledFor: string; definition: AutomationDefinition;
@@ -56,12 +56,12 @@ export interface AutomationRun {
   attemptCount: number; summary: string | null; errorCode: string | null; errorMessage: string | null;
   waitingReason: string | null; createdAt: string; startedAt: string | null; completedAt: string | null;
 }
-export interface AutomationExecution {
+interface AutomationExecution {
   id: number; targetKey: string; executionKind: AutomationExecutorKey;
   agentRunId: number | null; scheduledMangaId: string | null; imageRecordId: number | null;
   conversationId: string | null; requestId: string | null;
 }
-export interface AutomationEvent { id: number; type: string; payload: { summary?: string; code?: string }; createdAt: string }
+interface AutomationEvent { id: number; type: string; payload: { summary?: string; code?: string }; createdAt: string }
 export interface AutomationRunDetail { run: AutomationRun; executions: AutomationExecution[]; events: AutomationEvent[]; artifacts?: AutomationArtifact[]; reviewReceipt?: { artifact_id: string; status: 'COMMITTED' | 'REJECTED' }; userInputRequest?: AgentUserInputRequest & { artifactId?: string } }
 export interface AutomationArtifact { kind: string; id: string; title: string; url?: string; content?: string; state?: string; imageNumber?: number; error?: string; review?: { chapterId: number; conversationId: string; requestId: string; baseVersion: number; currentVersion: number; contentHash: string; originalContent: string } }
 export interface AutomationNotification { id: number; runId: string; name: string; kind: string; summary: string; read: boolean; createdAt: string }
@@ -91,12 +91,16 @@ export const getAutomation = (id: string) => request<AutomationPlan>(`automation
 export const saveAutomation = (definition: AutomationDefinition, id?: string, key = randomUUID()) => request<AutomationPlan>(id ? `automations/${id}` : 'automations', id ? 'PATCH' : 'POST', definition, key);
 export const previewAutomation = (schedule: AutomationSchedule) => request<{ occurrences: { instant: string; localTime: string }[] }>('automations/schedule-preview', 'POST', { schedule });
 export const changeAutomation = (plan: AutomationPlan, action: 'pause' | 'resume' | 'archive') => request<AutomationPlan>(`automations/${plan.id}/${action}`, 'POST', { expectedVersion: plan.version });
+export const deleteAutomation = (plan: AutomationPlan) => request<{ deleted: boolean }>(`automations/${plan.id}?expectedVersion=${plan.version}`, 'DELETE');
 export const runAutomationNow = (id: string, key: string) => request<AutomationRun>(`automations/${id}/run-now`, 'POST', undefined, key);
 export const listAutomationRuns = (id: string, before?: string) => request<{ items: AutomationRun[] }>(`automations/${id}/runs${before ? `?before=${before}` : ''}`);
 export const getAutomationRun = (id: string) => request<AutomationRunDetail>(`automation-runs/${id}`);
 export const actOnAutomationRun = (id: string, action: 'cancel' | 'retry' | 'respond', key: string, response?: unknown) => request<AutomationRun>(`automation-runs/${id}/${action}`, 'POST', response, key);
 export const listAutomationNotifications = () => request<{ items: AutomationNotification[] }>('automation-notifications');
 export const readAutomationNotification = (id: number) => request(`automation-notifications/${id}/read`, 'POST');
+export const readAllAutomationNotifications = () => request<{ updated: number }>('automation-notifications/read-all', 'POST');
+export const deleteAutomationNotification = (id: number) => request<{ deleted: boolean }>(`automation-notifications/${id}`, 'DELETE');
+export const clearAutomationNotifications = () => request<{ deleted: number }>('automation-notifications', 'DELETE');
 export async function uploadAutomationReference(file: File): Promise<string> {
   const body = new FormData(); body.append('file', file);
   const res = await authFetch('/api/automations/references', { method: 'POST', body });

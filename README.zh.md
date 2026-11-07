@@ -200,6 +200,7 @@ npm run dev
 | `ARTVERSE_MAIL_ENABLED` | 是否启用邮件验证码功能 | `true` |
 | `ARTVERSE_AUTH_COOKIE_SECURE` | HTTPS 环境下置为 `true` | `false` |
 | `ARTVERSE_AUTH_CHALLENGE_MODE` | 图形验证码模式（`enforce` / 宽松模式） | `enforce` |
+| `ARTVERSE_DEV_MODE` | `true` = 本地开发（自动放行 localhost 来源并关闭 Secure Cookie）；`false` = 线上模式 | `false` |
 | `ARTVERSE_CORS_ORIGINS` | CSRF/CORS 允许的来源，逗号分隔（如 `http://<服务器IP>`） | `http://localhost:5173,http://127.0.0.1:5173` |
 
 ## 常用开发命令

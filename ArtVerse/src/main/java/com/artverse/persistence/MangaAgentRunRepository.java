@@ -5,6 +5,7 @@ import com.artverse.domain.MangaAgentRunStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -62,4 +63,11 @@ public interface MangaAgentRunRepository extends JpaRepository<MangaAgentRun, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select run from MangaAgentRun run where run.id = :id")
     Optional<MangaAgentRun> findForUpdateById(@Param("id") Long id);
+
+    /**
+     * 只更新 updated_at，避免整行 UPDATE 与并发中的等待/执行权事务产生丢失更新。
+     */
+    @Modifying
+    @Query("update MangaAgentRun run set run.updatedAt = :updatedAt where run.id = :id")
+    int touchUpdatedAt(@Param("id") Long id, @Param("updatedAt") OffsetDateTime updatedAt);
 }

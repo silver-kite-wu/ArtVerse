@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -11,6 +12,7 @@ import com.artverse.application.workflow.MangaRouteSource;
 import com.artverse.application.workflow.MangaWorkflowRoute;
 
 @Entity
+@DynamicUpdate
 @Table(
         name = "manga_agent_runs",
         uniqueConstraints = @UniqueConstraint(name = "uk_manga_agent_runs_user_request", columnNames = {"user_id", "request_id"})

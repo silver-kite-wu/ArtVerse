@@ -1727,7 +1727,9 @@ public class MangaAgentRunService {
         event.setStatus(asString(payload.get("status")));
         event.setPayloadJson(toJson(payload));
         eventRepository.save(event);
-        attachedRun.setUpdatedAt(OffsetDateTime.now());
+        // 仅递增 updated_at，禁止整行回写：流式事件与本行事务存在并发，
+        // 整行 UPDATE 会用旧快照覆盖 waiting 状态或执行权字段。
+        runRepository.touchUpdatedAt(run.getId(), OffsetDateTime.now());
         return event.getId();
     }
 

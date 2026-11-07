@@ -113,6 +113,17 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   const titleState = conversation?.titleState;
 
   useEffect(() => {
+    if (!historyOpen) return;
+    const close = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.closest('[data-history-trigger]') && !target?.closest('[data-history-panel]')) setHistoryOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setHistoryOpen(false); };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', closeOnEscape); };
+  }, [historyOpen]);
+  useEffect(() => {
     const selected = conversation?.conversationId;
     if (!chapterId || !selected) return;
     let current = true;
@@ -181,12 +192,13 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
     let current = true;
     if (!chapterId) return () => { current = false; };
     // Reuse initialization when StrictMode replays effects, including first-conversation creation.
+    // 历史里可能只有定时任务的只读会话，此时仍需为正常对话新建一个活跃会话。
     initialConversationsRef.current ??= listAiConversations('STORY_CHAT', chapterId)
-      .then(async (items) => items.length ? items : [await createAiConversation('STORY_CHAT', undefined, chapterId)]);
+      .then(async (items) => items.some((item) => item.status === 'ACTIVE') ? items : [await createAiConversation('STORY_CHAT', undefined, chapterId), ...items]);
     void initialConversationsRef.current
       .then(async (items) => {
         if (!current) return;
-        const selected = items[0];
+        const selected = items.find((item) => item.status === 'ACTIVE') ?? items[0];
         const history = await listStoryChatMessages(chapterId, selected.conversationId);
         if (!current) return;
         setConversations(items);
@@ -609,7 +621,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !chapter || !conversation || busy || conversationLoading || sendingRef.current || requestRef.current || pendingDraft || pendingQuestion) return;
+    if (!input.trim() || !chapter || !conversation || conversation.status === 'ARCHIVED' || busy || conversationLoading || sendingRef.current || requestRef.current || pendingDraft || pendingQuestion) return;
     const text = input.trim();
     const requestId = randomUUID();
     const generation = lifecycleRef.current;
@@ -649,7 +661,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
     streamingChapterIdRef.current = chapter.id;
     void (async () => {
       const activeConversation = conversation
-        ?? (await listAiConversations('STORY_CHAT', chapter.id).then((items) => items[0] ?? null))
+        ?? (await listAiConversations('STORY_CHAT', chapter.id).then((items) => items.find((item) => item.status === 'ACTIVE') ?? items[0] ?? null))
         ?? await createAiConversation('STORY_CHAT', undefined, chapter.id);
       setConversation(activeConversation);
       if (!mountedRef.current || requestRef.current !== requestId) return;
@@ -784,6 +796,8 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
     finally { if (mountedRef.current && conversationRef.current === selected) setConversationLoading(false); }
   };
 
+  const archivedConversation = conversation?.status === 'ARCHIVED';
+
   return <div className="story-chat-panel relative flex h-full min-h-0 min-w-0 flex-col bg-bg-base">
     <div className="story-chat-toolbar relative z-20 shrink-0 border-b border-border px-3 py-3">
       <div className="flex min-w-0 items-center gap-2">
@@ -795,13 +809,13 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
           }} /> : <span className="text-sm font-semibold text-text-primary">新会话</span>}
         </div>
         <button type="button" onClick={() => void handleNewConversation()} disabled={!chapter || streaming || preparing || !!pendingDraft || conversationLoading} className="story-chat-icon-button" title="新建对话" aria-label="新建对话"><MessageSquarePlus size={16} /></button>
-        <button type="button" onClick={() => setHistoryOpen((value) => !value)} disabled={!chapter || busy || conversationLoading || !!pendingDraft} className="story-chat-icon-button relative" title="查看历史对话" aria-label="查看历史对话" aria-expanded={historyOpen}><History size={16} />{conversations.length > 1 && <span className="story-chat-history-count">{Math.min(conversations.length, 99)}</span>}</button>
+        <button type="button" data-history-trigger onClick={() => setHistoryOpen((value) => !value)} disabled={!chapter || busy || conversationLoading || !!pendingDraft} className="story-chat-icon-button relative" title="查看历史对话" aria-label="查看历史对话" aria-expanded={historyOpen}><History size={16} />{conversations.length > 1 && <span className="story-chat-history-count">{Math.min(conversations.length, 99)}</span>}</button>
       </div>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-text-muted">
         <span className="rounded-full bg-bg-surface px-2 py-1">第 {chapter?.chapter_number ?? '–'} 章</span>
         <span className="truncate">AI 修改需确认后写入正文</span>
       </div>
-      {historyOpen && <div className="story-chat-history-panel" role="dialog" aria-label="历史对话">
+      {historyOpen && <div className="story-chat-history-panel" data-history-panel role="dialog" aria-label="历史对话">
         <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5">
           <div><p className="text-xs font-semibold text-text-primary">历史对话</p><p className="mt-0.5 text-[10px] text-text-muted">当前章节 · {conversations.length} 个会话</p></div>
           <button type="button" onClick={() => void handleNewConversation()} disabled={busy || conversationLoading || !!pendingDraft} className="inline-flex items-center gap-1 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"><MessageSquarePlus size={13} />新建</button>
@@ -809,7 +823,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
         <div className="max-h-72 overflow-y-auto p-2">
           {conversations.map((item) => <div key={item.conversationId} className={'story-chat-history-item ' + (item.conversationId === conversation?.conversationId ? 'is-active' : '')}>
             <button type="button" disabled={busy || conversationLoading || !!pendingDraft} onClick={() => void handleSelectConversation(item)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{item.title || '新会话'}</span><span className="mt-1 flex items-center gap-1 text-[10px] text-text-muted"><Clock3 size={10} />{formatConversationTime(item.lastActivityAt)}</span></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{item.title || '新会话'}</span><span className="mt-1 flex items-center gap-1 text-[10px] text-text-muted"><Clock3 size={10} />{formatConversationTime(item.lastActivityAt)}{item.automationRun && <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] font-medium text-accent">定时任务</span>}</span></span>
             {item.conversationId === conversation?.conversationId && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
             </button>
             <button type="button" disabled={busy || conversationLoading || !!pendingDraft} onClick={() => void handleDeleteConversation(item)} aria-label={`删除会话：${item.title || '新会话'}`} title="删除会话" className="shrink-0 rounded-lg p-2 text-text-muted hover:bg-red-500/10 hover:text-red-500 disabled:opacity-40"><Trash2 size={14} /></button>
@@ -836,13 +850,13 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
     </div>
     <div className="ai-composer__footer--chat">
       <div className="ai-composer ai-composer--chat">
-        <textarea ref={textareaRef} value={input} onChange={(event) => { setInput(event.target.value); autoResize(event.target); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); handleSend(); } }} aria-label="AI 修改要求" disabled={preparing || !!pendingQuestion} placeholder={pendingQuestion ? '请先回复上方问题' : '聊聊剧情，或描述你想修改的内容…'} rows={3} className="ai-composer__input" />
+        <textarea ref={textareaRef} value={input} onChange={(event) => { setInput(event.target.value); autoResize(event.target); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); handleSend(); } }} aria-label="AI 修改要求" disabled={preparing || !!pendingQuestion || archivedConversation} placeholder={archivedConversation ? '定时任务会话为只读，请到任务中心查看本次执行记录' : pendingQuestion ? '请先回复上方问题' : '聊聊剧情，或描述你想修改的内容…'} rows={3} className="ai-composer__input" />
         <div className="ai-composer__toolbar">
           <ModelSwitcher capability="llm" selectedModel={selectedLlmModel} onSelect={setSelectedLlmModel} disabled={streaming || preparing || !!pendingDraft?.busy} />
-          {busy ? <button type="button" onClick={handleAbort} disabled={!task.accepted || !!pendingDraft?.busy} className="ai-composer__send" title={preparing ? '正在保存正文，请稍候' : !task.accepted ? '正在连接助手，请稍候' : pendingDraft?.busy ? '正在处理修改，请稍候' : '停止生成'} aria-label={preparing ? '正在保存正文' : !task.accepted ? '正在连接助手' : pendingDraft?.busy ? '正在处理修改' : '停止生成'}><Square size={14} /></button> : <button type="button" onClick={handleSend} disabled={!chapter || !conversation || !input.trim() || conversationLoading || !!pendingDraft || !!pendingQuestion} className="ai-composer__send" title="发送消息" aria-label="发送消息"><ArrowUp size={17} /></button>}
+          {busy ? <button type="button" onClick={handleAbort} disabled={!task.accepted || !!pendingDraft?.busy} className="ai-composer__send" title={preparing ? '正在保存正文，请稍候' : !task.accepted ? '正在连接助手，请稍候' : pendingDraft?.busy ? '正在处理修改，请稍候' : '停止生成'} aria-label={preparing ? '正在保存正文' : !task.accepted ? '正在连接助手' : pendingDraft?.busy ? '正在处理修改' : '停止生成'}><Square size={14} /></button> : <button type="button" onClick={handleSend} disabled={!chapter || !conversation || !input.trim() || conversationLoading || !!pendingDraft || !!pendingQuestion || archivedConversation} className="ai-composer__send" title="发送消息" aria-label="发送消息"><ArrowUp size={17} /></button>}
         </div>
       </div>
-      <p className="ai-composer__caption">{pendingDraft ? '请先审阅并处理本次修改' : 'Enter 发送 · Shift + Enter 换行'}</p>
+      <p className="ai-composer__caption">{archivedConversation ? '定时任务会话只读 · 结果可在任务中心「执行记录」查看' : pendingDraft ? '请先审阅并处理本次修改' : 'Enter 发送 · Shift + Enter 换行'}</p>
     </div>
   </div>;
 }

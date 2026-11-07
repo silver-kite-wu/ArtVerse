@@ -53,7 +53,14 @@ public class AiConversationService {
         if (chapterId == null) throw new BusinessException(400, "chapterId is required for this conversation type");
         chapterAccessService.requireVisible(chapterId, user.getId());
         return repository.findByUserIdAndChapterIdAndConversationTypeOrderByLastActivityAtDesc(user.getId(), chapterId, type)
-                .stream().filter(c -> includeArchived || c.getStatus() == MangaAgentConversationStatus.ACTIVE).toList();
+                .stream().filter(c -> includeArchived || c.getStatus() == MangaAgentConversationStatus.ACTIVE
+                        || isAutomationRun(c)).toList();
+    }
+
+    /** 定时任务每次运行建立独立会话；它虽然是 ARCHIVED（不参与默认选中），仍要能在章节历史里被找到。 */
+    public static boolean isAutomationRun(MangaAgentConversation conversation) {
+        String key = conversation.getLegacyImportKey();
+        return key != null && key.startsWith("automation:");
     }
 
     @Transactional

@@ -68,6 +68,10 @@ spring:
           writetimeout: 5000
 
 artverse:
+  # 运行模式总开关：true = 本地开发，false = 线上
+  # 本地开发：自动放行 localhost:5173 / 127.0.0.1:5173 来源，并强制关闭 Secure Cookie
+  # 线上：仅使用 ARTVERSE_CORS_ORIGINS 白名单与 ARTVERSE_AUTH_COOKIE_SECURE 配置
+  dev-mode: ${ARTVERSE_DEV_MODE:false}
   image-queue:
     producer-enabled: ${ARTVERSE_IMAGE_PRODUCER_ENABLED:false}
     worker-enabled: ${ARTVERSE_IMAGE_WORKER_ENABLED:false}
@@ -198,8 +202,8 @@ artverse:
     director-root-max-tool-calls: 64
     text-max-model-calls: 4
     text-max-tool-calls: 2
-    story-chat-read-max-model-calls: 4
-    story-chat-read-max-tool-calls: 8
+    story-chat-read-max-model-calls: 8
+    story-chat-read-max-tool-calls: 16
     story-chat-write-max-model-calls: 8
     story-chat-write-max-tool-calls: 12
     # 256K total context: max-input-tokens + max-output-tokens.

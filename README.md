@@ -198,6 +198,7 @@ The frontend dev server runs at `http://localhost:5173`, with CORS pre-configure
 | `ARTVERSE_MAIL_ENABLED` | Enable email verification codes | `true` |
 | `ARTVERSE_AUTH_COOKIE_SECURE` | Set to `true` behind HTTPS | `false` |
 | `ARTVERSE_AUTH_CHALLENGE_MODE` | Captcha mode (`enforce` / relaxed) | `enforce` |
+| `ARTVERSE_DEV_MODE` | `true` = local development (adds localhost origins, disables Secure cookies); `false` = online mode | `false` |
 | `ARTVERSE_CORS_ORIGINS` | Comma-separated origins allowed by CSRF/CORS (for example `http://<server-ip>`) | `http://localhost:5173,http://127.0.0.1:5173` |
 
 ## Development Commands

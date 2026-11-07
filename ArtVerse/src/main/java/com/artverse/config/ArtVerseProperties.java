@@ -1,16 +1,26 @@
 package com.artverse.config;
 
+import jakarta.annotation.PostConstruct;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Data
 @Component
 @ConfigurationProperties(prefix = "artverse")
 public class ArtVerseProperties {
 
+    /** 本地开发模式下固定放行的前端来源，避免本地 .env 里的线上域名配置拦截本地测试 */
+    private static final List<String> LOCAL_DEV_CORS_ORIGINS =
+            List.of("http://localhost:5173", "http://127.0.0.1:5173");
+
+    /** true = 本地开发模式；false = 线上模式 */
+    private boolean devMode = false;
     private List<String> corsOrigins = List.of("http://localhost:5173", "http://127.0.0.1:5173");
     private Storage storage = new Storage();
     private Upload upload = new Upload();
@@ -30,6 +40,30 @@ public class ArtVerseProperties {
     private Agent agent = new Agent();
     private Secrets secrets = new Secrets();
     private Auth auth = new Auth();
+
+    /**
+     * 模式开关（ARTVERSE_DEV_MODE）：true = 本地开发，false = 线上。
+     * 本地开发下强制追加 localhost 来源并关闭 Secure Cookie，避免线上 .env 配置拦截本地测试；
+     * 线上模式保持 .env 中显式配置的来源与 Cookie 安全策略。
+     */
+    @PostConstruct
+    void applyDevModeSettings() {
+        if (!devMode) {
+            log.info("ArtVerse running in online mode (ARTVERSE_DEV_MODE=false): origins={}, secureCookie={}",
+                    corsOrigins, auth.getCookie().isSecure());
+            return;
+        }
+        List<String> merged = new ArrayList<>(corsOrigins == null ? List.of() : corsOrigins);
+        for (String origin : LOCAL_DEV_CORS_ORIGINS) {
+            if (!merged.contains(origin)) {
+                merged.add(origin);
+            }
+        }
+        corsOrigins = List.copyOf(merged);
+        auth.getCookie().setSecure(false);
+        log.warn("ArtVerse running in local development mode (ARTVERSE_DEV_MODE=true): origins={}, secureCookie=false. "
+                + "Set ARTVERSE_DEV_MODE=false before deploying to the server.", corsOrigins);
+    }
 
     @Data
     public static class Storage {
@@ -221,8 +255,8 @@ public class ArtVerseProperties {
         private int directorRootMaxToolCalls = 64;
         private int textMaxModelCalls = 4;
         private int textMaxToolCalls = 2;
-        private int storyChatReadMaxModelCalls = 4;
-        private int storyChatReadMaxToolCalls = 8;
+        private int storyChatReadMaxModelCalls = 8;
+        private int storyChatReadMaxToolCalls = 16;
         private int storyChatWriteMaxModelCalls = 8;
         private int storyChatWriteMaxToolCalls = 12;
         private int maxInputTokens = 224_000;

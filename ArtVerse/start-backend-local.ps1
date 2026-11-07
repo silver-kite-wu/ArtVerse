@@ -13,8 +13,7 @@ if (Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyCont
 # Run from this script's directory so Spring can resolve ../.env consistently.
 $backendDirectory = $PSScriptRoot
 $localOverrides = @{
-    ARTVERSE_CORS_ORIGINS = 'http://localhost:5173,http://127.0.0.1:5173'
-    ARTVERSE_AUTH_COOKIE_SECURE = 'false'
+    ARTVERSE_DEV_MODE = 'true'
     SPRING_PROFILES_ACTIVE = 'local'
 }
 if ($RedisHost) {
@@ -49,7 +48,7 @@ try {
     foreach ($name in $localOverrides.Keys) {
         [Environment]::SetEnvironmentVariable($name, $localOverrides[$name], 'Process')
     }
-    Write-Host 'Starting local HTTP backend on port 8080 (local profile, localhost:5173 origins, CSRF enforced).'
+    Write-Host 'Starting local HTTP backend on port 8080 (ARTVERSE_DEV_MODE=true: localhost origins, insecure cookies, CSRF enforced).'
     & mvn '-Dspring-boot.run.jvmArguments=-Dfile.encoding=UTF-8' `
         '-Dspring-boot.run.arguments=--artverse.auth.csrf.mode=enforce' spring-boot:run
     if ($LASTEXITCODE -ne 0) {

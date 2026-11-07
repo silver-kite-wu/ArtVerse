@@ -3,8 +3,10 @@ package com.artverse.config;
 import cn.dev33.satoken.context.SaHolder;
 import cn.dev33.satoken.interceptor.SaInterceptor;
 import cn.dev33.satoken.stp.StpUtil;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
@@ -55,6 +57,25 @@ public class SaTokenConfig implements WebMvcConfigurer {
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(10);
+    }
+
+    /**
+     * 本地开发模式（ARTVERSE_DEV_MODE=true）下强制关闭 Sa-Token 会话 Cookie 的 Secure 属性，
+     * 否则纯 HTTP 访问（尤其是局域网 IP）时浏览器不会保存 satoken Cookie，登录状态无法维持。
+     * 线上模式完全沿用 application.yml 中 sa-token.cookie.secure 的配置。
+     */
+    @Bean
+    static BeanPostProcessor saTokenDevModeCookieCustomizer(Environment environment) {
+        boolean devMode = environment.getProperty("artverse.dev-mode", Boolean.class, false);
+        return new BeanPostProcessor() {
+            @Override
+            public Object postProcessAfterInitialization(Object bean, String beanName) {
+                if (devMode && bean instanceof cn.dev33.satoken.config.SaTokenConfig config) {
+                    config.getCookie().setSecure(false);
+                }
+                return bean;
+            }
+        };
     }
 
     @Bean

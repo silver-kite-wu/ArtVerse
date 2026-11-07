@@ -28,6 +28,7 @@ import {
   type SquareStoryDetail,
 } from '../api';
 import { useTheme } from '../hooks/useTheme';
+import Switch from '../ui/Switch';
 
 const PAGE_SIZE = 12;
 
@@ -193,8 +194,10 @@ export default function SquarePage() {
     go(fallback, true);
   }, [route]);
 
+  // 列表页不要用 key 重新挂载：分类/翻页/搜索只应刷新列表数据，
+  // 整页重挂会丢失滚动位置、重放 Hero 动画并让封面重新加载，看起来像整页刷新。
   return route.kind === 'list'
-    ? <SquareList key={`${route.format}:${route.page}:${route.query}`} route={route} />
+    ? <SquareList route={route} />
     : <StoryView key={`${route.format}:${route.storyId}`} route={route} onBackToSquare={backToList} />;
 }
 
@@ -202,38 +205,38 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
   const [stories, setStories] = useState<SquareStory[]>([]);
   const [facets, setFacets] = useState<Record<SquareFormat, number>>({ all: 0, novel: 0, manga: 0 });
   const [totalPages, setTotalPages] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [input, setInput] = useState(route.query);
+  // 已完成的请求对应的路由标识：与当前路由不一致即处于加载中，避免在 effect 里同步 setState。
+  const [loadedKey, setLoadedKey] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
+  const requestRef = useRef(0);
 
-  const load = useCallback(async () => {
-    try {
-      const data = await listSquareStories(route.page, PAGE_SIZE, route.query || undefined, route.format);
-      setStories(data.content);
-      setTotalPages(data.total_pages);
-      setFacets(data.facets);
-    } catch {
-      setError('作品加载失败，请检查网络后重试。');
-    } finally {
-      setLoading(false);
-    }
-  }, [route]);
+  const routeKey = `${route.format}:${route.page}:${route.query}`;
+  const loading = loadedKey !== routeKey;
 
   useEffect(() => {
+    // 只让最后一次请求落地，避免快速切换分类时旧响应覆盖新列表。
+    const requestId = ++requestRef.current;
     let active = true;
     listSquareStories(route.page, PAGE_SIZE, route.query || undefined, route.format)
       .then((data) => {
-        if (!active) return;
+        if (!active || requestRef.current !== requestId) return;
         setStories(data.content);
         setTotalPages(data.total_pages);
         setFacets(data.facets);
+        setError('');
       })
       .catch(() => {
-        if (active) setError('作品加载失败，请检查网络后重试。');
+        if (!active || requestRef.current !== requestId) return;
+        setError('作品加载失败，请检查网络后重试。');
       })
-      .finally(() => { if (active) setLoading(false); });
+      .finally(() => {
+        if (!active || requestRef.current !== requestId) return;
+        setLoadedKey(routeKey);
+      });
     return () => { active = false; };
-  }, [route.format, route.page, route.query]);
+  }, [route.format, route.page, route.query, routeKey, reloadToken]);
 
   const switchFormat = (format: ContentFormat) => go({ kind: 'list', format, page: 0, query: route.query });
   const activeLabel = formatLabel(route.format);
@@ -322,13 +325,20 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
               ))}
             </div>
           ) : error ? (
-            <Empty icon={<Compass size={42} />} text={error} action="重试" onAction={() => { setLoading(true); setError(''); void load(); }} />
+            <Empty icon={<Compass size={42} />} text={error} action="重试" onAction={() => { setLoadedKey(''); setReloadToken((n) => n + 1); }} />
           ) : stories.length === 0 ? (
             <Empty
               icon={<Search size={42} />}
               text={route.query ? `没有找到符合条件的${activeLabel}，换个关键词试试。` : `这里的故事正等待被写下，成为第一位分享${activeLabel}的创作者。`}
               action={route.query ? '清除搜索' : '开始创作'}
-              onAction={() => route.query ? go({ kind: 'list', format: route.format, page: 0, query: '' }) : window.location.assign('#/workspace')}
+              onAction={() => {
+                if (route.query) {
+                  setInput('');
+                  go({ kind: 'list', format: route.format, page: 0, query: '' });
+                  return;
+                }
+                window.location.assign('#/workspace');
+              }}
             />
           ) : (
             <>
@@ -840,7 +850,7 @@ function Reader({
   const [lineHeight, setLineHeight] = useState(savedState.lineHeight ?? 1.8);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMode, setChatMode] = useState<ReaderCharacterChatMode>(readReaderCharacterChatMode);
-  const { mode, toggleMode } = useTheme();
+  const { mode, setMode } = useTheme();
 
   const changeChatMode = (nextMode: ReaderCharacterChatMode) => {
     setChatMode(nextMode);
@@ -979,16 +989,16 @@ function Reader({
                 {[1.6, 1.8, 2.0, 2.2, 2.4].map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
-            <button
-              className="fanqie-setting-field cursor-pointer hover:border-accent transition"
-              onClick={toggleMode}
-              aria-label="切换日间/夜间模式"
-            >
-              <span>主题</span>
-              <span className="text-text-primary text-xs">
-                {mode === 'light' ? '☀️ 日间' : '🌙 夜间'}
-              </span>
-            </button>
+            <div className="fanqie-setting-field">
+              <span>深色模式</span>
+              <Switch
+                className="ml-auto"
+                checked={mode === 'dark'}
+                onChange={(checked, origin) => setMode(checked ? 'dark' : 'light', origin)}
+                ariaLabel={mode === 'dark' ? '关闭深色模式' : '开启深色模式'}
+                size="sm"
+              />
+            </div>
           </div>
         </div>
       )}

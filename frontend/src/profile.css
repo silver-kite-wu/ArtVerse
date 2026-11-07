@@ -16,9 +16,12 @@
 .account-menu-links > button:hover { background: var(--studio-note-bg); color: var(--color-text-primary); }
 .account-appearance { padding: 7px 7px 14px; border-bottom: 1px solid var(--color-border); }
 .account-appearance legend { padding-top: 8px; font-size: 11px; color: var(--color-text-muted); }
-.account-appearance > div { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 4px; padding: 4px; margin-top: 5px; border-radius: 9px; background: var(--color-bg-base); }
-.account-appearance button { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 9px 2px; border: 1px solid transparent; border-radius: 7px; font-size: 10px; color: var(--color-text-secondary); }
-.account-appearance button[aria-pressed='true'] { border-color: var(--color-border-strong); background: var(--color-bg-surface); color: var(--color-text-primary); box-shadow: var(--shadow-xs); }
+.account-appearance-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 5px; border-radius: 9px; background: var(--color-bg-base); font-size: 12px; color: var(--color-text-secondary); }
+.account-appearance-row > svg { flex-shrink: 0; color: var(--color-text-muted); }
+.account-appearance-row > span { min-width: 0; flex: 1; }
+.account-appearance-system { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 12px; margin-top: 4px; border-radius: 8px; font-size: 11px; color: var(--color-text-muted); transition: background .16s, color .16s; }
+.account-appearance-system:hover { background: var(--color-bg-base); color: var(--color-text-primary); }
+.account-appearance-system[aria-pressed='true'] { color: var(--color-accent); }
 .account-logout { padding-bottom: 0; }
 .account-logout > button { color: var(--color-accent); }
 .account-trigger:focus-visible, .account-popover button:focus-visible, .profile-page button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }

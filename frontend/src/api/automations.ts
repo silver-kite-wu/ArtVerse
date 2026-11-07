@@ -91,12 +91,16 @@ export const getAutomation = (id: string) => request<AutomationPlan>(`automation
 export const saveAutomation = (definition: AutomationDefinition, id?: string, key = randomUUID()) => request<AutomationPlan>(id ? `automations/${id}` : 'automations', id ? 'PATCH' : 'POST', definition, key);
 export const previewAutomation = (schedule: AutomationSchedule) => request<{ occurrences: { instant: string; localTime: string }[] }>('automations/schedule-preview', 'POST', { schedule });
 export const changeAutomation = (plan: AutomationPlan, action: 'pause' | 'resume' | 'archive') => request<AutomationPlan>(`automations/${plan.id}/${action}`, 'POST', { expectedVersion: plan.version });
+export const deleteAutomation = (plan: AutomationPlan) => request<{ deleted: boolean }>(`automations/${plan.id}?expectedVersion=${plan.version}`, 'DELETE');
 export const runAutomationNow = (id: string, key: string) => request<AutomationRun>(`automations/${id}/run-now`, 'POST', undefined, key);
 export const listAutomationRuns = (id: string, before?: string) => request<{ items: AutomationRun[] }>(`automations/${id}/runs${before ? `?before=${before}` : ''}`);
 export const getAutomationRun = (id: string) => request<AutomationRunDetail>(`automation-runs/${id}`);
 export const actOnAutomationRun = (id: string, action: 'cancel' | 'retry' | 'respond', key: string, response?: unknown) => request<AutomationRun>(`automation-runs/${id}/${action}`, 'POST', response, key);
 export const listAutomationNotifications = () => request<{ items: AutomationNotification[] }>('automation-notifications');
 export const readAutomationNotification = (id: number) => request(`automation-notifications/${id}/read`, 'POST');
+export const readAllAutomationNotifications = () => request<{ updated: number }>('automation-notifications/read-all', 'POST');
+export const deleteAutomationNotification = (id: number) => request<{ deleted: boolean }>(`automation-notifications/${id}`, 'DELETE');
+export const clearAutomationNotifications = () => request<{ deleted: number }>('automation-notifications', 'DELETE');
 export async function uploadAutomationReference(file: File): Promise<string> {
   const body = new FormData(); body.append('file', file);
   const res = await authFetch('/api/automations/references', { method: 'POST', body });

@@ -219,6 +219,36 @@ class AgentAutomationClaimIntegrationTest {
         } finally { release.countDown(); pool.shutdownNow(); }
     }
 
+    @Test void appendingARunEventMustNotRevertAConcurrentWaitingTransition() throws Exception {
+        var f = fixture(); bind(f);
+        var stale = tx().execute(status -> em.find(MangaAgentRun.class, f.childId()));
+        var locked = new CountDownLatch(1); var release = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        try {
+            var waiting = pool.submit(() -> tx().executeWithoutResult(status -> {
+                jdbc.queryForObject("SELECT id FROM manga_agent_runs WHERE id=? FOR UPDATE", Long.class, f.childId());
+                jdbc.update("UPDATE manga_agent_runs SET status='WAITING_USER', user_input_request_json=? WHERE id=?",
+                        "{\"question\":\"继续吗\"}", f.childId());
+                jdbc.update("UPDATE manga_agent_runs SET run_attributes_json=jsonb_set("
+                                + "run_attributes_json,'{waiting_execution_claim}',?::jsonb) WHERE id=?",
+                        "{\"owner\":\"" + f.child().owner() + "\",\"fencing_token\":" + f.child().fencingToken() + "}",
+                        f.childId());
+                locked.countDown(); await(release);
+            }));
+            assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+            var append = pool.submit(() -> runs.appendEvent(stale, "run_event", Map.of("type", "reply")));
+            assertThatThrownBy(() -> append.get(250, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+            release.countDown(); waiting.get(5, TimeUnit.SECONDS); append.get(5, TimeUnit.SECONDS);
+            assertThat(jdbc.queryForObject("SELECT status FROM manga_agent_runs WHERE id=?", String.class, f.childId()))
+                    .isEqualTo("WAITING_USER");
+            assertThat(jdbc.queryForObject("SELECT user_input_request_json FROM manga_agent_runs WHERE id=?",
+                    String.class, f.childId())).isEqualTo("{\"question\":\"继续吗\"}");
+            assertThat(jdbc.queryForObject("SELECT run_attributes_json->'waiting_execution_claim'->>'owner' "
+                            + "FROM manga_agent_runs WHERE id=?", String.class, f.childId()))
+                    .isEqualTo(f.child().owner());
+        } finally { release.countDown(); pool.shutdownNow(); }
+    }
+
     private void bind(Fixture f) { runs.bindAutomationExecutionClaim(f.conversation(), f.request(), f.child(), f.parent()); }
     private void finish(Fixture f) { finalizer.finalizeResult(f.conversation(), f.request(), MangaWorkflowRoute.CONVERSATION, MangaWorkflowResult.success("verified reply"), f.child()); }
     private long messageCount(Fixture f) { return jdbc.queryForObject("SELECT count(*) FROM manga_agent_messages WHERE request_id=?", Long.class, f.request()); }

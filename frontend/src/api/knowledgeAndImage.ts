@@ -126,6 +126,8 @@ export interface AiConversationSummary {
   status: 'ACTIVE' | 'ARCHIVED';
   chapterId: number | null;
   lastActivityAt: string;
+  /** 该会话由定时任务运行创建（每次运行一个独立会话，默认 ARCHIVED 只读）。 */
+  automationRun?: boolean;
 }
 
 export async function listAiConversations(type: AiConversationSummary['type'], chapterId?: number): Promise<AiConversationSummary[]> {

@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-label="ArtVerse system architecture">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8A9A8F"/>
+    </marker>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F8F4E9"/>
+      <stop offset="1" stop-color="#F2EEE2"/>
+    </linearGradient>
+    <style>
+      text { font-family: 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif; }
+      .title { font-size: 27px; font-weight: 700; fill: #14261F; }
+      .subtitle { font-size: 13px; fill: #5C6B63; letter-spacing: 0.4px; }
+      .card { fill: #FFFDF6; stroke: #DCD5C4; stroke-width: 1; }
+      .band { fill: #143A2E; }
+      .bandText { font-size: 13px; font-weight: 700; fill: #FBF7EC; letter-spacing: 1.4px; }
+      .item { font-size: 12.5px; fill: #33433B; }
+      .sub { font-size: 11.5px; fill: #6E7C73; }
+      .edge { font-size: 11px; fill: #7E8C83; letter-spacing: 0.3px; }
+      .dataLabel { font-size: 12.5px; font-weight: 700; fill: #143A2E; }
+      .dataSub { font-size: 10.8px; fill: #6E7C73; }
+      .pill { fill: #F3E7DA; stroke: #DCC8B2; }
+      .pillText { font-size: 10.5px; fill: #9A4E33; letter-spacing: 0.4px; }
+      .dot { fill: #C25B3F; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="600" fill="url(#bg)"/>
+  <circle cx="1140" cy="66" r="3" fill="#C25B3F" opacity="0.55"/>
+  <circle cx="1160" cy="92" r="2" fill="#7C9A76" opacity="0.6"/>
+  <circle cx="1118" cy="104" r="1.8" fill="#C25B3F" opacity="0.35"/>
+
+  <text x="48" y="56" class="title">ArtVerse · System Architecture</text>
+  <text x="48" y="82" class="subtitle">One continuous pipeline from story setup to published work · 从故事设定到作品发布的一体化链路</text>
+
+  <!-- Client -->
+  <g>
+    <rect x="48" y="120" width="250" height="190" rx="14" class="card"/>
+    <path d="M 48 134 a 14 14 0 0 1 14 -14 h 222 a 14 14 0 0 1 14 14 v 26 h -250 z" class="band"/>
+    <text x="66" y="152" class="bandText">CLIENT · 客户端</text>
+    <text x="66" y="190" class="item">React 19 · Vite · TypeScript</text>
+    <text x="66" y="216" class="item">故事工作区 Story workspace</text>
+    <text x="66" y="242" class="item">分镜 / 漫画 Storyboard &amp; manga</text>
+    <text x="66" y="268" class="item">作品广场与阅读器 Square &amp; reader</text>
+    <rect x="66" y="282" width="104" height="18" rx="9" class="pill"/>
+    <text x="76" y="295" class="pillText">SSE · live events</text>
+  </g>
+
+  <g>
+    <rect x="348" y="120" width="290" height="190" rx="14" class="card"/>
+    <path d="M 348 134 a 14 14 0 0 1 14 -14 h 262 a 14 14 0 0 1 14 14 v 26 h -290 z" class="band"/>
+    <text x="366" y="152" class="bandText">BACKEND · 服务端</text>
+    <text x="366" y="190" class="item">Spring Boot 3.3 · Java 21</text>
+    <text x="366" y="216" class="item">REST API · SSE streaming</text>
+    <text x="366" y="242" class="item">Sa-Token · CSRF · rate limit</text>
+    <text x="366" y="268" class="item">Media pipeline · object storage</text>
+    <rect x="366" y="282" width="126" height="18" rx="9" class="pill"/>
+    <text x="376" y="295" class="pillText">idempotent · guarded</text>
+  </g>
+
+  <g>
+    <rect x="688" y="120" width="260" height="190" rx="14" class="card"/>
+    <path d="M 688 134 a 14 14 0 0 1 14 -14 h 232 a 14 14 0 0 1 14 14 v 26 h -260 z" class="band"/>
+    <text x="706" y="152" class="bandText">AGENT · 智能体</text>
+    <text x="706" y="190" class="item">AgentScope Harness 2.0</text>
+    <text x="706" y="216" class="item">AG-UI event stream</text>
+    <text x="706" y="242" class="item">Chapter-scoped RAG · skills</text>
+    <text x="706" y="268" class="item">Human-in-the-loop resume</text>
+    <rect x="706" y="282" width="112" height="18" rx="9" class="pill"/>
+    <text x="716" y="295" class="pillText">watchdog · timeout</text>
+  </g>
+
+  <g>
+    <rect x="998" y="120" width="154" height="190" rx="14" class="card"/>
+    <path d="M 998 134 a 14 14 0 0 1 14 -14 h 126 a 14 14 0 0 1 14 14 v 26 h -154 z" class="band"/>
+    <text x="1016" y="152" class="bandText">MODELS · 模型</text>
+    <text x="1016" y="190" class="item">LLM APIs</text>
+    <text x="1016" y="216" class="item">Image generation</text>
+    <text x="1016" y="242" class="item">User-owned keys</text>
+    <text x="1016" y="268" class="sub" style="font-size:10.5px">加密存储 · encrypted</text>
+  </g>
+
+  <!-- arrows -->
+  <line x1="298" y1="215" x2="342" y2="215" stroke="#8A9A8F" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="300" y="206" class="edge">HTTPS</text>
+
+  <line x1="638" y1="215" x2="682" y2="215" stroke="#8A9A8F" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="640" y="206" class="edge">runs</text>
+
+  <line x1="948" y1="215" x2="992" y2="215" stroke="#8A9A8F" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="950" y="206" class="edge">tools</text>
+
+  <!-- data bus -->
+  <line x1="493" y1="310" x2="493" y2="352" stroke="#8A9A8F" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <line x1="173" y1="352" x2="1016" y2="352" stroke="#C9C2B1" stroke-width="1.2"/>
+  <g stroke="#8A9A8F" stroke-width="1.2" marker-end="url(#arrow)">
+    <line x1="173" y1="352" x2="173" y2="388"/>
+    <line x1="437" y1="352" x2="437" y2="388"/>
+    <line x1="716" y1="352" x2="716" y2="388"/>
+    <line x1="1016" y1="352" x2="1016" y2="388"/>
+  </g>
+  <text x="500" y="345" class="edge">JPA · Redis · object storage · SMTP</text>
+
+  <!-- data cards -->
+  <g>
+    <rect x="48" y="392" width="250" height="122" rx="12" class="card"/>
+    <text x="66" y="418" class="dataLabel">PostgreSQL 16 · pgvector</text>
+    <text x="66" y="440" class="dataSub">Stories · chapters · assets</text>
+    <text x="66" y="458" class="dataSub">知识库向量检索 Knowledge RAG</text>
+    <text x="66" y="482" class="sub" style="font-size:10.5px">Flyway migrations · 60 scripts</text>
+  </g>
+
+  <g>
+    <rect x="322" y="392" width="230" height="122" rx="12" class="card"/>
+    <text x="340" y="418" class="dataLabel">Redis 7</text>
+    <text x="340" y="440" class="dataSub">Sessions · verification codes</text>
+    <text x="340" y="458" class="dataSub">限流 · 幂等 · 运行态协调</text>
+    <text x="340" y="482" class="sub" style="font-size:10.5px">rate limit · single-flight</text>
+  </g>
+
+  <g>
+    <rect x="576" y="392" width="280" height="122" rx="12" class="card"/>
+    <text x="594" y="418" class="dataLabel">Aliyun OSS</text>
+    <text x="594" y="440" class="dataSub">Covers · manga pages · thumbnails</text>
+    <text x="594" y="458" class="dataSub">封面、漫画页与缩略图</text>
+    <text x="594" y="482" class="sub" style="font-size:10.5px">private generation bucket</text>
+  </g>
+
+  <g>
+    <rect x="880" y="392" width="272" height="122" rx="12" class="card"/>
+    <text x="898" y="418" class="dataLabel">SMTP mail</text>
+    <text x="898" y="440" class="dataSub">Sign-up &amp; reset verification</text>
+    <text x="898" y="458" class="dataSub">注册、登录与找回密码验证码</text>
+    <text x="898" y="482" class="sub" style="font-size:10.5px">disabled gracefully when unset</text>
+  </g>
+
+  <text x="48" y="562" class="subtitle">Stateless API · resumable streaming runs · per-user encrypted credentials</text>
+  <text x="1152" y="562" text-anchor="end" class="subtitle">ArtVerse · 向想象力开放的工作台</text>
+</svg>

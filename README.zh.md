@@ -2,7 +2,7 @@
 
 # ArtVerse
 
-**面向漫画创作流程的 AI 工作台，覆盖故事管理、分镜生成、漫画出图、作品社区与章节级智能体协作。**
+**面向漫画与小说创作的 AI 原生工作台：从故事设定、正文写作、分镜生成、漫画出图，到作品发布与章节级智能体协作。**
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-green?logo=springboot)](https://spring.io/projects/spring-boot)
@@ -13,19 +13,73 @@
 
 [English README](./README.md)
 
-</div>
+<p align="center">
+  <img src="./docs/screenshots/workspace.jpg" alt="ArtVerse 故事工作区" width="100%">
+</p>
+<p align="center"><sub>创作空间：故事、封面与快捷入口集中在一个工作台。截图使用示例故事与演示账号。</sub></p>
 
 ## 项目简介
 
-ArtVerse 是一个全栈 AI 漫画创作平台，目标是把"故事设定、章节编排、分镜辅助、图片生成、作品发布、智能体协作"整合进一套连续工作流。
+ArtVerse 把原本分散的写作工具串成一条连续的创作链路：在工作区里搭建故事，让理解当前章节的 AI 搭档参与写作，把正文拆成分镜，生成漫画页面，最后发布到作品广场，并用站内阅读器完成阅读。
 
-项目由 Spring Boot 后端、Vite React 前端，以及基于 AgentScope Harness 的漫画智能体组成：
+- 在一个工作区里管理故事、章节、角色卡、参考图与素材组
+- 与"看得见本章上下文"的 AI 对话协作，并保留完整运行记录
+- 把一章正文拆成逐格分镜提示词，再推进到漫画图片生成
+- 发布小说与漫画，在作品广场浏览，并通过沉浸式阅读器阅读
+- 通过邮箱验证码完成注册、登录与找回密码，并带有分层安全防护
 
-- 管理故事、章节、角色与素材，创作小说正文并获得 AI 对话辅助
-- 在章节上下文中与漫画智能体多轮协作，实时观察执行过程
-- 从分镜推进到漫画图片生成，全程带并发保护与幂等控制
-- 通过邮箱验证码完成注册、登录与找回密码
-- 在作品广场浏览作品，管理个人创作
+## 项目亮点
+
+- **一条链路，无需搬运。** 故事搭建、正文、分镜、出图与发布共享同一套数据模型，全部在同一个产品里完成。
+- **真正理解章节的智能体。** 智能体运行按章节隔离，通过 AG-UI / SSE 实时流式输出，中断后可恢复，并由知识库 RAG 提供上下文。
+- **为 AI 任务准备护栏。** 基于 Redis 的限流与 single-flight 幂等，让并发生图与智能体运行在压力下依然安全。
+- **面向生产的安全设计。** Sa-Token HttpOnly 会话、强制 CSRF、分级防爆破、用户级加密 AI 凭据，以及配置不合格时拒绝启动的生产 Profile。
+- **为真实创作者而做。** 故事包导入导出、缩略图处理、对象存储、作品管理与成品阅读体验。
+
+## 功能展示
+
+### 与"看得见本章"的 AI 搭档一起写作
+
+<p align="center">
+  <img src="./docs/screenshots/editor-ai.png" alt="小说编辑器与章节级 AI 对话" width="100%">
+</p>
+<p align="center"><sub>左侧写正文，右侧是与当前章节对话的 AI 助手：它会读取故事上下文，给出具体的改写建议，并保留完整对话历史。</sub></p>
+
+### 从正文到可生成的分镜
+
+<p align="center">
+  <img src="./docs/screenshots/editor-manga.png" alt="漫画创作与分镜面板" width="100%">
+</p>
+<p align="center"><sub>逐格分镜提示词、角色素材组、出图数量档位与一键生成漫画，都挂在同一章之下。</sub></p>
+
+### 发布、发现与阅读
+
+| 作品详情 | 站内阅读器 |
+| :---: | :---: |
+| <img src="./docs/screenshots/story-detail.png" alt="已发布作品详情页"> | <img src="./docs/screenshots/reader.png" alt="沉浸式阅读器"> |
+| <sub>封面、简介、章节列表与阅读入口</sub> | <sub>为成品小说准备的沉浸式阅读</sub> |
+
+### 在任何屏幕上都能逛的作品广场
+
+| 作品广场 | 移动端工作区 |
+| :---: | :---: |
+| <img src="./docs/screenshots/square.jpg" alt="作品广场"> | <img src="./docs/screenshots/mobile-workspace.png" alt="移动端创作空间" width="300"> |
+| <sub>发现其他创作者的小说与漫画</sub> | <sub>同一套工作区，在手机上依然可用</sub> |
+
+### 独立的 AI 生图工作台
+
+<p align="center">
+  <img src="./docs/screenshots/imagegen.png" alt="AI 生图工作台" width="100%">
+</p>
+<p align="center"><sub>提示词、模型选择、图片参数与生成历史——独立于章节流程，但共享同一套限流与幂等保护。</sub></p>
+
+## 系统架构
+
+<p align="center">
+  <img src="./docs/assets/architecture.svg" alt="ArtVerse 系统架构图" width="100%">
+</p>
+
+ArtVerse 由 Spring Boot 后端与 Vite React 前端组成，中间是基于 AgentScope 的漫画智能体。PostgreSQL（pgvector）承载故事、章节与知识库向量；Redis 负责会话、验证码、限流、幂等与智能体运行态协调；阿里云 OSS 存储封面、漫画页与缩略图。AI 服务由每个用户自行配置并加密入库，仓库不内置任何运营方凭据。
 
 ## 功能特性
 
@@ -47,7 +101,7 @@ ArtVerse 是一个全栈 AI 漫画创作平台，目标是把"故事设定、章
 
 - 分镜两阶段生成，支持 4–20 张的出图数量档位
 - 参考图参与生成、生成历史查询与删除
-- Redis guard 层提供限流（@RateLimit）与幂等（single-flight）保护
+- Redis guard 层提供限流（`@RateLimit`）与幂等（single-flight）保护
 - 图片缩略处理与阿里云 OSS 对象存储
 
 ### 账号与安全
@@ -66,7 +120,7 @@ ArtVerse 是一个全栈 AI 漫画创作平台，目标是把"故事设定、章
 
 ### 平台基础设施
 
-- Spring Data JPA + Flyway 管理数据模型（46 个迁移脚本）
+- Spring Data JPA + Flyway 管理数据模型（60 个迁移脚本）
 - pgvector 支撑知识库向量检索
 - Redis 承载会话、验证码、限流、幂等与运行态协调
 - Resilience4j 熔断与重试；Actuator 暴露 health / metrics / prometheus
@@ -96,6 +150,9 @@ ArtVerse/
 │     └─ domain/ persistence/       # 领域模型与数据访问
 ├─ frontend/                        # Vite + React 前端
 │  └─ src/components/               # 页面与业务组件
+├─ docs/
+│  ├─ screenshots/                  # README 演示图
+│  └─ assets/                       # 系统架构图
 ├─ ArtVerse/AGENTS.md               # 仓库协作规范
 ├─ README.md                        # 英文 README
 └─ README.zh.md                     # 中文 README

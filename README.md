@@ -2,7 +2,7 @@
 
 # ArtVerse
 
-**AI-native workspace for story writing, storyboard generation, manga image production, a works community, and chapter-scoped agent collaboration.**
+**An AI-native studio for story writing, storyboarding, manga image generation, publishing, and chapter-scoped agent collaboration.**
 
 [![Java](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-green?logo=springboot)](https://spring.io/projects/spring-boot)
@@ -13,23 +13,79 @@
 
 [中文文档](./README.zh.md)
 
-</div>
+<p align="center">
+  <img src="./docs/screenshots/workspace.jpg" alt="ArtVerse story workspace with covers and quick actions" width="100%">
+</p>
+<p align="center"><sub>Your creative studio — stories, covers and quick actions in one place. Screenshots use sample stories and a demo account.</sub></p>
 
 ## Overview
 
-ArtVerse is a full-stack creation platform for manga-oriented storytelling. It combines a Spring Boot backend, a Vite React frontend, and an AgentScope-powered manga agent to help creators move from story setup to storyboard refinement, image generation, and publishing in a single workflow.
+ArtVerse turns a scattered writing toolkit into one continuous pipeline: shape a story in a workspace, write the prose with an AI partner that understands the current chapter, turn the prose into a storyboard, generate manga pages, and publish the result to a community square with a built-in reader.
 
-- Manage stories, chapters, characters, and visual assets, with AI-assisted novel writing
-- Collaborate with a chapter-scoped manga agent through streamed, resumable runs
-- Generate manga images from storyboards with concurrency and idempotency protection
-- Register, sign in, and recover accounts with email verification codes
-- Browse published works in the community square and manage your own creations
+- Manage stories, chapters, characters, reference images and asset groups in a single workspace
+- Co-write with a chapter-scoped AI conversation and keep a full run history
+- Turn a chapter into scene-by-scene storyboard prompts, then generate manga images
+- Publish novels and manga, browse the works square and read in an immersive reader
+- Register, sign in and recover accounts with email verification codes under layered security
+
+## Highlights
+
+- **One flow, no hand-offs.** Story setup, prose, storyboard, image generation and publishing live in the same product, backed by the same data model.
+- **An agent that knows the chapter.** Agent runs are scoped to a chapter, streamed over AG-UI / SSE, resumable after interruption, and grounded by knowledge-base RAG.
+- **Guard rails for AI work.** Redis-backed rate limiting and single-flight idempotency keep image generation and agent runs safe under concurrency.
+- **Production-minded security.** Sa-Token HttpOnly sessions, enforced CSRF, graded brute-force protection, per-user encrypted AI credentials, and a production profile that refuses to start misconfigured.
+- **Made for real creators.** Story package import/export, thumbnail pipelines, object storage, works management and a reading experience for finished pieces.
+
+## Product Tour
+
+### Write with an AI partner that sees the chapter
+
+<p align="center">
+  <img src="./docs/screenshots/editor-ai.png" alt="Novel editor with chapter-scoped AI assistant conversation" width="100%">
+</p>
+<p align="center"><sub>Novel editing on the left, a chapter-scoped assistant on the right. The conversation reads the current story context, suggests concrete rewrites and keeps its history.</sub></p>
+
+### From prose to a storyboard you can generate
+
+<p align="center">
+  <img src="./docs/screenshots/editor-manga.png" alt="Storyboard and manga generation panel" width="100%">
+</p>
+<p align="center"><sub>Scene-by-scene prompts, character asset groups, image-count tiers and one-click manga generation — all attached to the same chapter.</sub></p>
+
+### Publish, discover and read
+
+| Work detail | Built-in reader |
+| :---: | :---: |
+| <img src="./docs/screenshots/story-detail.png" alt="Published work detail page"> | <img src="./docs/screenshots/reader.png" alt="Immersive in-site reader"> |
+| <sub>Cover, synopsis, chapter list and reading entry</sub> | <sub>An immersive reader for finished novels</sub> |
+
+### A community square that works on any screen
+
+| Works square | Mobile workspace |
+| :---: | :---: |
+| <img src="./docs/screenshots/square.jpg" alt="Community works square"> | <img src="./docs/screenshots/mobile-workspace.png" alt="ArtVerse workspace on a phone" width="300"> |
+| <sub>Discover novels and manga from other creators</sub> | <sub>The same workspace, responsive on mobile</sub> |
+
+### An image playground for everything else
+
+<p align="center">
+  <img src="./docs/screenshots/imagegen.png" alt="AI image generation playground" width="100%">
+</p>
+<p align="center"><sub>Prompt, model selection, image parameters and generation history — separate from the chapter workflow but sharing the same guards.</sub></p>
+
+## Architecture
+
+<p align="center">
+  <img src="./docs/assets/architecture.svg" alt="ArtVerse system architecture" width="100%">
+</p>
+
+ArtVerse is a Spring Boot backend and a Vite React frontend, with an AgentScope-powered manga agent in the middle. PostgreSQL (pgvector) holds stories, chapters and knowledge vectors; Redis coordinates sessions, verification codes, rate limits, idempotency and running agent state; Aliyun OSS stores covers, manga pages and thumbnails. AI providers are configured per user and stored encrypted — the repository ships no operator credentials.
 
 ## Features
 
 ### Story Workspace
 
-- Story, chapter, character-profile, reference-image, and asset-group management
+- Story, chapter, character-profile, reference-image and asset-group management
 - Novel content writing with story-context AI conversation support
 - Story package import and export
 
@@ -39,13 +95,13 @@ ArtVerse is a full-stack creation platform for manga-oriented storytelling. It c
 - AG-UI / SSE streaming execution events
 - Human-in-the-loop (HITL) resume flow after interruptions
 - Knowledge-base RAG injection and built-in business skills (manga / novel)
-- Run watchdog, timeout controls, and a multi-instance event bus
+- Run watchdog, timeout controls and a multi-instance event bus
 
 ### Storyboard & Image Generation
 
 - Two-phase storyboard generation with image-count tiers from 4 to 20
 - Reference-image-assisted generation, generation history query and deletion
-- Redis-backed guard layer with rate limiting (@RateLimit) and idempotency (single-flight)
+- Redis-backed guard layer with rate limiting (`@RateLimit`) and idempotency (single-flight)
 - Thumbnail processing and Aliyun OSS object storage
 
 ### Accounts & Security
@@ -55,7 +111,7 @@ ArtVerse is a full-stack creation platform for manga-oriented storytelling. It c
 - Graded brute-force protection for password login: 3 failures in a 5-minute window triggers captcha, 6 failures locks password login for 10 minutes
 - IP-level rate limiting with separate policies for login and registration
 - Sa-Token sessions: HttpOnly cookies (SameSite=Strict) backed by Redis, with refresh-token support
-- JSON API success and error responses use a shared `code / message / data` envelope; HTTP status codes continue to express request outcomes. SSE, file/image responses, and `204 No Content` keep their transport-specific formats
+- JSON API success and error responses use a shared `code / message / data` envelope; HTTP status codes continue to express request outcomes. SSE, file/image responses and `204 No Content` keep their transport-specific formats
 
 ### Works Square
 
@@ -64,9 +120,9 @@ ArtVerse is a full-stack creation platform for manga-oriented storytelling. It c
 
 ### Platform Foundations
 
-- Spring Data JPA + Flyway migrations (46 scripts)
+- Spring Data JPA + Flyway migrations (60 scripts)
 - pgvector for knowledge-base vector search
-- Redis for sessions, verification codes, rate limiting, idempotency, and runtime coordination
+- Redis for sessions, verification codes, rate limiting, idempotency and runtime coordination
 - Resilience4j circuit breakers and retries; Actuator exposes health / metrics / prometheus
 
 ## Tech Stack
@@ -94,6 +150,9 @@ ArtVerse/
 │     └─ domain/ persistence/       # Domain models and data access
 ├─ frontend/                        # Vite + React frontend
 │  └─ src/components/               # Pages and business components
+├─ docs/
+│  ├─ screenshots/                  # README screenshots
+│  └─ assets/                       # Architecture diagram
 ├─ ArtVerse/AGENTS.md               # Repository working conventions
 ├─ README.md                        # English README
 └─ README.zh.md                     # Chinese README
@@ -148,8 +207,8 @@ Notes:
 - Without `ARTVERSE_MAIL_HOST`, the mail feature is disabled automatically; everything else keeps working
 - API keys and base URLs for AI capabilities (LLM / image / workflow) are saved per user on the settings page and stored encrypted; the repository ships no operator credentials
 - `.env` is ignored by `.gitignore` and will not be committed
-- The current Compose file uses local development credentials and publishes PostgreSQL and Redis ports. Use it only in a trusted development environment; production deployments need separate strong credentials and network or firewall restrictions for dependency services.
-- The `prod` or `production` Spring profile validates key length and separation, HTTPS cookies, enforced CSRF, and disabled Flyway checksum auto-repair; the application refuses to start if these requirements are not met.
+- The current Compose file uses local development credentials and publishes PostgreSQL and Redis ports. Use it only in a trusted development environment; production deployments need separate strong credentials and network or firewall restrictions for dependency services
+- The `prod` or `production` Spring profile validates key length and separation, HTTPS cookies, enforced CSRF, and disabled Flyway checksum auto-repair; the application refuses to start if these requirements are not met
 
 ### 3. Run the backend
 
@@ -170,7 +229,7 @@ For local Windows development, run from the repository root:
 .\ArtVerse\start-backend-local.ps1 -Background -RedisHost ::1
 ```
 
-Stop the old backend on port 8080 first. The script uses the `local` profile, allows `http://localhost:5173` and `http://127.0.0.1:5173`, uses non-Secure cookies for local HTTP, and enforces CSRF. Overrides apply only to this launch; `.env` and global environment variables are preserved. For IDE launches, set `SPRING_PROFILES_ACTIVE=local`, `ARTVERSE_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173`, and `ARTVERSE_AUTH_COOKIE_SECURE=false`. Production keeps its separate HTTPS origins, Secure cookies, and production profile. See the [local login CSRF implementation notes](ArtVerse/docs/login-csrf-analysis-and-plan.md) (Chinese).
+Stop the old backend on port 8080 first. The script uses the `local` profile, allows `http://localhost:5173` and `http://127.0.0.1:5173`, uses non-Secure cookies for local HTTP, and enforces CSRF. Overrides apply only to this launch; `.env` and global environment variables are preserved. For IDE launches, set `SPRING_PROFILES_ACTIVE=local`, `ARTVERSE_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173`, and `ARTVERSE_AUTH_COOKIE_SECURE=false`. Production keeps its separate HTTPS origins, Secure cookies and production profile. See the [local login CSRF implementation notes](ArtVerse/docs/login-csrf-analysis-and-plan.md) (Chinese).
 
 ### 4. Run the frontend
 
@@ -225,10 +284,10 @@ npm run preview   # preview production build
 
 - Frontend build output is served by Nginx (SPA fallback `try_files ... /index.html`) and reverse-proxies `/api` and SSE endpoints (`proxy_buffering off`)
 - The backend is packaged as a JAR managed by systemd (`Restart=always`), with `.env` placed next to the JAR
-- Do not deploy the repository's local-development Compose configuration as-is; production needs separate credentials and network or firewall restrictions for PostgreSQL and Redis, plus a properly secured OSS bucket policy.
-- Set `SPRING_PROFILES_ACTIVE=production` and configure distinct encryption and HMAC keys with at least 32 characters.
-- Set `ARTVERSE_AUTH_COOKIE_SECURE=true` behind HTTPS. Actuator requires an administrator login except for `/actuator/health`, and health details are hidden.
-- Flyway checksum mismatches stop startup and require migration-history review; deployed database checksums are not repaired automatically.
+- Do not deploy the repository's local-development Compose configuration as-is; production needs separate credentials and network or firewall restrictions for PostgreSQL and Redis, plus a properly secured OSS bucket policy
+- Set `SPRING_PROFILES_ACTIVE=production` and configure distinct encryption and HMAC keys with at least 32 characters
+- Set `ARTVERSE_AUTH_COOKIE_SECURE=true` behind HTTPS. Actuator requires an administrator login except for `/actuator/health`, and health details are hidden
+- Flyway checksum mismatches stop startup and require migration-history review; deployed database checksums are not repaired automatically
 - See [ArtVerse/AGENTS.md](./ArtVerse/AGENTS.md) for the full working conventions
 
 ## License

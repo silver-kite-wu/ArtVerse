@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>ArtVerse · 人物关系图谱设计预览</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+/* ═══════════════ Tokens — 与 ArtVerse index.css 保持一致 ═══════════════ */
+:root, html[data-mode="dark"] {
+  --color-bg-base:#1e1a16; --color-bg-surface:#2a2521; --color-bg-raised:#302923;
+  --color-text-primary:#f2ede7; --color-text-secondary:#b4aba2; --color-text-muted:#84776e;
+  --color-border:#3a322c; --color-border-strong:#4a413a;
+  --color-accent:#f1481e; --color-accent-hover:#ff6b3a; --color-accent-soft:rgba(241,72,30,.08);
+  --color-accent-muted:rgba(241,72,30,.16); --color-accent-tertiary:#b3a6ff;
+  --color-success:#3ccf8e; --color-warning:#f4b366; --color-danger:#ff6b57;
+  --cat-kin:#e0778c; --cat-love:#f1481e; --cat-sect:#e0a33c; --cat-ally:#4fae8c; --cat-foe:#8093ad; --cat-other:#b3a6ff;
+  --edge:#6b6058; --edge-strong:#968a7e; --grid-dot:rgba(242,237,231,.055); --ring-guide:rgba(242,237,231,.07);
+  --panel-scrim:rgba(30,26,22,.55);
+  --shadow-card:0 12px 28px rgba(20,16,12,.28), 0 4px 8px rgba(20,16,12,.12);
+}
+html[data-mode="light"] {
+  --color-bg-base:#e3dfd9; --color-bg-surface:#f3f0eb; --color-bg-raised:#f7f4ef;
+  --color-text-primary:#211d1a; --color-text-secondary:#5c5650; --color-text-muted:#84776e;
+  --color-border:#d7d1c9; --color-border-strong:#cbc3ba;
+  --color-accent:#f1481e; --color-accent-hover:#d63a14; --color-accent-soft:rgba(241,72,30,.10);
+  --color-accent-muted:rgba(241,72,30,.16); --color-accent-tertiary:#aea4fd;
+  --color-success:#13b15a; --color-warning:#fe9a45; --color-danger:#ef4444;
+  --cat-kin:#c94f63; --cat-love:#d63a14; --cat-sect:#b9802a; --cat-ally:#2f8a6b; --cat-foe:#5f728f; --cat-other:#7a6cd6;
+  --edge:#b3aaa0; --edge-strong:#8b8074; --grid-dot:rgba(33,29,26,.055); --ring-guide:rgba(33,29,26,.07);
+  --panel-scrim:rgba(33,29,26,.32);
+  --shadow-card:0 12px 28px rgba(60,50,40,.16), 0 4px 8px rgba(60,50,40,.08);
+}
+
+*,*::before,*::after { box-sizing:border-box; }
+body {
+  margin:0; min-height:100dvh; font-family:"Geist",ui-sans-serif,system-ui,sans-serif;
+  font-size:14px; line-height:1.6; color:var(--color-text-primary); background:var(--color-bg-base);
+  -webkit-font-smoothing:antialiased;
+}
+body::before {
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:
+    radial-gradient(ellipse 70% 35% at 50% -5%, var(--color-accent-soft), transparent 60%),
+    radial-gradient(ellipse 45% 30% at 95% 110%, var(--color-accent-soft), transparent 65%);
+}
+button, select, input { font:inherit; color:inherit; }
+button { cursor:pointer; }
+::selection { background:var(--color-accent-muted); color:var(--color-text-primary); }
+:focus-visible { outline:2px solid var(--color-accent); outline-offset:2px; }
+
+/* ═══════════════ Preview shell ═══════════════ */
+.preview-shell { max-width:1180px; margin:0 auto; padding:26px 24px 72px; }
+.preview-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
+.preview-bar h1 { font-family:"Playfair Display",serif; font-size:20px; font-weight:600; margin:0; letter-spacing:.01em; }
+.preview-bar h1 small { font-family:"Geist",sans-serif; font-size:11px; font-weight:400; letter-spacing:.1em; color:var(--color-text-muted); margin-left:10px; text-transform:uppercase; }
+.preview-badge { display:inline-flex; align-items:center; gap:7px; font-size:11px; color:var(--color-text-secondary); }
+.preview-badge::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--color-accent); }
+.mode-switch { display:inline-flex; padding:3px; border:1px solid var(--color-border); border-radius:999px; background:var(--color-bg-surface); }
+.mode-switch button { border:0; background:transparent; border-radius:999px; padding:5px 13px; font-size:11px; color:var(--color-text-muted); }
+.mode-switch button[aria-pressed="true"] { background:var(--color-bg-raised); color:var(--color-text-primary); box-shadow:inset 0 0 0 1px var(--color-border); }
+
+/* ═══════════════ App frame / knowledge page chrome ═══════════════ */
+.app-frame {
+  display:flex; flex-direction:column; min-height:0; overflow:hidden;
+  background:var(--color-bg-base); border:1px solid var(--color-border); border-radius:18px;
+  box-shadow:var(--shadow-card); color:var(--color-text-primary);
+}
+.app-frame svg.icon { width:16px; height:16px; flex-shrink:0; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.kb-header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:17px 24px 14px; background:var(--color-bg-surface); border-bottom:1px solid var(--color-border); }
+.kb-header-title { display:flex; align-items:center; gap:12px; }
+.kb-header h1 { font-size:18px; font-weight:650; margin:0; letter-spacing:.03em; }
+.kb-header p { color:var(--color-text-muted); font-size:11px; margin:3px 0 0; }
+.kb-back { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-bg-raised); }
+.kb-back:hover { border-color:var(--color-accent); color:var(--color-accent); }
+.kb-logo { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:9px; border:1px solid var(--color-border-strong); background:var(--color-accent-soft); color:var(--color-accent); }
+.kb-primary { display:inline-flex; align-items:center; gap:6px; border:1px solid transparent; border-radius:8px; background:var(--color-accent); color:#fff; padding:8px 13px; font-size:12px; }
+.kb-primary:hover { background:var(--color-accent-hover); }
+.kb-toolbar { display:flex; align-items:center; gap:16px; padding:14px 24px 12px; }
+.kb-search { display:flex; align-items:center; gap:9px; flex:1; min-width:180px; padding:9px 12px; border:1px solid var(--color-border); background:var(--color-bg-surface); border-radius:9px; color:var(--color-text-muted); }
+.kb-search input { width:100%; border:0; outline:0; background:transparent; color:var(--color-text-primary); font-size:12px; }
+.kb-search input::placeholder { color:var(--color-text-muted); }
+.kb-perspective { display:flex; align-items:center; gap:8px; color:var(--color-text-muted); font-size:12px; white-space:nowrap; }
+.kb-perspective select, .graph-toolbar select {
+  border:1px solid var(--color-border); background:var(--color-bg-surface); border-radius:7px; padding:7px 9px; font-size:12px; max-width:100%;
+}
+.kb-type-nav { display:flex; align-items:center; gap:6px; padding:0 24px 12px; overflow-x:auto; }
+.kb-type-nav button { flex-shrink:0; display:inline-flex; align-items:center; gap:8px; background:transparent; border:1px solid transparent; border-radius:8px; padding:9px 12px; font-size:12.5px; color:var(--color-text-secondary); white-space:nowrap; }
+.kb-type-nav button:hover { background:var(--color-accent-soft); }
+.kb-type-nav button[aria-pressed="true"] { background:var(--color-accent-soft); color:var(--color-accent); border-color:color-mix(in srgb, var(--color-accent) 42%, transparent); }
+.kb-type-nav .mark { font-family:"Playfair Display",serif; font-size:15px; }
+.kb-type-nav .count { font-family:"Roboto Mono",monospace; font-size:10px; opacity:.65; }
+.kb-review-nav { display:flex; gap:20px; padding:0 24px; background:var(--color-bg-surface); border-top:1px solid var(--color-border); border-bottom:1px solid var(--color-border); overflow-x:auto; }
+.kb-review-nav button { display:inline-flex; align-items:center; gap:7px; flex-shrink:0; border:0; border-bottom:2px solid transparent; background:transparent; padding:13px 2px; font-size:12px; color:var(--color-text-muted); }
+.kb-review-nav button[aria-pressed="true"] { border-bottom-color:var(--color-accent); color:var(--color-accent); }
+.kb-review-nav em { font-style:normal; font-family:"Roboto Mono",monospace; font-size:10px; padding:1px 5px; border-radius:4px; background:var(--color-bg-base); }
+.kb-content { padding:18px 24px 24px; }
+.graph-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:12px; margin-bottom:12px; font-size:12px; color:var(--color-text-muted); }
+.graph-toolbar > span { margin-right:auto; color:var(--color-text-secondary); }
+.graph-toolbar label { display:flex; align-items:center; gap:7px; }
+/* ═══════════════ 关系图谱卡片 ═══════════════ */
+.graph-card { background:var(--color-bg-surface); border:1px solid var(--color-border); border-radius:14px; overflow:hidden; }
+.graph-head { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:15px 20px 12px; flex-wrap:wrap; }
+.graph-title { display:flex; align-items:center; gap:11px; min-width:0; }
+.graph-title h2 { margin:0; font-size:15px; font-weight:650; letter-spacing:.02em; }
+.graph-title p { margin:2px 0 0; font-size:11px; color:var(--color-text-muted); }
+.graph-title .eyebrow { font-family:"Roboto Mono",monospace; font-size:9px; letter-spacing:.14em; color:var(--color-text-muted); text-transform:uppercase; }
+.graph-head-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.segmented { display:inline-flex; padding:2px; border:1px solid var(--color-border); border-radius:999px; background:var(--color-bg-base); }
+.segmented button { border:0; background:transparent; border-radius:999px; padding:5px 11px; font-size:11px; color:var(--color-text-muted); }
+.segmented button[aria-pressed="true"] { background:var(--color-bg-raised); color:var(--color-text-primary); box-shadow:inset 0 0 0 1px var(--color-border-strong); }
+.ghost-btn { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--color-border); background:var(--color-bg-raised); border-radius:8px; padding:6px 10px; font-size:11px; color:var(--color-text-secondary); }
+.ghost-btn:hover { border-color:var(--color-accent); color:var(--color-accent); }
+.ghost-btn[hidden] { display:none; }
+.center-back { color:var(--color-accent); border-color:color-mix(in srgb, var(--color-accent) 40%, var(--color-border)); }
+.ghost-btn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.7; }
+
+.filter-row { display:flex; align-items:center; gap:8px; padding:0 20px 13px; flex-wrap:wrap; }
+.filter-chips { display:flex; align-items:center; gap:7px; flex-wrap:wrap; min-width:0; }
+.chip {
+  display:inline-flex; align-items:center; gap:6px; height:29px; padding:0 11px 0 9px;
+  border:1px solid var(--color-border); border-radius:999px; background:transparent;
+  font-size:11.5px; color:var(--color-text-secondary); transition:border-color .15s, background .15s, color .15s;
+}
+.chip:hover { border-color:var(--color-border-strong); color:var(--color-text-primary); }
+.chip .dot { width:6px; height:6px; border-radius:50%; background:var(--chip-color,var(--color-text-muted)); }
+.chip .n { font-family:"Roboto Mono",monospace; font-size:10px; color:var(--color-text-muted); }
+.chip[aria-pressed="true"] { border-color:var(--chip-color,var(--color-accent)); background:color-mix(in srgb, var(--chip-color,var(--color-accent)) 12%, transparent); color:var(--color-text-primary); }
+.chip[aria-pressed="true"] .n { color:var(--color-text-secondary); }
+.person-search { display:flex; align-items:center; gap:7px; margin-left:auto; min-width:160px; padding:6px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-bg-base); color:var(--color-text-muted); }
+.person-search input { width:100%; border:0; outline:0; background:transparent; font-size:11.5px; color:var(--color-text-primary); }
+.person-search input::placeholder { color:var(--color-text-muted); }
+.person-search svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:1.8; }
+
+/* ═══════════════ 画布 ═══════════════ */
+.graph-body { position:relative; display:block; border-top:1px solid var(--color-border); background:var(--color-bg-base); }
+.graph-stage { position:relative; width:100%; height:630px; overflow:hidden; }
+.graph-stage svg { display:block; width:100%; height:100%; user-select:none; -webkit-user-select:none; }
+.graph-stage .edges { transition:opacity .28s ease; }
+.edge-item.dense-label .edge-label { opacity:0; transition:opacity .18s ease; }
+.edge-item.dense-label:hover .edge-label, .edge-item.dense-label.active .edge-label { opacity:1; }
+#graphScene { transform-box:view-box; transform-origin:480px 315px; transition:transform .3s cubic-bezier(.2,.8,.2,1); }
+.graph-stage .dotgrid { fill:var(--grid-dot); }
+.graph-stage .guide { fill:none; stroke:var(--ring-guide); stroke-width:1; stroke-dasharray:5 7; }
+.graph-stage .guide-label { fill:var(--color-text-muted); font-size:10px; letter-spacing:.1em; opacity:.6; }
+
+.edge-base { fill:none; stroke:var(--edge); stroke-width:1.6; marker-end:url(#arrow); }
+.edge-base.symmetric { marker-start:url(#arrow-start); }
+.edge-base.pending { stroke:var(--color-warning); stroke-dasharray:6 5; marker-end:url(#arrow-warn); }
+.edge-hit { fill:none; stroke:transparent; stroke-width:14; cursor:pointer; }
+.edge-hit:hover + .edge-glow { opacity:1; }
+.edge-label rect { fill:var(--color-bg-surface); stroke:var(--color-border); stroke-width:1; }
+.edge-label text { fill:var(--color-text-secondary); font-size:11px; font-weight:450; }
+.edge-label .label-dot { fill:var(--color-accent-tertiary); opacity:0; }
+.edge-label.hidden .label-dot { opacity:1; }
+.edge-label.pending rect { stroke:color-mix(in srgb, var(--color-warning) 55%, transparent); }
+.edge-label.pending text { fill:var(--color-warning); }
+.edge-label.hidden rect { stroke:color-mix(in srgb, var(--color-accent-tertiary) 45%, transparent); }
+.edge-label .tiny { font-size:9px; font-weight:500; }
+
+.person-node { cursor:grab; transition:transform .42s cubic-bezier(.2,.8,.2,1); touch-action:none; }
+.person-node.ego { cursor:pointer; }
+.person-node.dragging { cursor:grabbing; transition:none; }
+.person-node.dragging .avatar { transform:scale(1.08); }
+.graph-stage.dragging { cursor:grabbing; }
+.graph-stage.dragging .person-node { transition:none; }
+.person-node .avatar { stroke-width:2; transition:transform .18s ease, opacity .18s ease; transform-box:fill-box; transform-origin:center; }
+.person-node .name { fill:var(--color-text-primary); font-weight:600; text-anchor:middle; font-size:13px; }
+.person-node .sub { fill:var(--color-text-muted); font-size:10px; text-anchor:middle; }
+.person-node .initial { fill:var(--color-text-primary); text-anchor:middle; font-family:"Playfair Display",serif; }
+.person-node .halo { fill:transparent; stroke:var(--color-border-strong); stroke-width:1; opacity:0; transition:opacity .18s; }
+.person-node:hover .avatar { transform:scale(1.07); }
+.person-node:hover .halo { opacity:1; }
+.person-node:hover .name { fill:var(--color-accent-hover); }
+.person-node.selected .halo { opacity:1; stroke:var(--color-accent); stroke-width:2; }
+.person-node:focus { outline:none; }
+.person-node:focus .halo { opacity:1; stroke:var(--color-accent); stroke-width:2; }
+.person-node.selected .name { fill:var(--color-accent-hover); }
+.person-node.dim, .edge-item.dim { opacity:.16; }
+.person-node.dim .name { fill:var(--color-text-muted); }
+.cat-kin .avatar { fill:color-mix(in srgb, var(--cat-kin) 22%, var(--color-bg-surface)); stroke:var(--cat-kin); }
+.cat-love .avatar { fill:color-mix(in srgb, var(--cat-love) 22%, var(--color-bg-surface)); stroke:var(--cat-love); }
+.cat-sect .avatar { fill:color-mix(in srgb, var(--cat-sect) 22%, var(--color-bg-surface)); stroke:var(--cat-sect); }
+.cat-ally .avatar { fill:color-mix(in srgb, var(--cat-ally) 22%, var(--color-bg-surface)); stroke:var(--cat-ally); }
+.cat-foe .avatar { fill:color-mix(in srgb, var(--cat-foe) 22%, var(--color-bg-surface)); stroke:var(--cat-foe); }
+.cat-other .avatar { fill:color-mix(in srgb, var(--cat-other) 22%, var(--color-bg-surface)); stroke:var(--cat-other); }
+.cat-none .avatar { fill:color-mix(in srgb, var(--color-accent) 20%, var(--color-bg-surface)); stroke:var(--color-accent); }
+.edge-item.active .edge-base { stroke:var(--color-accent); stroke-width:2.2; }
+.edge-item.active .edge-label rect { stroke:var(--color-accent); }
+.edge-item.active .edge-label text { fill:var(--color-text-primary); }
+.edge-item:hover .edge-base { stroke:var(--color-accent-hover); stroke-width:2.2; }
+.edge-item:hover .edge-label text { fill:var(--color-text-primary); }
+.edge-item { cursor:pointer; }
+.ego .halo { stroke:var(--color-accent); stroke-width:1.5; opacity:1; }
+.ego .avatar { fill:color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-surface)); stroke:var(--color-accent); }
+.ego .initial { fill:var(--color-text-primary); }
+.ego-badge rect { fill:var(--color-accent-soft); stroke:color-mix(in srgb, var(--color-accent) 55%, transparent); }
+.ego-badge text { fill:var(--color-accent); font-size:10px; letter-spacing:.08em; }
+
+.legend { position:absolute; left:16px; bottom:14px; display:flex; align-items:center; gap:14px; padding:7px 11px; border:1px solid var(--color-border); border-radius:9px; background:color-mix(in srgb, var(--color-bg-surface) 88%, transparent); font-size:10.5px; color:var(--color-text-muted); backdrop-filter:blur(6px); }
+.legend span { display:inline-flex; align-items:center; gap:6px; }
+.legend i { width:16px; height:1.5px; background:var(--edge); }
+.legend i.dash { background:repeating-linear-gradient(90deg,var(--color-warning) 0 4px,transparent 4px 7px); }
+.legend i.sym { position:relative; }
+.legend i.sym::before, .legend i.sym::after { content:""; position:absolute; top:-2px; width:0; height:0; border-top:3px solid transparent; border-bottom:3px solid transparent; }
+.legend i.sym::before { left:0; border-right:5px solid var(--edge); }
+.legend i.sym::after { right:0; border-left:5px solid var(--edge); }
+.legend i.dotkey { width:5px; height:5px; border-radius:50%; background:var(--color-accent-tertiary); }
+
+.zoom-controls { position:absolute; right:16px; bottom:14px; display:flex; flex-direction:column; border:1px solid var(--color-border); border-radius:9px; overflow:hidden; background:var(--color-bg-surface); }
+.zoom-controls button { width:32px; height:30px; border:0; border-bottom:1px solid var(--color-border); background:transparent; color:var(--color-text-secondary); display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
+.zoom-controls button:last-child { border-bottom:0; }
+.zoom-controls button:hover { background:var(--color-accent-soft); color:var(--color-accent); }
+.zoom-controls svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.7; }
+
+.hint { position:absolute; left:50%; bottom:16px; transform:translateX(-50%); padding:5px 12px; border-radius:999px; border:1px solid color-mix(in srgb, var(--color-border) 70%, transparent); background:color-mix(in srgb, var(--color-bg-surface) 82%, transparent); font-size:10.5px; color:var(--color-text-muted); white-space:nowrap; pointer-events:none; backdrop-filter:blur(4px); }
+@media (max-width:900px) { .hint { display:none; } }
+
+/* ═══════════════ 右侧档案面板 ═══════════════ */
+.detail-panel {
+  position:absolute; top:0; right:0; z-index:4; height:630px;
+  width:0; opacity:0; overflow:hidden; border-left:1px solid transparent;
+  background:var(--color-bg-surface); transition:width .28s cubic-bezier(.2,.8,.2,1), opacity .2s;
+}
+.graph-body.open .detail-panel { width:330px; opacity:1; border-left-color:var(--color-border); box-shadow:-18px 0 32px rgba(20,16,12,.18); }
+.graph-body.open #graphScene { transform:translate(-170px, 0) scale(.8); }
+.graph-body.open .zoom-controls { right:346px; }
+.graph-body.open .hint { display:none; }
+.detail-inner { width:100%; height:100%; overflow-y:auto; padding:18px 18px 22px; }
+.detail-head { display:flex; align-items:flex-start; gap:12px; }
+.detail-avatar { display:flex; align-items:center; justify-content:center; width:60px; height:60px; flex-shrink:0; border-radius:50%; border:2px solid var(--cat-color,var(--color-accent)); background:color-mix(in srgb, var(--cat-color,var(--color-accent)) 22%, var(--color-bg-surface)); font-family:"Playfair Display",serif; font-size:23px; }
+.detail-head h3 { margin:4px 0 3px; font-size:19px; font-weight:650; line-height:1.25; }
+.detail-head p { margin:0; font-size:11px; color:var(--color-text-muted); }
+.detail-tags { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.tag { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--color-border); border-radius:4px; padding:2px 6px; font-size:10px; color:var(--color-text-muted); }
+.tag.cat { border-color:color-mix(in srgb, var(--cat-color,var(--color-accent)) 55%, transparent); color:var(--cat-color,var(--color-accent)); background:color-mix(in srgb, var(--cat-color,var(--color-accent)) 10%, transparent); }
+.tag.warn { border-color:color-mix(in srgb, var(--color-warning) 55%, transparent); color:var(--color-warning); background:color-mix(in srgb, var(--color-warning) 10%, transparent); }
+.icon-btn { margin-left:auto; display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; flex-shrink:0; border:1px solid var(--color-border); border-radius:7px; background:transparent; color:var(--color-text-muted); }
+.icon-btn:hover { border-color:var(--color-accent); color:var(--color-accent); }
+.icon-btn svg { width:14px; height:14px; stroke:currentColor; fill:none; stroke-width:1.8; }
+.detail-facts { display:grid; grid-template-columns:1fr 1fr; gap:1px; margin:16px 0 4px; border:1px solid var(--color-border); border-radius:8px; overflow:hidden; background:var(--color-border); }
+.detail-facts div { background:var(--color-bg-raised); padding:8px 10px; }
+.detail-facts dt { font-size:10px; color:var(--color-text-muted); margin-bottom:2px; }
+.detail-facts dd { margin:0; font-size:12px; }
+.detail-section { margin-top:18px; }
+.detail-section > header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.detail-section h4 { margin:0; font-size:11px; font-weight:550; letter-spacing:.06em; color:var(--color-text-muted); }
+.detail-section h4 span { font-family:"Roboto Mono",monospace; font-size:10px; margin-left:5px; }
+.rel-list { list-style:none; margin:0; padding:0; border-top:1px solid var(--color-border); }
+.rel-list li { border-bottom:1px solid var(--color-border); }
+.rel-list button { display:flex; width:100%; align-items:center; gap:8px; border:0; background:transparent; padding:8px 2px; text-align:left; font-size:12px; }
+.rel-list button:hover { color:var(--color-accent-hover); }
+.rel-list .dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; background:var(--rel-color,var(--color-text-muted)); }
+.rel-list .rel-label { font-weight:550; }
+.rel-list .arrow { color:var(--color-text-muted); font-size:11px; }
+.rel-list .rel-person { margin-left:auto; color:var(--color-text-muted); font-size:11.5px; }
+.rel-list .state { font-size:9px; color:var(--color-text-muted); border:1px solid var(--color-border); border-radius:3px; padding:0 4px; }
+.info-block { margin-top:10px; padding:10px 11px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-bg-raised); font-size:11.5px; line-height:1.8; color:var(--color-text-secondary); }
+.info-block.locked { border-color:color-mix(in srgb, var(--color-accent-tertiary) 35%, transparent); background:color-mix(in srgb, var(--color-accent-tertiary) 7%, var(--color-bg-raised)); }
+.info-block strong { display:flex; align-items:center; gap:6px; font-size:10px; letter-spacing:.05em; color:var(--color-text-muted); margin-bottom:5px; font-weight:500; }
+.info-block strong svg { width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:1.8; }
+.quote { margin:0; padding:9px 11px; border-left:2px solid var(--color-accent); background:var(--color-accent-soft); border-radius:0 6px 6px 0; font-size:11.5px; line-height:1.85; color:var(--color-text-secondary); }
+.detail-actions { display:flex; gap:8px; margin-top:18px; }
+.detail-actions button { flex:1; border:1px solid var(--color-border); border-radius:7px; background:var(--color-bg-raised); padding:8px; font-size:11.5px; }
+.detail-actions button:hover { border-color:var(--color-accent); color:var(--color-accent); }
+.detail-actions button.primary { background:var(--color-accent); border-color:transparent; color:#fff; }
+.detail-actions button.primary:hover { background:var(--color-accent-hover); }
+.detail-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--color-text-muted); font-size:12px; gap:8px; text-align:center; }
+
+/* ═══════════════ 列表视图 ═══════════════ */
+.list-view { display:none; border-top:1px solid var(--color-border); background:var(--color-bg-surface); padding:16px 20px 20px; }
+.graph-card.list-mode .graph-body { display:none; }
+.graph-card.list-mode .list-view { display:block; }
+.list-view caption { text-align:left; font-size:11px; color:var(--color-text-muted); padding:0 0 10px; }
+.list-view table { width:100%; border-collapse:collapse; font-size:12px; }
+.list-view th { text-align:left; font-weight:500; color:var(--color-text-muted); font-size:11px; padding:8px 10px; border-bottom:1px solid var(--color-border); }
+.list-view td { padding:9px 10px; border-bottom:1px solid var(--color-border); }
+.list-view tr:last-child td { border-bottom:0; }
+.list-view tr:hover td { background:var(--color-accent-soft); }
+.list-view .person-cell { display:inline-flex; align-items:center; gap:7px; border:0; background:transparent; padding:0; color:inherit; cursor:pointer; }
+.list-view .person-cell:hover { color:var(--color-accent-hover); }
+.list-view .arrow { color:var(--color-text-muted); font-size:11px; }
+.list-view .mini-avatar { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; border:1.5px solid var(--cat-color,var(--color-border)); background:color-mix(in srgb, var(--cat-color,var(--color-accent)) 20%, var(--color-bg-surface)); font-family:"Playfair Display",serif; font-size:10px; }
+.list-view .rel-link { display:inline-flex; align-items:center; gap:5px; border:0; background:transparent; padding:2px 4px; font-size:12px; border-radius:4px; }
+.list-view .rel-link:hover { color:var(--color-accent-hover); background:var(--color-accent-soft); }
+.list-view .badge { display:inline-flex; border:1px solid var(--color-border); border-radius:4px; padding:1px 5px; font-size:10px; color:var(--color-text-muted); }
+.list-view .badge.pending { color:var(--color-warning); border-color:color-mix(in srgb, var(--color-warning) 45%, transparent); }
+.graph-footnote { margin:10px 0 0; font-size:11px; color:var(--color-text-muted); }
+
+/* ═══════════════ 设计说明 ═══════════════ */
+.design-notes { margin-top:44px; }
+.design-notes > header { display:flex; align-items:baseline; gap:12px; margin-bottom:16px; }
+.design-notes h2 { font-family:"Playfair Display",serif; font-size:22px; font-weight:600; margin:0; }
+.design-notes > header span { font-size:11px; color:var(--color-text-muted); letter-spacing:.08em; }
+.note-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.note-card { border:1px solid var(--color-border); border-radius:12px; background:var(--color-bg-surface); padding:15px 16px; }
+.note-card .idx { font-family:"Roboto Mono",monospace; font-size:10px; color:var(--color-accent); letter-spacing:.1em; }
+.note-card h3 { margin:7px 0 5px; font-size:13px; font-weight:600; }
+.note-card p { margin:0; font-size:11.5px; line-height:1.8; color:var(--color-text-secondary); }
+.note-card ul { margin:0; padding-left:15px; font-size:11.5px; line-height:1.85; color:var(--color-text-secondary); }
+.keep-row { display:flex; flex-wrap:wrap; gap:7px; margin-top:14px; }
+.keep-row span { border:1px solid var(--color-border); border-radius:999px; padding:4px 10px; font-size:10.5px; color:var(--color-text-muted); background:var(--color-bg-surface); }
+.open-questions { margin-top:26px; border:1px solid var(--color-border); border-radius:12px; background:var(--color-bg-surface); padding:16px 18px; }
+.open-questions h3 { margin:0 0 10px; font-size:13px; font-weight:600; }
+.open-questions > div { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.open-questions dt { font-size:10.5px; color:var(--color-text-muted); margin-bottom:3px; }
+.open-questions dd { margin:0; font-size:11.5px; color:var(--color-text-secondary); line-height:1.75; }
+.open-questions dd b { color:var(--color-text-primary); font-weight:550; }
+
+@media (min-width:761px) {
+  .filter-row { flex-wrap:nowrap; }
+  .filter-chips { flex:1; }
+}
+@media (max-width:1000px) {
+  .note-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .open-questions > div { grid-template-columns:1fr 1fr; }
+}
+@media (max-width:760px) {
+  .preview-shell { padding:16px 12px 48px; }
+  .preview-bar { flex-wrap:wrap; gap:10px; }
+  .graph-head { align-items:flex-start; }
+  .filter-row .person-search { margin-left:0; width:100%; }
+  .filter-row .person-search input { width:100%; }
+  .graph-body { position:relative; }
+  .graph-stage { height:430px; }
+  .graph-body.open .detail-panel { position:absolute; inset:auto 0 0 0; width:100%; height:66%; border-left:0; border-top:1px solid var(--color-border); border-radius:12px 12px 0 0; background:var(--color-bg-surface); z-index:5; box-shadow:0 -12px 30px rgba(20,16,12,.3); }
+  .detail-inner { width:100%; height:100%; padding:15px 16px 18px; }
+  .detail-facts { grid-template-columns:1fr 1fr; }
+  .legend { display:none; }
+  .note-grid, .open-questions > div { grid-template-columns:1fr; }
+  .kb-toolbar { flex-wrap:wrap; }
+  .kb-search { flex-basis:100%; }
+}
+</style>
+</head>
+<body>
+<div class="preview-shell">
+  <div class="preview-bar">
+    <h1>人物关系图谱<small>Design Preview</small></h1>
+    <div class="preview-badge">设计预览 · 尚未接入实际数据</div>
+    <div class="mode-switch" role="group" aria-label="主题预览">
+      <button type="button" data-mode-btn="dark" aria-pressed="true">暗色</button>
+      <button type="button" data-mode-btn="light" aria-pressed="false">亮色</button>
+    </div>
+  </div>
+
+  <div class="app-frame">
+    <header class="kb-header">
+      <div class="kb-header-title">
+        <button class="kb-back" type="button" aria-label="返回创作"><svg class="icon" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+        <span class="kb-logo"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v18H6.5A2.5 2.5 0 0 0 4 23V5.5Z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H19"/></svg></span>
+        <div><h1>故事知识库</h1><p>人物、世界与故事的连续性</p></div>
+      </div>
+      <button class="kb-primary" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新增知识</button>
+    </header>
+
+    <div class="kb-toolbar">
+      <label class="kb-search">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" placeholder="搜索标题、描述、别名或事实…" aria-label="搜索知识" />
+      </label>
+      <label class="kb-perspective">章节视角
+        <select aria-label="章节视角"><option>截至第 3 章</option><option>全书作者视图</option></select>
+      </label>
+      <button class="ghost-btn" type="button">知识工具<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+    </div>
+
+    <nav class="kb-type-nav" aria-label="知识分类">
+      <button type="button">全部<span class="count">128</span></button>
+      <button type="button"><span class="mark">人</span>角色卡<span class="count">26</span></button>
+      <button type="button" aria-pressed="true"><span class="mark">↗</span>人物关系<span class="count">42</span></button>
+      <button type="button"><span class="mark">界</span>世界观<span class="count">31</span></button>
+      <button type="button"><span class="mark">时</span>时间线<span class="count">18</span></button>
+      <button type="button"><span class="mark">线</span>伏笔<span class="count">11</span></button>
+    </nav>
+
+    <nav class="kb-review-nav" aria-label="知识审核状态">
+      <button type="button" aria-pressed="true">正式知识<em>128</em></button>
+      <button type="button">待确认<em>9</em></button>
+      <button type="button">已拒绝<em>3</em></button>
+      <button type="button">已归档<em>6</em></button>
+      <button type="button">已取代<em>2</em></button>
+    </nav>
+
+    <main class="kb-content">
+      <div class="graph-toolbar">
+        <span id="graphMeta">第 3 章视角 · 12 位人物 / 15 条关系</span>
+        <label>展开人物
+          <select aria-label="展开人物关系"><option>全部（有界首屏）</option><option>沈砚 #1</option></select>
+        </label>
+
+      </div>
+
+      <section class="graph-card" id="graphCard" aria-label="人物关系图谱">
+        <header class="graph-head">
+          <div class="graph-title">
+            <div>
+              <div class="eyebrow">Relation Map</div>
+              <h2>人物关系图谱</h2>
+              <p id="graphSubtitle">以 <strong>沈砚</strong> 为中心 · 第 3 章已揭示的关系</p>
+            </div>
+          </div>
+          <div class="graph-head-tools">
+            <button class="ghost-btn center-back" id="centerBack" type="button" hidden>↩ 回到 沈砚</button>
+            <div class="segmented" role="group" aria-label="展开层数">
+              <button type="button" data-hops="1" aria-pressed="true">一层</button>
+              <button type="button" data-hops="2" aria-pressed="false">两层</button>
+            </div>
+            <button class="ghost-btn" id="listToggle" type="button" aria-pressed="false">
+              <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.5M3.5 12h.5M3.5 18h.5"/></svg>
+              <span id="listLabel">列表视图</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="filter-row">
+          <div class="filter-chips" id="filterChips" role="group" aria-label="关系类型筛选"></div>
+          <label class="person-search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="personSearch" type="search" placeholder="在当前图谱中查找人物…" aria-label="搜索人物" />
+          </label>
+        </div>
+
+        <div class="graph-body" id="graphBody">
+          <div class="graph-stage" id="graphStage">
+            <svg id="graphSvg" viewBox="0 0 960 630" preserveAspectRatio="xMidYMid meet" role="img" aria-label="以沈砚为中心的人物关系网络"></svg>
+            <div class="legend" aria-hidden="true">
+              <span><i></i>单向关系</span>
+              <span><i class="sym"></i>双向关系</span>
+              <span><i class="dash"></i>待确认</span>
+              <span><i class="dotkey"></i>隐藏信息</span>
+            </div>
+            <div class="zoom-controls">
+              <button type="button" data-zoom="in" aria-label="放大">+</button>
+              <button type="button" data-zoom="out" aria-label="缩小">−</button>
+              <button type="button" data-zoom="reset" aria-label="重置视图"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6"/></svg></button>
+            </div>
+            <div class="hint">点击人物设为中心 · 点击中心人物查看档案 · 拖拽节点可调整位置</div>
+          </div>
+          <aside class="detail-panel" id="detailPanel" aria-label="人物档案">
+            <div class="detail-inner" id="detailInner"></div>
+          </aside>
+        </div>
+
+        <div class="list-view" id="listView"></div>
+      </section>
+
+      <p class="graph-footnote">点击环上人物即以他为中心重建图谱，点击中心人物查看档案，点击连线查看关系与证据。外圈关系密集时标签自动收起，悬停连线即可显示。</p>
+    </main>
+  </div>
+
+  <section class="design-notes">
+    <header><h2>设计说明</h2><span>百度百科式关系叙事的结构 + ArtVerse 现有设计语言</span></header>
+    <div class="note-grid">
+      <article class="note-card"><div class="idx">01 / LAYOUT</div><h3>以人物为中心的环形双圈</h3><p>当前中心人物居中放大，一层关系排内圈，两层关系排外圈。点击任意环上人物，即以他为中心重新构建：新中心放大、原中心退回环上，图谱始终围绕"当前正在看的人"。</p></article>
+      <article class="note-card"><div class="idx">02 / NODE</div><h3>圆形头像 + 姓名下置</h3><p>延续百科图谱的识别方式：圆形头像、姓名在下方。角色卡有封面时直接显示照片，没有则用姓名首字，避免空白占位感。</p></article>
+      <article class="note-card"><div class="idx">03 / FILTER</div><h3>彩色关系筛选 chips</h3><p>替代现有的两个下拉框。每类关系带色点与计数，点选即聚焦该关系；再次点击恢复全部。筛选状态与图例颜色一致，不需要额外图例学习。</p></article>
+      <article class="note-card"><div class="idx">04 / EDGE</div><h3>细曲线 + 中点标签</h3><p>关系标签做成线上小胶囊，保留箭头方向：单向一个箭头，对称关系两端箭头。待确认关系用琥珀虚线，隐藏信息用紫色小圆点标记，避免标签过长。</p></article>
+      <article class="note-card"><div class="idx">05 / PANEL</div><h3>右侧档案抽屉</h3><p>点击中心人物从右侧滑出档案：身份、直接关系、隐藏信息、证据引用与下一步操作。面板展开时画布同步缩放，避免边缘节点被遮住；节点可拖拽微调位置，中心节点固定不动。</p></article>
+      <article class="note-card"><div class="idx">06 / ADAPT</div><h3>主题、窄屏与列表降级</h3><p>全部颜色取自现有 token，暗色 / 亮色自动适配；窄屏时抽屉改为底部浮层；保留关系列表视图，表格同样带头像与审核状态。</p></article>
+    </div>
+    <div class="keep-row">
+      <span>保留：一层 / 两层</span><span>保留：关系列表</span><span>保留：章节视角</span><span>新增：点击人物重置中心</span><span>新增：拖拽节点布局</span><span>保留：点击关系查看证据</span><span>保留：待确认虚线</span><span>保留：隐藏信息</span><span>保留：80 节点 / 200 边上限提示</span>
+    </div>
+    <div class="open-questions">
+      <h3>实施前需要你确认</h3>
+      <div>
+        <dl><dt>布局方式</dt><dd><b>环形双圈（推荐）</b><br/>关系密集时按类别分簇；若你更想看到自由探索，可改力导向布局，但首屏稳定性会下降。</dd></dl>
+        <dl><dt>档案面板</dt><dd><b>右侧抽屉（推荐）</b><br/>窄屏自动变为底部浮层，与移动端阅读器的手势习惯一致。</dd></dl>
+        <dl><dt>改动范围</dt><dd><b>只改关系图谱页（推荐）</b><br/>RelationshipGraph.tsx + knowledge.css，其他知识分类维持现状。</dd></dl>
+      </div>
+    </div>
+  </section>
+</div>
+<script>
+(() => {
+  const CATS = {
+    kin:{ label:'亲属', color:'var(--cat-kin)' },
+    love:{ label:'情感', color:'var(--cat-love)' },
+    sect:{ label:'师门', color:'var(--cat-sect)' },
+    ally:{ label:'盟友', color:'var(--cat-ally)' },
+    foe:{ label:'敌对', color:'var(--cat-foe)' },
+    other:{ label:'其他', color:'var(--cat-other)' }
+  };
+  const RING = { 1:{ rx:292, ry:178 }, 2:{ rx:388, ry:238 } };
+  const CX = 480, CY = 315;
+
+  const PEOPLE = [
+    { id:'shen', name:'沈砚', initial:'砚', ring:0, cat:null, role:'主角 · 青云宗内门弟子', first:'第 1 章',
+      evidence:'沈砚在青云宗大比中重伤濒死，是苏清漪以一株雪魄莲把他从鬼门关拉了回来。' },
+    { id:'yun', name:'云娘', initial:'娘', ring:1, angle:197, cat:'kin', role:'母亲 · 沈府主母', first:'第 1 章',
+      evidence:'云娘在沈砚离府前夜，把刻着「沈」字的旧玉佩塞进了他的行囊。' },
+    { id:'su', name:'苏清漪', initial:'漪', ring:1, angle:232, cat:'love', role:'道侣 · 天音阁少主', first:'第 2 章',
+      evidence:'苏清漪替沈砚挡下裴无咎的毒掌，自己却在雪地里昏迷了三天。' },
+    { id:'jiang', name:'姜黎', initial:'黎', ring:1, angle:268, cat:'love', role:'青梅 · 姜氏孤女', first:'第 1 章',
+      evidence:'姜黎与沈砚在偏院一起长大，她始终收着那枚没能送出去的剑穗。' },
+    { id:'lu', name:'陆昭', initial:'昭', ring:1, angle:310, cat:'ally', role:'挚友 · 散修剑客', first:'第 1 章',
+      evidence:'陆昭在断魂崖外守了沈砚一整夜，直到他从崖底爬上来。' },
+    { id:'xie', name:'谢不疑', initial:'谢', ring:1, angle:350, cat:'ally', role:'结义兄弟 · 镇魔司校尉', first:'第 2 章',
+      evidence:'谢不疑以镇魔司腰牌为沈砚洗清通魔嫌疑，代价是自请降职三级。' },
+    { id:'pei', name:'裴无咎', initial:'裴', ring:1, angle:30, cat:'foe', role:'宿敌 · 血衣楼少主', first:'第 2 章',
+      evidence:'裴无咎在雨夜留下半枚血衣令牌，指名要沈砚单独赴约。' },
+    { id:'xuan', name:'玄真子', initial:'玄', ring:1, angle:110, cat:'sect', role:'师尊 · 青云宗长老', first:'第 1 章',
+      evidence:'玄真子破例收沈砚为亲传，只留下一句「你活着回来，我再教你第二剑」。' },
+    { id:'bai', name:'白芷', initial:'芷', ring:1, angle:145, cat:'sect', role:'同门师姐 · 药庐执事', first:'第 2 章',
+      evidence:'白芷把最后一瓶止血散给了沈砚，自己带着伤守了一夜药炉。' },
+    { id:'aruo', name:'阿箬', initial:'箬', ring:2, angle:222, cat:'other', role:'侍女 · 沈府旧人', first:'第 3 章',
+      evidence:'阿箬藏在送饭的食盒里一张字条：祠堂第三块砖下，还有一封没烧完的信。' },
+    { id:'qi', name:'戚长风', initial:'戚', ring:2, angle:318, cat:'ally', role:'盟友 · 北境商盟主', first:'第 3 章',
+      evidence:'戚长风在酒桌上只提了一个条件：沈砚替他查清十年前那批军械的去向。' },
+    { id:'zhou', name:'老周', initial:'周', ring:2, angle:158, cat:'other', role:'管家 · 沈府', first:'第 2 章',
+      evidence:'老周把沈砚幼时的乳名写在账本背面，又匆匆涂掉。' },
+    { id:'gu', name:'顾寒衣', initial:'顾', ring:2, angle:58, cat:'foe', role:'暗探 · 听风阁', first:'第 3 章',
+      evidence:'顾寒衣在客栈窗下站了半炷香，最终只留下一枚听风阁的铜哨。' }
+  ];
+
+  const EDGES = [
+    { id:'e1', from:'yun', to:'shen', label:'母亲', cat:'kin', curve:14, stage:'第 1 章起',
+      open:'云娘是沈砚生母，沈府上下皆知。', hidden:'云娘并非沈砚生母，真正的沈夫人已于十年前病逝。',
+      evidence:'族谱上「云氏」二字被人用新墨覆盖过，底下隐约是另一个姓氏。' },
+    { id:'e2', from:'shen', to:'su', label:'道侣', cat:'love', sym:true, curve:8, stage:'第 2 章起',
+      open:'天音阁与青云宗默许的婚约。', hidden:'苏清漪最初接近沈砚，是为了查清父亲的死因。',
+      evidence:'苏清漪的琴匣夹层里，藏着半张与沈砚有关的悬赏令。' },
+    { id:'e3', from:'jiang', to:'shen', label:'青梅', cat:'love', sym:true, curve:10, stage:'第 1 章起',
+      open:'姜黎与沈砚自幼相识，是沈府旧人默认的「半个自家人」。', hidden:'姜黎一直知道沈砚失忆前的身份。',
+      evidence:'姜黎在梦中喊出一个沈砚从未用过的名字。' },
+    { id:'e4', from:'shen', to:'lu', label:'挚友', cat:'ally', sym:true, curve:6, stage:'第 1 章起',
+      open:'陆昭是沈砚唯一愿意托付后背的同辈。', hidden:'',
+      evidence:'陆昭把断剑埋进崖底，却在第二年又悄悄挖了出来。' },
+    { id:'e5', from:'shen', to:'xie', label:'结义', cat:'ally', sym:true, curve:6, stage:'第 2 章起',
+      open:'二人在镇魔司狱中结拜，此事有卷宗可查。', hidden:'谢不疑奉密令监视沈砚。',
+      evidence:'镇魔司卷宗里，谢不疑的名字出现在「沈砚」监视人的一栏。' },
+    { id:'e6', from:'pei', to:'shen', label:'宿敌', cat:'foe', curve:10, stage:'第 2 章起',
+      open:'血衣楼与青云宗积怨已久。', hidden:'裴无咎要的不是沈砚的命，而是他体内的那枚剑种。',
+      evidence:'裴无咎每次出手都避开沈砚心口，只攻丹田。' },
+    { id:'e7', from:'xuan', to:'shen', label:'师尊', cat:'sect', curve:10, stage:'第 1 章起',
+      open:'玄真子破例收徒，宗门多有非议。', hidden:'玄真子知道沈砚失忆的真相，却选择沉默。',
+      evidence:'玄真子的书房里锁着一封十年前的验伤记录。' },
+    { id:'e8', from:'bai', to:'shen', label:'同门', cat:'sect', curve:8, stage:'第 2 章起',
+      open:'白芷代师授艺，待沈砚如亲弟。', hidden:'',
+      evidence:'白芷的药庐里，至今留着沈砚第一次煎糊的那口药罐。' },
+    { id:'e9', from:'shen', to:'aruo', label:'救命之恩', cat:'other', curve:8, stage:'第 3 章起',
+      open:'阿箬曾在雪夜把沈砚拖进柴房，躲过一场追杀。', hidden:'阿箬是沈府灭门案唯一的活口证人。',
+      evidence:'阿箬手腕内侧有一道与旧案卷宗描述一致的烫伤。' },
+    { id:'e10', from:'shen', to:'qi', label:'盟友', cat:'ally', sym:true, curve:8, stage:'第 3 章起',
+      open:'北境商盟与沈砚达成临时合作。', hidden:'戚长风早已把沈砚的行踪卖给了血衣楼。',
+      evidence:'商盟账册上，有一笔指向血衣楼暗桩的巨额支出。' },
+    { id:'e11', from:'gu', to:'shen', label:'监视', cat:'foe', pending:true, curve:12, stage:'候选',
+      open:'尚待作者确认的暗探关系。', hidden:'',
+      evidence:'系统候选：顾寒衣连续三夜出现在沈砚落脚的客栈。' },
+    { id:'e12', from:'yun', to:'zhou', label:'主仆', cat:'other', curve:20, stage:'第 1 章起',
+      open:'老周在沈府做了三十年管家。', hidden:'老周每月十五都会去城外一座无名坟前上香。',
+      evidence:'账本背面被涂掉的乳名，与无名墓碑上的名字只差一个字。' },
+    { id:'e13', from:'xuan', to:'bai', label:'师徒', cat:'sect', curve:18, stage:'第 1 章起',
+      open:'白芷是玄真子门下最年长的弟子。', hidden:'',
+      evidence:'白芷的拜师帖上，日期比青云宗开山早了整整三年。' },
+    { id:'e14', from:'su', to:'jiang', label:'情敌', cat:'love', curve:16, stage:'第 2 章起',
+      open:'两人在药王谷有过一次争执。', hidden:'',
+      evidence:'药王谷的伙计记得，两位姑娘最后是红着眼眶一起离开的。' },
+    { id:'e15', from:'lu', to:'xie', label:'同袍', cat:'ally', sym:true, curve:16, stage:'第 2 章起',
+      open:'二人曾在北境同守一座孤城。', hidden:'',
+      evidence:'孤城残墙上，还刻着两人的名字和一道剑痕。' }
+  ];
+
+  const byId = id => PEOPLE.find(p => p.id === id);
+  const peopleIndex = new Map(PEOPLE.map((p, i) => [p.id, i]));
+  const CAT_ORDER = ['kin', 'love', 'sect', 'ally', 'foe', 'other'];
+  const catRank = p => p.cat ? CAT_ORDER.indexOf(p.cat) : CAT_ORDER.length;
+  const colorOf = p => p.cat ? CATS[p.cat].color : 'var(--color-accent)';
+  const escape = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  const ADJ = new Map(PEOPLE.map(p => [p.id, []]));
+  EDGES.forEach(e => { ADJ.get(e.from).push(e); ADJ.get(e.to).push(e); });
+
+  let centerId = 'shen';
+  let history = [];
+  let filter = '', hops = 1, query = '', zoom = 1;
+  let selectedId = null;
+  let positions = {};
+  let innerRing = RING[1];
+  let visibleEdges = [];
+  let suppressClickUntil = 0;
+  let dragState = null;
+
+  /* 以当前中心人物 BFS 分层：0 = 中心，1 = 直接关系，2 = 关系的关系 */
+  function buildLayout() {
+    const depth = new Map([[centerId, 0]]);
+    const queue = [centerId];
+    while (queue.length) {
+      const id = queue.shift();
+      const d = depth.get(id);
+      if (d >= hops) continue;
+      ADJ.get(id).forEach(e => {
+        const other = e.from === id ? e.to : e.from;
+        if (!depth.has(other)) { depth.set(other, d + 1); queue.push(other); }
+      });
+    }
+    const ring1 = [], ring2 = [];
+    depth.forEach((d, id) => {
+      if (d === 1) ring1.push(byId(id));
+      else if (d === 2) ring2.push(byId(id));
+    });
+    ring1.sort((a, b) => catRank(a) - catRank(b) || peopleIndex.get(a.id) - peopleIndex.get(b.id));
+
+    positions = {};
+    positions[centerId] = { x: CX, y: CY, ring: 0, angle: -90 };
+
+    const inner = ring1.length > 8 ? { rx: 336, ry: 208 } : RING[1];
+    innerRing = inner;
+    const step = ring1.length ? 360 / ring1.length : 0;
+    /* 让连接数最多的人物（通常是上一个中心）落在正上方，便于对照 */
+    let hubIdx = 0;
+    ring1.forEach((p, i) => {
+      if (ADJ.get(p.id).length > ADJ.get(ring1[hubIdx].id).length) hubIdx = i;
+    });
+    const startDeg = -90 - step * hubIdx;
+    ring1.forEach((p, i) => {
+      const deg = startDeg + step * i;
+      const rad = deg * Math.PI / 180;
+      positions[p.id] = { x: CX + inner.rx * Math.cos(rad), y: CY + inner.ry * Math.sin(rad), ring: 1, angle: deg };
+    });
+
+    /* 外圈节点靠近它在内圈的"父节点"，避免与内圈重叠 */
+    const buckets = new Map();
+    const loose = [];
+    ring2.forEach(p => {
+      const parent = ADJ.get(p.id)
+        .map(e => e.from === p.id ? e.to : e.from)
+        .find(id => positions[id] && positions[id].ring === 1);
+      if (parent) {
+        if (!buckets.has(parent)) buckets.set(parent, []);
+        buckets.get(parent).push(p);
+      } else loose.push(p);
+    });
+    const placeOuter = (p, deg) => {
+      const rad = deg * Math.PI / 180;
+      positions[p.id] = { x: CX + RING[2].rx * Math.cos(rad), y: CY + RING[2].ry * Math.sin(rad), ring: 2, angle: deg };
+    };
+    buckets.forEach((children, parentId) => {
+      children.sort((a, b) => catRank(a) - catRank(b) || peopleIndex.get(a.id) - peopleIndex.get(b.id));
+      const base = positions[parentId].angle;
+      const n = children.length;
+      if (n === 1) { placeOuter(children[0], base + 16); return; }
+      /* 以父节点方向为中心左右对称展开，留出 22° 空档避免压住父节点 */
+      const perSide = Math.ceil(n / 2);
+      const span = Math.min(85, 22 + Math.max(0, perSide - 1) * 21);
+      const gap = perSide > 1 ? (span - 22) / (perSide - 1) : 0;
+      children.forEach((p, i) => {
+        const rank = Math.floor(i / 2);
+        placeOuter(p, base + (i % 2 === 0 ? -1 : 1) * (22 + rank * gap));
+      });
+    });
+    loose.forEach((p, i) => {
+      const gap = loose.length > 1 ? 360 / loose.length : 0;
+      placeOuter(p, -90 + gap * i);
+    });
+
+    visibleEdges = EDGES.filter(e => positions[e.from] && positions[e.to]);
+  }
+
+  function snapshotPositions() {
+    const snap = {};
+    Object.entries(positions).forEach(([id, p]) => { snap[id] = { x: p.x, y: p.y, ring: p.ring }; });
+    return snap;
+  }
+
+  const svg = document.getElementById('graphSvg');
+  const graphBody = document.getElementById('graphBody');
+  const graphCard = document.getElementById('graphCard');
+  const graphStage = document.getElementById('graphStage');
+  const filterChips = document.getElementById('filterChips');
+  const detailInner = document.getElementById('detailInner');
+  const listView = document.getElementById('listView');
+  const listLabel = document.getElementById('listLabel');
+
+  function renderChips() {
+    const counts = {};
+    visibleEdges.forEach(e => { counts[e.cat] = (counts[e.cat] || 0) + 1; });
+    const total = visibleEdges.length;
+    const chip = (key, label, color, n) =>
+      `<button type="button" class="chip" data-cat="${key}" aria-pressed="${filter === key}" style="--chip-color:${color}">
+        <span class="dot"></span>${label}<span class="n">${n}</span></button>`;
+    filterChips.innerHTML =
+      chip('', '全部', 'var(--color-accent)', total) +
+      Object.entries(CATS).map(([key, c]) => chip(key, c.label, c.color, counts[key] || 0)).join('');
+  }
+
+  function renderMeta() {
+    const people = Object.keys(positions).length;
+    document.getElementById('graphMeta').textContent =
+      `第 3 章视角 · ${people} 位人物 / ${visibleEdges.length} 条关系`;
+    document.getElementById('graphSubtitle').innerHTML =
+      `以 <strong>${escape(byId(centerId).name)}</strong> 为中心 · 第 3 章已揭示的关系`;
+  }
+
+  function renderBack() {
+    const btn = document.getElementById('centerBack');
+    const targetId = history.length ? history[history.length - 1] : (centerId !== 'shen' ? 'shen' : null);
+    if (!targetId) { btn.hidden = true; btn.dataset.target = ''; return; }
+    btn.hidden = false;
+    btn.dataset.target = targetId;
+    btn.textContent = `↩ 回到 ${byId(targetId).name}`;
+  }
+
+  function edgeGeometry(e) {
+    const a = positions[e.from], b = positions[e.to];
+    const padA = a.ring === 0 ? 44 : (a.ring === 1 ? 29 : 27);
+    const padB = b.ring === 0 ? 44 : (b.ring === 1 ? 29 : 27);
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const sx = a.x + ux * padA, sy = a.y + uy * padA;
+    const tx = b.x - ux * padB, ty = b.y - uy * padB;
+    const curve = e.curve || 0;
+    const cx = (sx + tx) / 2 - uy * curve;
+    const cy = (sy + ty) / 2 + ux * curve;
+    /* 外圈连线标签靠近外侧节点，避免所有标签挤在中心人物附近 */
+    const t = Math.max(a.ring, b.ring) >= 2 ? 0.74 : 0.5;
+    const mt = 1 - t;
+    const lx = mt * mt * sx + 2 * mt * t * cx + t * t * tx;
+    const ly = mt * mt * sy + 2 * mt * t * cy + t * t * ty;
+    return { d: `M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${tx.toFixed(1)} ${ty.toFixed(1)}`, lx, ly };
+  }
+
+  function renderGraph(prev) {
+    const q = query.trim();
+    const matches = p => !q || p.name.includes(q);
+    const nodes = PEOPLE.filter(p => positions[p.id])
+      .sort((a, b) => positions[b.id].ring - positions[a.id].ring);
+    const catNodes = new Set();
+    if (filter) visibleEdges.filter(e => e.cat === filter).forEach(e => { catNodes.add(e.from); catNodes.add(e.to); });
+
+    const outerEdgeCount = visibleEdges.filter(e =>
+      Math.max(positions[e.from].ring, positions[e.to].ring) >= 2).length;
+
+    const edgeMarkup = visibleEdges.map(e => {
+      const g = edgeGeometry(e);
+      const dim = (filter && e.cat !== filter) || (q && !matches(byId(e.from)) && !matches(byId(e.to)));
+      const outer = Math.max(positions[e.from].ring, positions[e.to].ring) >= 2;
+      const denseLabel = outer && outerEdgeCount > 5;
+      const w = Math.max(30, Array.from(e.label).length * 11.5 + (e.hidden ? 20 : 12));
+      return `<g class="edge-item${dim ? ' dim' : ''}${denseLabel ? ' dense-label' : ''}" data-edge="${e.id}" data-incident="${e.from} ${e.to}">
+        <path class="edge-base${e.sym ? ' symmetric' : ''}${e.pending ? ' pending' : ''}" d="${g.d}"/>
+        <path class="edge-hit" d="${g.d}"/>
+        <g class="edge-label${e.pending ? ' pending' : ''}${e.hidden ? ' hidden' : ''}" transform="translate(${g.lx.toFixed(1)} ${g.ly.toFixed(1)})">
+          <rect x="${-w / 2}" y="-9" width="${w}" height="18" rx="6"/>
+          <circle class="label-dot" cx="${-w / 2 + 7}" cy="0" r="2.4"/>
+          <text x="${e.hidden ? 3 : 0}" y="3.5" text-anchor="middle">${escape(e.label)}</text>
+        </g>
+      </g>`;
+    }).join('');
+
+    const nodeMarkup = nodes.map(p => {
+      const pos = positions[p.id];
+      const ring = pos.ring;
+      const r = ring === 0 ? 40 : (ring === 1 ? 26 : 24);
+      const nameY = r + (ring === 0 ? 27 : 19);
+      const dim = (filter && !catNodes.has(p.id) && ring !== 0) || (q && !matches(p));
+      const cat = p.cat || 'none';
+      const color = p.cat ? CATS[p.cat].color : 'var(--color-accent)';
+      const start = prev && prev[p.id]
+        ? `translate(${prev[p.id].x.toFixed(1)}px, ${prev[p.id].y.toFixed(1)}px)`
+        : `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
+      return `<g class="person-node cat-${cat}${ring === 0 ? ' ego' : ''}${dim ? ' dim' : ''}"
+        style="transform:${start}" data-person="${p.id}" tabindex="0"
+        role="button" aria-label="${ring === 0 ? '查看' + escape(p.name) + '档案' : '以' + escape(p.name) + '为中心'}">
+        <circle class="halo" r="${r + 9}"/>
+        <circle class="avatar" r="${r}" style="fill:${color};fill-opacity:${ring === 0 ? 0.24 : 0.19};stroke:${color}"/>
+        <text class="initial" y="1" font-size="${Math.round(r * 0.82)}" dominant-baseline="middle" style="fill:var(--color-text-primary)">${escape(p.initial)}</text>
+        <text class="name" y="${nameY}"${ring === 0 ? ' font-size="17"' : ''}>${escape(p.name)}</text>
+      </g>`;
+    }).join('');
+
+    svg.innerHTML = `<defs>
+      <pattern id="dotPattern" width="22" height="22" patternUnits="userSpaceOnUse">
+        <circle class="dotgrid" cx="1.5" cy="1.5" r="1"/>
+      </pattern>
+      <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+        <path d="M1 1 L7 4 L1 7 Z" style="fill:var(--edge-strong)"/>
+      </marker>
+      <marker id="arrow-start" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+        <path d="M1 1 L7 4 L1 7 Z" style="fill:var(--edge-strong)"/>
+      </marker>
+      <marker id="arrow-warn" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+        <path d="M1 1 L7 4 L1 7 Z" style="fill:var(--color-warning)"/>
+      </marker>
+    </defs>
+    <rect x="0" y="0" width="960" height="630" fill="url(#dotPattern)"/>
+    <g id="graphScene">
+      <ellipse class="guide" cx="${CX}" cy="${CY}" rx="${innerRing.rx}" ry="${innerRing.ry}"/>
+      ${nodes.some(p => positions[p.id].ring === 2) ? `<ellipse class="guide" cx="${CX}" cy="${CY}" rx="${RING[2].rx}" ry="${RING[2].ry}"/>` : ''}
+      <g class="edges">${edgeMarkup}</g>
+      <g class="nodes">${nodeMarkup}</g>
+      ${q && !nodes.some(matches) ? `<text x="${CX}" y="588" text-anchor="middle" class="guide-label">没有匹配「${escape(q)}」的人物</text>` : ''}
+    </g>`;
+
+    svg.querySelectorAll('.person-node').forEach(node => {
+      node.addEventListener('click', ev => {
+        ev.stopPropagation();
+        if (Date.now() < suppressClickUntil) return;
+        focusPerson(node.dataset.person);
+      });
+      node.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          if (Date.now() < suppressClickUntil) return;
+          focusPerson(node.dataset.person);
+        }
+      });
+    });
+    svg.querySelectorAll('.edge-item').forEach(group => {
+      group.addEventListener('click', ev => { ev.stopPropagation(); openEdge(group.dataset.edge); });
+    });
+    if (selectedId) decorateSelection();
+    if (prev) animateLayout();
+  }
+
+  function animateLayout() {
+    const nodes = svg.querySelectorAll('.person-node');
+    const edgesGroup = svg.querySelector('.edges');
+    void svg.getBoundingClientRect();
+    if (edgesGroup) edgesGroup.style.opacity = '0';
+    requestAnimationFrame(() => {
+      nodes.forEach(n => {
+        const pos = positions[n.dataset.person];
+        if (pos) n.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
+      });
+      if (edgesGroup) edgesGroup.style.opacity = '1';
+    });
+  }
+
+  function decorateSelection() {
+    svg.querySelectorAll('.person-node').forEach(node => node.classList.remove('selected'));
+    svg.querySelectorAll('.edge-item').forEach(group => group.classList.remove('active', 'dim'));
+    if (!selectedId) return;
+    svg.querySelectorAll('.person-node').forEach(node => {
+      if (node.dataset.person === selectedId) node.classList.add('selected');
+    });
+    if (selectedId === centerId) return;
+    svg.querySelectorAll('.edge-item').forEach(group => {
+      const incident = group.dataset.incident.split(' ');
+      if (incident.includes(selectedId)) group.classList.add('active');
+      else group.classList.add('dim');
+    });
+  }
+
+  function catInfo(p) {
+    return p.cat ? CATS[p.cat] : { label:'中心人物', color:'var(--color-accent)' };
+  }
+
+  function relsFor(p) {
+    return EDGES.filter(e => e.from === p.id || e.to === p.id)
+      .map(e => ({
+        e,
+        other: byId(e.from === p.id ? e.to : e.from),
+        dir: e.sym ? '⇄' : (e.from === p.id ? '→' : '←')
+      }))
+      .sort((a, b) =>
+        (positions[a.other.id]?.ring ?? 9) - (positions[b.other.id]?.ring ?? 9) ||
+        a.e.label.localeCompare(b.e.label, 'zh-Hans-CN'));
+  }
+
+  function bindPanelButtons() {
+    detailInner.querySelectorAll('[data-goto]').forEach(btn =>
+      btn.addEventListener('click', () => focusPerson(btn.dataset.goto)));
+    detailInner.querySelectorAll('[data-center]').forEach(btn =>
+      btn.addEventListener('click', () => setCenter(btn.dataset.center, { openPanel: true })));
+    detailInner.querySelectorAll('[data-close]').forEach(btn =>
+      btn.addEventListener('click', closePanel));
+  }
+
+  function renderPersonPanel(p) {
+    const c = catInfo(p);
+    const isCenter = p.id === centerId;
+    const rels = relsFor(p);
+    const hiddenRel = rels.find(r => r.e.hidden);
+    const pendingCount = rels.filter(r => r.e.pending).length;
+    const rows = rels.map(r => `<li><button type="button" data-goto="${r.other.id}">
+      <span class="dot" style="--rel-color:${CATS[r.e.cat].color}"></span>
+      <span class="rel-label">${escape(r.e.label)}</span>
+      <span class="arrow">${r.dir}</span>
+      ${r.e.pending ? '<span class="state">待确认</span>' : ''}
+      <span class="rel-person">${escape(r.other.name)}</span>
+    </button></li>`).join('');
+
+    detailInner.innerHTML = `
+      <div class="detail-head">
+        <div class="detail-avatar" style="--cat-color:${c.color}">${escape(p.initial)}</div>
+        <div style="min-width:0;flex:1">
+          <h3>${escape(p.name)}</h3>
+          <p>${escape(p.role)}</p>
+          <div class="detail-tags">
+            <span class="tag cat" style="--cat-color:${c.color}">${c.label}</span>
+            ${isCenter ? '<span class="tag" style="border-color:color-mix(in srgb, var(--color-accent) 55%, transparent);color:var(--color-accent);background:var(--color-accent-soft)">当前中心</span>' : ''}
+            <span class="tag">正式知识</span>
+            ${pendingCount ? '<span class="tag warn">含待确认</span>' : ''}
+          </div>
+        </div>
+        <button class="icon-btn" type="button" data-close aria-label="关闭档案">
+          <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <dl class="detail-facts">
+        <div><dt>直接关系</dt><dd>${rels.length} 条</dd></div>
+        <div><dt>首次登场</dt><dd>${escape(p.first)}</dd></div>
+        <div><dt>当前阶段</dt><dd>第 3 章</dd></div>
+        <div><dt>知识状态</dt><dd>${pendingCount ? '正式 · 待审 1' : '正式'}</dd></div>
+      </dl>
+      <div class="detail-section">
+        <header><h4>直接关系 <span>${rels.length}</span></h4></header>
+        <ul class="rel-list">${rows}</ul>
+      </div>
+      ${hiddenRel ? `<div class="detail-section">
+        <header><h4>隐藏信息</h4></header>
+        <div class="info-block locked">
+          <strong><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>仅作者视图可见</strong>
+          ${escape(hiddenRel.e.hidden)}
+        </div>
+      </div>` : ''}
+      <div class="detail-section">
+        <header><h4>证据引用</h4></header>
+        <p class="quote">${escape(p.evidence)}</p>
+      </div>
+      <div class="detail-actions">
+        <button class="primary" type="button" data-close>查看角色档案</button>
+        <button type="button" ${isCenter ? 'data-close' : `data-center="${p.id}"`}>${isCenter ? '编辑角色卡' : '设为中心'}</button>
+      </div>`;
+    bindPanelButtons();
+  }
+
+  function renderEdgePanel(e) {
+    const a = byId(e.from), b = byId(e.to), c = CATS[e.cat];
+    detailInner.innerHTML = `
+      <div class="detail-head">
+        <div class="detail-avatar" style="--cat-color:${c.color};font-family:Geist,sans-serif;font-size:20px">↗</div>
+        <div style="min-width:0;flex:1">
+          <h3>${escape(e.label)}</h3>
+          <p>${escape(a.name)} ${e.sym ? '⇄' : '→'} ${escape(b.name)}</p>
+          <div class="detail-tags">
+            <span class="tag cat" style="--cat-color:${c.color}">${c.label}</span>
+            ${e.pending ? '<span class="tag warn">待确认</span>' : '<span class="tag">正式知识</span>'}
+            ${e.hidden ? '<span class="tag" style="border-color:color-mix(in srgb, var(--color-accent-tertiary) 50%, transparent);color:var(--color-accent-tertiary)">含隐藏信息</span>' : ''}
+          </div>
+        </div>
+        <button class="icon-btn" type="button" data-close aria-label="关闭关系详情">
+          <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <dl class="detail-facts">
+        <div><dt>起点</dt><dd>${escape(a.name)}</dd></div>
+        <div><dt>终点</dt><dd>${escape(b.name)}</dd></div>
+        <div><dt>方向</dt><dd>${e.sym ? '对称关系' : '单向关系'}</dd></div>
+        <div><dt>起始章节</dt><dd>${escape(e.stage)}</dd></div>
+      </dl>
+      <div class="detail-section">
+        <header><h4>公开信息</h4></header>
+        <div class="info-block">${escape(e.open)}</div>
+      </div>
+      ${e.hidden ? `<div class="detail-section">
+        <header><h4>隐藏信息</h4></header>
+        <div class="info-block locked">
+          <strong><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>仅作者视图可见</strong>
+          ${escape(e.hidden)}
+        </div>
+      </div>` : ''}
+      <div class="detail-section">
+        <header><h4>证据引用</h4></header>
+        <p class="quote">${escape(e.evidence)}</p>
+      </div>
+      <div class="detail-actions">
+        <button class="primary" type="button" data-close>查看知识来源</button>
+        <button type="button" data-close>${e.pending ? '审核关系' : '编辑关系'}</button>
+      </div>`;
+    bindPanelButtons();
+  }
+
+  function focusPerson(id) {
+    if (id === centerId) { openPerson(id); return; }
+    setCenter(id);
+  }
+
+  /* 以 B 为圆心重建：B 居中放大，原中心退回环上 */
+  function setCenter(id, opts = {}) {
+    const { openPanel: showPanel = false, push = true } = opts;
+    const person = byId(id);
+    if (!person) return;
+    if (push && id !== centerId) {
+      history.push(centerId);
+      if (history.length > 8) history.shift();
+    }
+    if (id !== centerId) {
+      const prev = snapshotPositions();
+      centerId = id;
+      selectedId = null;
+      buildLayout();
+      renderGraph(prev);
+      renderChips();
+      renderMeta();
+      renderBack();
+      renderList();
+      svg.setAttribute('aria-label', `以 ${person.name} 为中心的人物关系网络`);
+    }
+    if (showPanel || graphBody.classList.contains('open')) openPerson(centerId);
+  }
+
+  function openPerson(id) {
+    const p = byId(id);
+    if (!p) return;
+    selectedId = id;
+    decorateSelection();
+    renderPersonPanel(p);
+    graphBody.classList.add('open');
+  }
+
+  function openEdge(id) {
+    const e = EDGES.find(item => item.id === id);
+    if (!e || !positions[e.from] || !positions[e.to]) return;
+    selectedId = null;
+    decorateSelection();
+    renderEdgePanel(e);
+    graphBody.classList.add('open');
+    svg.querySelector(`[data-edge="${id}"]`)?.classList.add('active');
+  }
+
+  function closePanel() {
+    selectedId = null;
+    graphBody.classList.remove('open');
+    detailInner.innerHTML = '';
+    decorateSelection();
+  }
+
+  function renderList() {
+    const rows = visibleEdges.map(e => {
+      const a = byId(e.from), b = byId(e.to);
+      return `<tr>
+        <td><button class="person-cell" type="button" data-list-person="${a.id}">
+          <span class="mini-avatar" style="--cat-color:${colorOf(a)}">${escape(a.initial)}</span>${escape(a.name)}
+        </button></td>
+        <td><button class="rel-link" type="button" data-list-edge="${e.id}">
+          ${escape(e.label)} <span class="arrow">${e.sym ? '⇄' : '→'}</span>
+        </button></td>
+        <td><button class="person-cell" type="button" data-list-person="${b.id}">
+          <span class="mini-avatar" style="--cat-color:${colorOf(b)}">${escape(b.initial)}</span>${escape(b.name)}
+        </button></td>
+        <td>${escape(e.stage)}</td>
+        <td><span class="badge${e.pending ? ' pending' : ''}">${e.pending ? '待确认' : '正式'}</span></td>
+      </tr>`;
+    }).join('');
+    listView.innerHTML = `<table>
+      <caption>共 ${visibleEdges.length} 条关系 · 以 ${escape(byId(centerId).name)} 为中心 · 点击人物或关系查看详情</caption>
+      <thead><tr><th>起点</th><th>关系</th><th>终点</th><th>起始章节</th><th>审核</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+    listView.querySelectorAll('[data-list-person]').forEach(btn =>
+      btn.addEventListener('click', () => { setListMode(false); focusPerson(btn.dataset.listPerson); }));
+    listView.querySelectorAll('[data-list-edge]').forEach(btn =>
+      btn.addEventListener('click', () => { setListMode(false); openEdge(btn.dataset.listEdge); }));
+  }
+
+  function setListMode(on) {
+    graphCard.classList.toggle('list-mode', on);
+    document.getElementById('listToggle').setAttribute('aria-pressed', String(on));
+    listLabel.textContent = on ? '图谱视图' : '列表视图';
+    if (on) closePanel();
+  }
+
+  function applyZoom() {
+    const w = 960 / zoom, h = 630 / zoom;
+    svg.setAttribute('viewBox', `${(480 - w / 2).toFixed(1)} ${(315 - h / 2).toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`);
+  }
+
+  filterChips.addEventListener('click', ev => {
+    const chip = ev.target.closest('.chip');
+    if (!chip) return;
+    filter = filter === chip.dataset.cat ? '' : chip.dataset.cat;
+    if (!chip.dataset.cat) filter = '';
+    renderChips();
+    renderGraph();
+  });
+
+  document.querySelectorAll('[data-hops]').forEach(btn => btn.addEventListener('click', () => {
+    const next = Number(btn.dataset.hops);
+    if (next === hops) return;
+    const prev = snapshotPositions();
+    hops = next;
+    document.querySelectorAll('[data-hops]').forEach(b =>
+      b.setAttribute('aria-pressed', String(Number(b.dataset.hops) === hops)));
+    buildLayout();
+    if (selectedId && !positions[selectedId]) closePanel();
+    renderGraph(prev);
+    renderChips();
+    renderMeta();
+    renderBack();
+    renderList();
+  }));
+
+  document.getElementById('personSearch').addEventListener('input', ev => {
+    query = ev.target.value;
+    renderGraph();
+  });
+
+  document.getElementById('listToggle').addEventListener('click', () => {
+    setListMode(!graphCard.classList.contains('list-mode'));
+  });
+
+  document.getElementById('centerBack').addEventListener('click', () => {
+    const btn = document.getElementById('centerBack');
+    const target = btn.dataset.target;
+    if (!target) return;
+    if (history.length && history[history.length - 1] === target) history.pop();
+    setCenter(target, { push: false });
+  });
+
+  document.querySelectorAll('[data-zoom]').forEach(btn => btn.addEventListener('click', () => {
+    if (btn.dataset.zoom === 'in') zoom = Math.min(1.8, zoom * 1.2);
+    else if (btn.dataset.zoom === 'out') zoom = Math.max(0.6, zoom / 1.2);
+    else zoom = 1;
+    applyZoom();
+    if (btn.dataset.zoom === 'reset') {
+      const prev = snapshotPositions();
+      buildLayout();
+      renderGraph(prev);
+    }
+  }));
+
+  function setTheme(mode) {
+    document.documentElement.dataset.mode = mode;
+    document.querySelectorAll('[data-mode-btn]').forEach(b =>
+      b.setAttribute('aria-pressed', b.dataset.modeBtn === mode ? 'true' : 'false'));
+  }
+
+  document.querySelectorAll('[data-mode-btn]').forEach(btn =>
+    btn.addEventListener('click', () => setTheme(btn.dataset.modeBtn)));
+
+  /* ══ 节点拖拽：屏幕坐标 → SVG 用户坐标，实时重算关联连线 ══ */
+  function svgPoint(ev) {
+    const pt = svg.createSVGPoint();
+    pt.x = ev.clientX; pt.y = ev.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  function refreshIncident(id) {
+    visibleEdges.forEach(e => {
+      if (e.from !== id && e.to !== id) return;
+      const group = svg.querySelector(`.edge-item[data-edge="${e.id}"]`);
+      if (!group) return;
+      const g = edgeGeometry(e);
+      group.querySelectorAll('path').forEach(path => path.setAttribute('d', g.d));
+      const label = group.querySelector('.edge-label');
+      if (label) label.setAttribute('transform', `translate(${g.lx.toFixed(1)} ${g.ly.toFixed(1)})`);
+    });
+  }
+
+  svg.addEventListener('pointerdown', ev => {
+    if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+    const node = ev.target.closest('.person-node');
+    if (!node || node.dataset.person === centerId) return;
+    const pos = positions[node.dataset.person];
+    if (!pos) return;
+    const pt = svgPoint(ev);
+    dragState = {
+      id: node.dataset.person,
+      node,
+      startX: pt.x, startY: pt.y,
+      originX: pos.x, originY: pos.y,
+      pointerId: ev.pointerId,
+      moved: false
+    };
+  });
+
+  svg.addEventListener('pointermove', ev => {
+    const drag = dragState;
+    if (!drag || ev.pointerId !== drag.pointerId) return;
+    const pt = svgPoint(ev);
+    const dx = pt.x - drag.startX;
+    const dy = pt.y - drag.startY;
+    if (!drag.moved) {
+      if (Math.hypot(dx, dy) < 4) return;
+      drag.moved = true;
+      drag.node.classList.add('dragging');
+      graphStage.classList.add('dragging');
+      try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
+      const nodesGroup = svg.querySelector('.nodes');
+      if (nodesGroup) nodesGroup.appendChild(drag.node);
+    }
+    const pos = positions[drag.id];
+    if (!pos) return;
+    pos.x = clamp(drag.originX + dx, 48, 912);
+    pos.y = clamp(drag.originY + dy, 48, 556);
+    drag.node.style.transform = `translate(${pos.x.toFixed(1)}px, ${pos.y.toFixed(1)}px)`;
+    refreshIncident(drag.id);
+  });
+
+  function endDrag(ev) {
+    if (!dragState) return;
+    if (ev && ev.pointerId !== dragState.pointerId) return;
+    const { node, moved, pointerId } = dragState;
+    node.classList.remove('dragging');
+    graphStage.classList.remove('dragging');
+    if (moved) {
+      suppressClickUntil = Date.now() + 320;
+      try { svg.releasePointerCapture(pointerId); } catch (e) {}
+    }
+    dragState = null;
+  }
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+  svg.addEventListener('lostpointercapture', endDrag);
+
+  graphStage.addEventListener('click', ev => {
+    if (Date.now() < suppressClickUntil) return;
+    if (ev.target.closest('.zoom-controls') || ev.target.closest('.legend')) return;
+    if (!ev.target.closest('.person-node') && !ev.target.closest('.edge-item')) closePanel();
+  });
+
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape') closePanel();
+  });
+
+  const params = new URLSearchParams(location.search);
+  if (params.get('mode') === 'light') setTheme('light');
+  if (params.get('h') === '2') {
+    hops = 2;
+    document.querySelectorAll('[data-hops]').forEach(b =>
+      b.setAttribute('aria-pressed', String(Number(b.dataset.hops) === 2)));
+  }
+  const requestedCenter = params.get('center');
+  if (requestedCenter && byId(requestedCenter)) centerId = requestedCenter;
+  buildLayout();
+  renderChips();
+  renderMeta();
+  renderBack();
+  renderGraph();
+  renderList();
+  applyZoom();
+  svg.setAttribute('aria-label', `以 ${byId(centerId).name} 为中心的人物关系网络`);
+  if (params.get('panel') === 'list') setListMode(true);
+  else if (params.get('panel') === 'edge') openEdge(params.get('id') || 'e2');
+  else if (params.get('panel')) openPerson(params.get('panel'));
+})();
+</script>
+</body>
+</html>

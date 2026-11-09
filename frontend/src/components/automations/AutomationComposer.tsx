@@ -3,6 +3,7 @@ import { CalendarClock, Check, ChevronDown, ImagePlus, Loader2, X } from 'lucide
 import { listStories, listChapters, type Story, type Chapter } from '../../api/authoring';
 import { getUserProviderConfigs, parseProviderModels } from '../../api/providerSettings';
 import { saveAutomation, previewAutomation, uploadAutomationReference, type AutomationPlan, type AutomationSeed, type AutomationExecutorKey, type AutomationSchedule, type AutomationDefinition } from '../../api/automations';
+import { AI_PERMISSION_OPTIONS, fetchAiPermission, type AiPermissionMode } from '../../api/aiPermission';
 import OverlayPortal from '../../ui/OverlayPortal';
 import { useToast } from '../../ui/toast/useToast';
 import { randomUUID } from '../../utils/browserSecurity';
@@ -79,6 +80,7 @@ export default function AutomationComposer({ plan, seed = {}, onClose, onSaved }
   const [modelLimit, setModelLimit] = useState(initial?.limits.maxModelCallsPerRun ?? 10);
   const [duration, setDuration] = useState((initial?.limits.maxDurationSeconds ?? 1800) / 60);
   const [misfire, setMisfire] = useState<'RUN_LATEST' | 'SKIP'>(initial?.misfirePolicy ?? 'RUN_LATEST');
+  const [permissionMode, setPermissionMode] = useState<AiPermissionMode>(initial?.permissionMode ?? 'AUTO');
   const [busy, setBusy] = useState(false);
   const [occurrences, setOccurrences] = useState<string[]>([]);
   const isImage = executorKey === 'IMAGE_GEN' || executorKey === 'MANGA_IMAGE';
@@ -101,6 +103,12 @@ export default function AutomationComposer({ plan, seed = {}, onClose, onSaved }
     }).catch(e => { if (live) toast.error(String(e.message)); });
     return () => { live = false; };
   }, [toast]);
+  useEffect(() => {
+    if (plan) return;
+    let live = true;
+    void fetchAiPermission().then(mode => { if (live) setPermissionMode(mode); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [plan]);
   useEffect(() => {
     if (!storyId) return;
     let live = true;
@@ -129,6 +137,7 @@ export default function AutomationComposer({ plan, seed = {}, onClose, onSaved }
           ...(executorKey === 'IMAGE_GEN' ? { size, referenceImageKeys: refs, ...(initial?.payload.conversationId ?? seed.conversationId ? { conversationId: initial?.payload.conversationId ?? seed.conversationId } : {}) } : { storyId, ...(executorKey === 'MANGA_IMAGE' ? { chapterIds, inputPolicy: (inputPolicy || (repeat === 'ONCE' ? 'FIXED_SNAPSHOT' : 'RESOLVE_AT_RUN')) as 'FIXED_SNAPSHOT' | 'RESOLVE_AT_RUN' } : { chapterId: chapterIds[0] }) }),
         }, limits: { maxImagesPerRun: imageLimit, maxModelCallsPerRun: modelLimit, maxDurationSeconds: duration * 60 },
         misfirePolicy: misfire, overlapPolicy: 'SKIP', expectedVersion: plan?.version, origin: initial?.origin ?? seed.origin ?? 'TASK_CENTER',
+        ...(isImage ? {} : { permissionMode }),
       };
       const saved = await saveAutomation(definition, plan?.id, key.current);
       window.dispatchEvent(new Event('artverse:automations-changed')); onSaved(saved);
@@ -157,6 +166,7 @@ export default function AutomationComposer({ plan, seed = {}, onClose, onSaved }
         {executorKey === 'MANGA_IMAGE' && <label className={label}>图片输入<Select value={inputPolicy || (repeat === 'ONCE' ? 'FIXED_SNAPSHOT' : 'RESOLVE_AT_RUN')} options={[{ value: 'FIXED_SNAPSHOT', label: '固定当前分镜与素材，变化时提醒我' }, { value: 'RESOLVE_AT_RUN', label: '每次获取所选章节当时缺失的图片' }]} onValue={setInputPolicy} /></label>}
         {executorKey === 'IMAGE_GEN' && <label className={label}>图片尺寸<input className={field} value={size} onChange={e => setSize(e.target.value)} placeholder="1024x1024" /></label>}
         <div className="grid gap-3 sm:grid-cols-2"><label className={label}>{isImage ? '每次最多生成图片' : '每次最多模型调用'}<input className={field} type="number" min={1} max={isImage ? 180 : 50} value={isImage ? imageLimit : modelLimit} onChange={e => isImage ? setImageLimit(Number(e.target.value)) : setModelLimit(Number(e.target.value))} /></label><label className={label}>最长运行（分钟）<input className={field} type="number" min={1} max={120} value={duration} onChange={e => setDuration(Number(e.target.value))} /></label></div>
+        {!isImage && <div className="grid gap-2"><label className={label}>AI 运行权限<Select value={permissionMode} options={AI_PERMISSION_OPTIONS.map(option => ({ value: option.value, label: option.label }))} onValue={value => setPermissionMode(value as AiPermissionMode)} /></label><p className="text-xs leading-5 text-text-muted">{AI_PERMISSION_OPTIONS.find(option => option.value === permissionMode)?.description}默认继承 AI 助手的权限设置。</p></div>}
         <label className={label}>错过执行时<Select value={misfire} options={[{ value: 'RUN_LATEST', label: '恢复后补最近一次（重复任务限 24 小时内）' }, { value: 'SKIP', label: '重复任务跳过错过的时间' }]} onValue={value => setMisfire(value as 'RUN_LATEST' | 'SKIP')} /></label>
         <p className="text-xs leading-5 text-text-muted">上次仍在执行或等待确认时，自动跳过新周期。覆盖正式内容仍需确认。结果与待处理事项会显示在任务中心。</p>
       </div></details>

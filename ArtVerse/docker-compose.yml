@@ -2,6 +2,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: artverse-postgres
+    restart: unless-stopped
     ports:
       - "127.0.0.1:5432:5432"
     environment:
@@ -12,13 +13,14 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      interval: 30s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: artverse-redis
+    restart: unless-stopped
     environment:
       REDISCLI_AUTH: ${REDIS_PASSWORD:?required}
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction", "--requirepass", "${REDIS_PASSWORD:?required}"]
@@ -28,7 +30,7 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 30s
       timeout: 5s
       retries: 5
 

@@ -42,7 +42,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 /** Native state/CAS and the real Redis turn-gate scripts; no paid provider requests. */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AgentSessionStateIntegrationTest {
     @Container static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
             .withExposedPorts(6379).withImagePullPolicy(ignored -> false);

@@ -40,11 +40,9 @@
 .ai-composer__tool:disabled { cursor: not-allowed; opacity: .4; }
 .ai-composer__tool svg { width: 15px; height: 15px; flex-shrink: 0; }
 .ai-composer__model { min-width: 0; max-width: calc(100% - 44px); margin-left: auto; }
-.ai-composer__send { display: inline-flex; width: 36px; height: 36px; flex: 0 0 36px; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: #1c1e20; color: #fff; transition: background-color .16s; }
-.ai-composer__send:hover:not(:disabled) { background: #35383b; }
+.ai-composer__send { display: inline-flex; width: 36px; height: 36px; flex: 0 0 36px; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: var(--color-accent); color: var(--color-accent-ink); transition: background-color .16s; }
+.ai-composer__send:hover:not(:disabled) { background: var(--color-accent-hover); }
 .ai-composer__send:disabled { cursor: not-allowed; background: var(--color-bg-raised); color: var(--color-text-muted); }
-[data-mode='dark'] .ai-composer__send:not(:disabled) { background: #edeef0; color: #1c1e20; }
-[data-mode='dark'] .ai-composer__send:hover:not(:disabled) { background: #d6d8dc; }
 .ai-composer__send svg { width: 19px; height: 19px; stroke-width: 1.8; }
 .ai-composer__caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin: 10px 8px 0; color: var(--color-text-muted); font-size: 10px; line-height: 1.7; }
 .ai-composer__attachments { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 20px 0; }
@@ -89,6 +87,12 @@
 .model-switcher__option svg { flex-shrink: 0; color: var(--color-accent); }
 .model-switcher__option small { display: block; margin-top: 1px; color: var(--color-text-muted); font-size: 10px; }
 .model-switcher__empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 10px; color: var(--color-text-muted); font-size: 12px; text-align: center; }
+.permission-switcher { flex: 0 1 auto; min-width: 0; }
+.permission-switcher .model-switcher__trigger > svg:first-child { color: var(--color-text-muted); }
+.permission-switcher__menu .model-switcher__option { align-items: flex-start; padding: 10px; }
+.permission-switcher__menu .model-switcher__option-label { white-space: normal; }
+.permission-switcher__menu .model-switcher__option-label small { white-space: normal; line-height: 1.5; }
+.permission-switcher__icon { margin-top: 2px; color: var(--color-text-muted) !important; }
 
 @media (max-width: 600px) {
   .ai-composer__input { min-height: 155px; padding: 18px 17px 8px; font-size: 13px; }

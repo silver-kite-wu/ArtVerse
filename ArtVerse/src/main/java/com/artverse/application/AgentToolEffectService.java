@@ -75,6 +75,25 @@ public class AgentToolEffectService {
         }
     }
 
+    /** Record an AI auto-approval separately so audit data never claims a human reviewed it. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordAiAutoReview(Long actor, Long chapterId, UUID requestId, UUID artifactId, Map<String,Object> receipt) {
+        if (receipt == null || !artifactId.toString().equals(String.valueOf(receipt.get("artifact_id")))
+                || !java.util.Set.of("COMMITTED", "REJECTED").contains(receipt.get("status"))) throw denied();
+        var rows = jdbc.queryForList("""
+                SELECT id,metadata FROM agent_usage_ledger WHERE user_id=? AND root_request_id=?
+                  AND usage_kind='TOOL_CALL' AND metadata->'domain_effect'->>'artifact_id'=?
+                  AND metadata->'domain_effect'->>'chapter_id'=? FOR UPDATE
+                """, actor, requestId, artifactId.toString(), chapterId.toString());
+        JsonNode formed = read(json(receipt));
+        for (var row : rows) {
+            JsonNode metadata = read(row.get("metadata"));
+            if (metadata.has("ai_auto_review_receipt") && !metadata.get("ai_auto_review_receipt").equals(formed)) throw denied();
+            jdbc.update("UPDATE agent_usage_ledger SET metadata=jsonb_set(metadata,'{ai_auto_review_receipt}',?::jsonb,true) WHERE id=?",
+                    json(formed), row.get("id"));
+        }
+    }
+
     private static JsonNode read(Object value) { try { return JSON.readTree(value.toString()); } catch (Exception e) { throw denied(); } }
     private static String json(Object value) { try { return JSON.writeValueAsString(value); } catch (Exception e) { throw denied(); } }
     private static BusinessException denied() { return new BusinessException(409, "TOOL_EFFECT_DENIED: domain receipt does not match the reserved native attempt"); }

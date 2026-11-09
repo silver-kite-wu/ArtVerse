@@ -64,7 +64,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         MangaAgentRunService.class, MangaAgentRunSnapshotReader.class, AgentOutboxService.class,
         NovelDraftReviewIntegrationTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class NovelDraftReviewIntegrationTest {
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path workspace;
     @Autowired NativeNovelDraftService nativeDrafts;

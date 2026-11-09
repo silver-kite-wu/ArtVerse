@@ -1,4 +1,4 @@
-export type SwitchOrigin = { x: number; y: number };
+type SwitchOrigin = { x: number; y: number };
 
 type SwitchSize = 'sm' | 'md';
 

@@ -82,6 +82,59 @@ class AgentScopeAgentFactoryTest {
                 .isInstanceOf(com.artverse.common.BusinessException.class).hasMessageContaining("model-capabilities");
     }
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', value = {
+            "MANUAL|fixture_read_only",
+            "AUTO|fixture_read_only,fixture_write",
+            "FULL|fixture_read_only,fixture_write,commit_storyboard_fixture"
+    })
+    void permissionModeFiltersBusinessTools(String mode, String expectedTools) {
+        var registry = mock(AgentToolConfigurationRegistry.class);
+        doAnswer(call -> {
+            Toolkit toolkit = call.getArgument(0);
+            toolkit.createToolGroup("fixture-write", "fixture business tools", true);
+            toolkit.registration().tool(new FixtureNamedTool("fixture_read_only", true)).group("fixture-write").apply();
+            toolkit.registration().tool(new FixtureNamedTool("fixture_write", false)).group("fixture-write").apply();
+            toolkit.registration().tool(new FixtureNamedTool("commit_storyboard_fixture", false)).group("fixture-write").apply();
+            toolkit.setActiveGroups(List.of("fixture-write"));
+            return null;
+        }).when(registry).configure(any(), any());
+        var boundary = new AgentToolBoundaryMiddleware(mock(MangaAgentRunService.class),
+                mock(AutomationAgentTools.class), mock(AgentBudgetService.class));
+        var factory = new AgentScopeAgentFactory(CompactionConfig.builder().build(), new ArtVerseProperties(),
+                mock(AgentWorkspaceService.class), mock(MangaAgentPromptProvider.class), null,
+                mock(AgentTurnStateStores.class), registry,
+                mock(ArtVerseSkillRegistry.class), mock(ArtVerseSkillRepository.class), mock(MangaAgentRunService.class),
+                mock(PostgresAgentWorkspaceStore.class), boundary);
+        var permissions = mock(AiPermissionService.class);
+        when(permissions.resolve(any())).thenReturn(AiPermissionMode.valueOf(mode));
+        factory.setAiPermissions(permissions);
+        var request = new AgentRunRequest("1", 2L, 3L, AgentTaskType.STORY_CHAT_WRITE, List.of(), Map.of(),
+                new AgentModelSpec("openai", "http://127.0.0.1:1", "fixture", "fixture", 1L,
+                        new AgentModelCapabilities(true, false, false, "fixture-v1")), "fixture-not-a-real-key");
+        HarnessAgent agent = ReflectionTestUtils.invokeMethod(factory, "buildAgent", request, workspace, BusinessSkillSelection.empty());
+        try {
+            Object delegate = ReflectionTestUtils.getField(agent, "delegate");
+            Toolkit toolkit = ReflectionTestUtils.invokeMethod(delegate, "getToolkit");
+            List<String> expected = Arrays.stream(expectedTools.split(",")).toList();
+            assertThat(toolkit.getToolNames()).containsExactlyInAnyOrderElementsOf(expected);
+            PermissionContextState context = ReflectionTestUtils.invokeMethod(delegate, "getPermissionContext");
+            assertThat(context.getAllowRules()).containsOnlyKeys(expected);
+        } finally {
+            agent.close();
+        }
+    }
+
+    public static final class FixtureNamedTool extends ToolBase {
+        FixtureNamedTool(String name, boolean readOnly) {
+            super(ToolBase.builder().name(name).description(name).inputSchema(Map.of("type", "object")).readOnly(readOnly));
+        }
+
+        @Override public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
+            return Mono.error(new AssertionError("Build test must never execute tools"));
+        }
+    }
+
     public static final class FixtureTool extends ToolBase {
         FixtureTool() { super(ToolBase.builder().name("fixture_business_tool").description("fixture").inputSchema(Map.of("type","object"))); }
         @Override public Mono<ToolResultBlock> callAsync(ToolCallParam param) { return Mono.error(new AssertionError("Build test must never execute tools")); }

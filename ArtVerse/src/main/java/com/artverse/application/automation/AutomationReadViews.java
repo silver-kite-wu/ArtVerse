@@ -17,7 +17,7 @@ public final class AutomationReadViews {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Definition(String name,String taskType,String executor,String instruction,
                              AutomationDefinition.Schedule schedule,AutomationDefinition.Limits limits,Targets targets,
-                             String misfirePolicy,String overlapPolicy,Integer maxLatenessSeconds) {}
+                             String misfirePolicy,String overlapPolicy,Integer maxLatenessSeconds,String permissionMode) {}
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Plan(UUID automationId,String status,long version,Definition definition,ModelDisplay model,
                        Instant nextRunAt,Instant createdAt,Instant updatedAt) {}

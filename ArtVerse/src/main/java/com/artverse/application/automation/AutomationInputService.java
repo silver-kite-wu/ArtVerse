@@ -20,6 +20,7 @@ public class AutomationInputService {
     private final ScheduledMangaGenerationService manga;
     private final ObjectMapper mapper;
     private final AiConversationService conversations;
+    private final com.artverse.application.AiPermissionService aiPermissions;
 
     @Transactional(readOnly=true)
     public AutomationDefinition validateAndNormalize(long userId,AutomationDefinition input) {
@@ -62,7 +63,15 @@ public class AutomationInputService {
             }
             validateReferences(userId,payload.path("referenceImageKeys"));
         }
-        return new AutomationDefinition(input.name(),input.taskType(),input.executorKey(),input.instruction(),input.schedule(),payload,input.limits(),input.misfirePolicy(),input.overlapPolicy(),input.maxLatenessSeconds(),null,input.origin(),input.sourceConversationId());
+        return new AutomationDefinition(input.name(),input.taskType(),input.executorKey(),input.instruction(),input.schedule(),payload,input.limits(),input.misfirePolicy(),input.overlapPolicy(),input.maxLatenessSeconds(),null,input.origin(),input.sourceConversationId(),permission(userId,input.permissionMode()));
+    }
+
+    /** 未显式选择时继承 AI 助手设置；显式值必须是受支持的模式。 */
+    private String permission(long userId,String requested) {
+        if(requested==null||requested.isBlank())return aiPermissions.get(userId);
+        com.artverse.agent.AiPermissionMode mode=com.artverse.agent.AiPermissionMode.parse(requested);
+        if(mode==null)throw new BusinessException(400,"未知的 AI 运行权限");
+        return mode.name();
     }
 
     @Transactional(readOnly=true)
@@ -101,7 +110,7 @@ public class AutomationInputService {
     public User user(long id) { return users.findById(id).orElseThrow(()->new BusinessException(404,"用户不存在")); }
     public AutomationDefinition refreshedDefinition(long userId,AutomationDefinition original) {
         ObjectNode payload=original.payload().deepCopy();payload.remove("chapterSnapshots");
-        return validateAndNormalize(userId,new AutomationDefinition(original.name(),original.taskType(),original.executorKey(),original.instruction(),original.schedule(),payload,original.limits(),original.misfirePolicy(),original.overlapPolicy(),original.maxLatenessSeconds(),null,original.origin(),original.sourceConversationId()));
+        return validateAndNormalize(userId,new AutomationDefinition(original.name(),original.taskType(),original.executorKey(),original.instruction(),original.schedule(),payload,original.limits(),original.misfirePolicy(),original.overlapPolicy(),original.maxLatenessSeconds(),null,original.origin(),original.sourceConversationId(),original.permissionMode()));
     }
     public void refreshChildren(AutomationStore.Run run,List<AutomationStore.Execution> executions) {
         if(!"MANGA_IMAGE".equals(run.definition().executorKey()))return;

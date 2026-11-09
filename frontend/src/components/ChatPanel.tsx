@@ -32,6 +32,8 @@ import {
 } from '../api';
 import MarkdownRenderer from './MarkdownRenderer';
 import ModelSwitcher from './ModelSwitcher';
+import PermissionModeSwitcher from './PermissionModeSwitcher';
+import type { AiPermissionMode } from '../api/aiPermission';
 import { randomUUID } from '../utils/browserSecurity';
 import InlineConversationTitle from './InlineConversationTitle';
 import NovelDraftReview, { type NovelReviewDraft } from './NovelDraftReview';
@@ -81,6 +83,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
   const [conversation, setConversation] = useState<AiConversationSummary | null>(null);
   const [conversations, setConversations] = useState<AiConversationSummary[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [aiPermissionMode, setAiPermissionMode] = useState<AiPermissionMode>('AUTO');
   const [conversationLoading, setConversationLoading] = useState(() => !!chapter);
   const [conversationError, setConversationError] = useState('');
   const [pendingDraft, setPendingDraft] = useState<PendingDraftState | null>(null);
@@ -813,7 +816,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
       </div>
       <div className="mt-2 flex items-center gap-2 text-[11px] text-text-muted">
         <span className="rounded-full bg-bg-surface px-2 py-1">第 {chapter?.chapter_number ?? '–'} 章</span>
-        <span className="truncate">AI 修改需确认后写入正文</span>
+        <span className="truncate">{aiPermissionMode === 'FULL' ? 'AI 将自动确认修改并写入正文' : aiPermissionMode === 'MANUAL' ? 'AI 只提供建议，不直接修改正文' : 'AI 修改需确认后写入正文'}</span>
       </div>
       {historyOpen && <div className="story-chat-history-panel" data-history-panel role="dialog" aria-label="历史对话">
         <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5">
@@ -852,6 +855,7 @@ function ChapterChatPanel({ chapter, onMessageSent, onChapterRefresh, onBeforeSe
       <div className="ai-composer ai-composer--chat">
         <textarea ref={textareaRef} value={input} onChange={(event) => { setInput(event.target.value); autoResize(event.target); }} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); handleSend(); } }} aria-label="AI 修改要求" disabled={preparing || !!pendingQuestion || archivedConversation} placeholder={archivedConversation ? '定时任务会话为只读，请到任务中心查看本次执行记录' : pendingQuestion ? '请先回复上方问题' : '聊聊剧情，或描述你想修改的内容…'} rows={3} className="ai-composer__input" />
         <div className="ai-composer__toolbar">
+          <PermissionModeSwitcher disabled={streaming || preparing || !!pendingDraft?.busy} onModeChange={setAiPermissionMode} />
           <ModelSwitcher capability="llm" selectedModel={selectedLlmModel} onSelect={setSelectedLlmModel} disabled={streaming || preparing || !!pendingDraft?.busy} />
           {busy ? <button type="button" onClick={handleAbort} disabled={!task.accepted || !!pendingDraft?.busy} className="ai-composer__send" title={preparing ? '正在保存正文，请稍候' : !task.accepted ? '正在连接助手，请稍候' : pendingDraft?.busy ? '正在处理修改，请稍候' : '停止生成'} aria-label={preparing ? '正在保存正文' : !task.accepted ? '正在连接助手' : pendingDraft?.busy ? '正在处理修改' : '停止生成'}><Square size={14} /></button> : <button type="button" onClick={handleSend} disabled={!chapter || !conversation || !input.trim() || conversationLoading || !!pendingDraft || !!pendingQuestion || archivedConversation} className="ai-composer__send" title="发送消息" aria-label="发送消息"><ArrowUp size={17} /></button>}
         </div>

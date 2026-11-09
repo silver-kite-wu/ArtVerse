@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-mode="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ArtVerse · 骨架屏加载方案预览</title>
+<style>
+  :root {
+    --bg-base: #0a0a0b;
+    --bg-surface: #121214;
+    --bg-raised: #1a1a1d;
+    --text-primary: #f2f2ef;
+    --text-secondary: #a8a8a2;
+    --text-muted: #7c7c83;
+    --border: #232327;
+    --border-strong: #35353b;
+    --accent: #e9e7e1;
+    --accent-soft: rgba(233, 231, 225, 0.055);
+    --accent-muted: rgba(233, 231, 225, 0.12);
+    --skeleton-base: #1b1b1e;
+    --skeleton-highlight: rgba(242, 242, 239, 0.10);
+    --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    --code-bg: #151517;
+    --frame-bg: #0d0d0f;
+  }
+  html[data-mode="light"] {
+    --bg-base: #f5f4f0;
+    --bg-surface: #ffffff;
+    --bg-raised: #f0efea;
+    --text-primary: #1a1a1c;
+    --text-secondary: #55555c;
+    --text-muted: #73737a;
+    --border: #e4e2db;
+    --border-strong: #cfccc3;
+    --accent: #1a1a1c;
+    --accent-soft: rgba(26, 26, 28, 0.04);
+    --accent-muted: rgba(26, 26, 28, 0.08);
+    --skeleton-base: #e9e6df;
+    --skeleton-highlight: rgba(255, 255, 255, 0.92);
+    --shadow: 0 16px 40px rgba(20, 20, 22, 0.12);
+    --code-bg: #f0efea;
+    --frame-bg: #faf9f6;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: ui-sans-serif, system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+  }
+
+  /* ── Top bar ───────────────────────────────────────────── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--bg-base) 88%, transparent);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .topbar-inner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 13px 24px;
+  }
+  .brand {
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-size: 19px;
+    letter-spacing: 0.01em;
+  }
+  .topbar-title {
+    padding-left: 14px;
+    border-left: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .badge::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.7;
+  }
+  .theme-toggle {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 13px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .theme-toggle:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  /* ── Page layout ───────────────────────────────────────── */
+  .page { max-width: 1200px; margin: 0 auto; padding: 0 24px 96px; }
+  .hero { padding: 64px 0 40px; border-bottom: 1px solid var(--border); }
+  .eyebrow {
+    margin: 0 0 14px;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+  .hero h1 {
+    max-width: 760px;
+    margin: 0;
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    font-size: clamp(30px, 4.4vw, 46px);
+    font-weight: 500;
+    line-height: 1.28;
+    letter-spacing: -0.01em;
+  }
+  .hero h1 em { font-style: italic; color: var(--text-secondary); }
+  .hero p.lead {
+    max-width: 660px;
+    margin: 20px 0 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.9;
+  }
+  .hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 26px;
+  }
+  .meta-chip {
+    padding: 5px 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .meta-chip b { color: var(--text-secondary); font-weight: 500; }
+
+  section { padding-top: 56px; }
+  .section-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 24px; }
+  .section-no {
+    font-family: ui-monospace, "Roboto Mono", monospace;
+    color: var(--text-muted);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    padding-bottom: 3px;
+  }
+  .section-head h2 {
+    margin: 0;
+    font-family: ui-serif, Georgia, serif;
+    font-size: 24px;
+    font-weight: 500;
+  }
+  .section-head p { margin: 0 0 3px; color: var(--text-muted); font-size: 12px; }
+  .section-intro {
+    max-width: 760px;
+    margin: -8px 0 24px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.9;
+  }
+
+  /* ── Principles ────────────────────────────────────────── */
+  .principle-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .principle {
+    padding: 20px 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-surface);
+  }
+  .principle .no {
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.12em;
+  }
+  .principle h3 { margin: 10px 0 8px; font-size: 13px; font-weight: 600; }
+  .principle p { margin: 0; color: var(--text-secondary); font-size: 11.5px; line-height: 1.8; }
+
+  /* ── Token cards ───────────────────────────────────────── */
+  .token-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .token-card {
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-surface);
+  }
+  .token-card h3 { margin: 0 0 12px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+  .swatch-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .swatch {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .swatch.base { background: var(--skeleton-base); }
+  .swatch.highlight {
+    background:
+      linear-gradient(100deg, var(--skeleton-base) 30%, var(--skeleton-highlight) 50%, var(--skeleton-base) 70%);
+  }
+  .swatch-name { font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-primary); }
+  .swatch-val { font-family: ui-monospace, monospace; font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+  .spec-list { margin: 0; padding: 0; list-style: none; }
+  .spec-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+  .spec-list li:last-child { border-bottom: 0; }
+  .spec-list b { color: var(--text-primary); font-weight: 500; font-family: ui-monospace, monospace; font-size: 11px; }
+
+  /* ── Comparison frames ─────────────────────────────────── */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .compare-card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg-surface);
+    overflow: hidden;
+  }
+  .compare-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 15px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+  .tag-current {
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+  .tag-new {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--text-primary);
+    font-size: 10px;
+    border: 1px solid var(--border);
+  }
+  .mock {
+    position: relative;
+    flex: 1;
+    min-height: 430px;
+    padding: 18px;
+    background: var(--frame-bg);
+    overflow: hidden;
+  }
+  .mock--flush { padding: 0; }
+  .mock-fade {
+    position: absolute;
+    inset: auto 0 0;
+    height: 64px;
+    pointer-events: none;
+    background: linear-gradient(to top, var(--frame-bg), transparent);
+  }
+  .center-state {
+    display: flex;
+    height: 100%;
+    min-height: 390px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+  .center-state svg { color: var(--text-muted); opacity: 0.5; animation: pulse 1.9s ease-in-out infinite; }
+  .center-state .spinner { color: var(--accent); }
+  .spinner {
+    width: 21px;
+    height: 21px;
+    border: 2px solid var(--accent-muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.75; } }
+
+  /* ── Skeleton primitive (mirrors production CSS) ───────── */
+  .sk {
+    background-color: var(--skeleton-base);
+    background-image: linear-gradient(
+      100deg,
+      transparent 42%,
+      var(--skeleton-highlight) 50%,
+      transparent 58%
+    );
+    background-size: 240% 100%;
+    background-repeat: no-repeat;
+    animation: sk-shimmer 1.6s ease-in-out infinite;
+    border-radius: 6px;
+  }
+  @keyframes sk-shimmer {
+    0% { background-position: 0% 0; }
+    100% { background-position: 100% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sk { animation: none; background-image: none; }
+    .center-state svg, .spinner { animation: none; }
+  }
+
+  /* ── Mock: story workspace ─────────────────────────────── */
+  .ws-top { display: flex; align-items: center; gap: 11px; margin-bottom: 16px; }
+  .ws-hero {
+    height: 138px;
+    border-radius: 12px;
+    margin-bottom: 14px;
+  }
+  .ws-quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .ws-quick-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg-surface);
+  }
+  .ws-head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .ws-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .ws-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-surface);
+    overflow: hidden;
+    padding-bottom: 12px;
+  }
+  .ws-cover { aspect-ratio: 3 / 4; width: 100%; border-radius: 0; }
+  .ws-card-body { padding: 10px 10px 0; display: flex; flex-direction: column; gap: 7px; }
+
+  /* ── Mock: square list ─────────────────────────────────── */
+  .sq-head { display: flex; flex-direction: column; gap: 9px; margin-bottom: 18px; }
+  .sq-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+  .sq-card {
+    display: flex;
+    gap: 13px;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-surface);
+    min-height: 168px;
+  }
+  .sq-cover { width: 102px; height: 144px; flex: 0 0 auto; border-radius: 5px; }
+  .sq-info { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 7px; }
+  .sq-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .sq-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 8px; }
+  .flat-skel {
+    height: 168px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background-color: var(--bg-surface);
+  }
+
+  /* ── Mock: automation ──────────────────────────────────── */
+  .auto { display: flex; height: 100%; min-height: 430px; }
+  .auto-list {
+    width: 262px;
+    flex: 0 0 auto;
+    padding: 14px;
+    border-right: 1px solid var(--border);
+  }
+  .auto-detail { flex: 1; min-width: 0; padding: 20px; }
+  .auto-chips { display: flex; gap: 6px; margin: 10px 0 14px; }
+  .auto-task {
+    display: flex;
+    gap: 9px;
+    padding: 11px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-surface);
+    margin-bottom: 8px;
+  }
+  .auto-task-icon { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 8px; }
+  .auto-detail-head { display: flex; flex-direction: column; gap: 9px; }
+  .auto-info {
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--bg-surface);
+    margin: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .auto-run {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg-surface);
+    margin-bottom: 7px;
+  }
+
+  /* ── Mock: detail ──────────────────────────────────────── */
+  .detail { display: flex; gap: 22px; padding: 6px; }
+  .detail-cover { width: 176px; height: 246px; flex: 0 0 auto; border-radius: 8px; }
+  .detail-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .chapter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
+  }
+
+  /* ── Coverage table ────────────────────────────────────── */
+  .coverage {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .coverage th, .coverage td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .coverage th {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .coverage tr:last-child td { border-bottom: 0; }
+  .coverage td:first-child { color: var(--text-primary); font-weight: 500; white-space: nowrap; }
+  .coverage td { color: var(--text-secondary); }
+  .coverage .after { color: var(--text-primary); }
+
+  /* ── Implementation ────────────────────────────────────── */
+  .impl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .impl-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-surface);
+    padding: 18px;
+  }
+  .impl-card h3 { margin: 0 0 12px; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+  .file-list { margin: 0; padding: 0; list-style: none; }
+  .file-list li {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+  .file-list li:last-child { border-bottom: 0; }
+  .file-list code {
+    flex: 0 0 44%;
+    color: var(--text-primary);
+    font-family: ui-monospace, "Roboto Mono", monospace;
+    font-size: 10.5px;
+    word-break: break-all;
+  }
+  .check-list { margin: 0; padding: 0; list-style: none; }
+  .check-list li {
+    display: flex;
+    gap: 9px;
+    padding: 7px 0;
+    color: var(--text-secondary);
+    font-size: 11.5px;
+    line-height: 1.7;
+  }
+  .check-list li::before {
+    content: "—";
+    flex: 0 0 auto;
+    color: var(--text-muted);
+  }
+  pre {
+    margin: 0;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--code-bg);
+    overflow-x: auto;
+  }
+  pre code {
+    font-family: ui-monospace, "Roboto Mono", Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+    white-space: pre;
+  }
+  pre code .k { color: var(--text-primary); }
+  pre code .c { color: var(--text-muted); }
+
+  .note {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--text-muted);
+    border-radius: 8px;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: 11.5px;
+    line-height: 1.85;
+  }
+  .note b { color: var(--text-primary); font-weight: 500; }
+
+  .footer {
+    margin-top: 64px;
+    padding-top: 22px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+  }
+
+  @media (max-width: 980px) {
+    .principle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .token-grid { grid-template-columns: 1fr; }
+    .compare { grid-template-columns: 1fr; }
+    .impl-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 700px) {
+    .topbar-title, .badge { display: none; }
+    .page { padding: 0 16px 72px; }
+    .hero { padding-top: 44px; }
+    .ws-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sq-grid { grid-template-columns: 1fr; }
+    .auto-list { display: none; }
+    .detail-cover { width: 120px; height: 168px; }
+    .coverage th:nth-child(2), .coverage td:nth-child(2) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand">ArtVerse.</span>
+    <span class="topbar-title">骨架屏加载方案</span>
+    <span class="badge">v1 预览 · 待审核</span>
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换明暗主题">
+      <span id="themeIcon">☾</span><span id="themeText">切到浅色</span>
+    </button>
+  </div>
+</header>
+
+<div class="page">
+
+  <div class="hero">
+    <p class="eyebrow">Loading Experience / Design Proposal</p>
+    <h1>让等待也有形状：<br /><em>骨架屏 + 流动亮带</em>统一方案</h1>
+    <p class="lead">
+      针对故事创作、小说广场、定时任务等「固定数据加载」场景，用与真实内容同构的骨架屏替代空白与转圈，
+      并在骨架上加入低对比、慢节奏的移动高光，让页面在数据到达前就建立结构预期。
+    </p>
+    <div class="hero-meta">
+      <span class="meta-chip">覆盖 <b>4 个页面</b></span>
+      <span class="meta-chip">基础组件 <b>1 个</b></span>
+      <span class="meta-chip">支持 <b>深色 / 浅色</b></span>
+      <span class="meta-chip">动效 <b>1.6s · 100° 亮带</b></span>
+      <span class="meta-chip">可访问 <b>reduced-motion</b></span>
+    </div>
+  </div>
+
+  <!-- 01 Principles -->
+  <section>
+    <div class="section-head">
+      <span class="section-no">01</span>
+      <div>
+        <h2>设计原则</h2>
+        <p>骨架不是装饰，是内容结构的提前占位。</p>
+      </div>
+    </div>
+    <div class="principle-grid">
+      <div class="principle">
+        <span class="no">STRUCTURE</span>
+        <h3>结构即内容</h3>
+        <p>骨架尺寸、圆角、栅格与真实卡片保持一致，数据到达后不发生布局跳动。</p>
+      </div>
+      <div class="principle">
+        <span class="no">SCOPE</span>
+        <h3>只替换等待区域</h3>
+        <p>页面标题、搜索框、筛选器等静态部分保持可见；只对正在取数的区域使用骨架。</p>
+      </div>
+      <div class="principle">
+        <span class="no">RESTRAINT</span>
+        <h3>低对比、慢节奏</h3>
+        <p>高光只做轻微「呼吸」提示，不抢内容注意力。1.6s 循环，亮度不超过文字色 10%。</p>
+      </div>
+      <div class="principle">
+        <span class="no">A11Y</span>
+        <h3>可访问与降级</h3>
+        <p>容器标记 aria-busy，提供 sr-only 加载文案；prefers-reduced-motion 下停用亮带。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 Tokens -->
+  <section>
+    <div class="section-head">
+      <span class="section-no">02</span>
+      <div>
+        <h2>Shimmer 视觉规范</h2>
+        <p>沿用现有 Obsidian 中性色，不引入新的品牌色。</p>
+      </div>
+    </div>
+    <div class="token-grid">
+      <div class="token-card">
+        <h3>骨架色板</h3>
+        <div class="swatch-row">
+          <span class="swatch base"></span>
+          <span>
+            <span class="swatch-name">--skeleton-base</span>
+            <span class="swatch-val">dark #1B1B1E / light #E9E6DF</span>
+          </span>
+        </div>
+        <div class="swatch-row">
+          <span class="swatch highlight"></span>
+          <span>
+            <span class="swatch-name">--skeleton-highlight</span>
+            <span class="swatch-val">dark rgba(242,242,239,.10)</span>
+            <span class="swatch-val">light rgba(255,255,255,.92)</span>
+          </span>
+        </div>
+        <p style="margin:10px 0 0;color:var(--text-muted);font-size:11px;line-height:1.8">
+          基础色比 bg-surface 亮一档，与 bg-raised 接近；高光只提亮约 10%，避免「闪白」。
+        </p>
+      </div>
+      <div class="token-card">
+        <h3>亮带参数</h3>
+        <ul class="spec-list">
+          <li><span>角度</span><b>100deg</b></li>
+          <li><span>亮带占比</span><b>16%</b></li>
+          <li><span>背景尺寸</span><b>240% 100%</b></li>
+          <li><span>位移方向</span><b>右 → 左</b></li>
+          <li><span>循环时长</span><b>1.6s</b></li>
+          <li><span>缓动</span><b>ease-in-out</b></li>
+        </ul>
+      </div>
+      <div class="token-card">
+        <h3>状态与降级</h3>
+        <ul class="spec-list">
+          <li><span>加载容器</span><b>aria-busy="true"</b></li>
+          <li><span>形状元素</span><b>aria-hidden="true"</b></li>
+          <li><span>屏幕阅读器</span><b>sr-only「正在加载…」</b></li>
+          <li><span>减少动态</span><b>animation: none</b></li>
+          <li><span>加载完成</span><b>直接卸载，不淡出</b></li>
+          <li><span>人为延时</span><b>不引入</b></li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top:18px">
+<pre><code><span class="c">/* index.css — 统一骨架原语 */</span>
+:root {
+  <span class="k">--skeleton-base</span>: #1b1b1e;
+  <span class="k">--skeleton-highlight</span>: rgba(242, 242, 239, 0.10);
+}
+[data-mode="light"] {
+  <span class="k">--skeleton-base</span>: #e9e6df;
+  <span class="k">--skeleton-highlight</span>: rgba(255, 255, 255, 0.92);
+}
+
+<span class="k">.skeleton</span> {
+  background-color: var(--skeleton-base);
+  background-image: linear-gradient(
+    100deg,
+    transparent 42%,
+    var(--skeleton-highlight) 50%,
+    transparent 58%
+  );
+  background-size: 240% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  pointer-events: none;
+  <span class="c">/* 圆角由页面与真实卡片保持一致，通过 rounded-* 控制 */</span>
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 0% 0; }
+  100% { background-position: 100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background-image: none; }
+}</code></pre>
+    </div>
+    <div class="note">
+      <b>为什么不用现有 .shimmer-bg？</b> 现有类仅用 accent-soft（深色下约 5.5% 白）作为亮带，实际几乎不可见，
+      且依赖外部 bg 类提供底色。新方案把「底色 + 亮带 + 动效 + 降级」收敛为一个 <b>.skeleton</b> 原语，
+      便于四个页面统一。生图占位仍保留 .shimmer-bg，二者语义不同。
+    </div>
+  </section>
+
+  <!-- 03 Story workspace -->
+  <section>
+    <div class="section-head">
+      <span class="section-no">03</span>
+      <div>
+        <h2>故事创作工作区</h2>
+        <p>HomePage · 首次进入 / 刷新</p>
+      </div>
+    </div>
+    <p class="section-intro">
+      当前整页只显示一个脉冲书本图标与「加载中…」，与即将出现的工作区结构毫无对应。
+      改为同构骨架：顶栏、Hero、快捷入口、故事卡片栅格逐层占位，底部用渐隐暗示内容继续。
+    </p>
+    <div class="compare">
+      <div class="compare-card">
+        <div class="compare-label"><span>当前实现</span><span class="tag-current">图标 + 文字</span></div>
+        <div class="mock">
+          <div class="center-state">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+              <path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>
+            </svg>
+            <span>加载中…</span>
+          </div>
+        </div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-label"><span>方案效果</span><span class="tag-new">同构骨架</span></div>
+        <div class="mock">
+          <div class="ws-top">
+            <div class="sk" style="width:34px;height:34px;border-radius:9px"></div>
+            <div style="flex:1">
+              <div class="sk" style="width:96px;height:11px;margin-bottom:6px"></div>
+              <div class="sk" style="width:142px;height:7px"></div>
+            </div>
+            <div class="sk" style="width:74px;height:29px;border-radius:7px"></div>
+          </div>
+          <div class="sk ws-hero"></div>
+          <div class="ws-quick">
+            <div class="ws-quick-item">
+              <div class="sk" style="width:30px;height:30px;border-radius:8px;flex:0 0 auto"></div>
+              <div style="flex:1">
+                <div class="sk" style="width:64%;height:9px;margin-bottom:6px"></div>
+                <div class="sk" style="width:94%;height:6px"></div>
+              </div>
+            </div>
+            <div class="ws-quick-item">
+              <div class="sk" style="width:30px;height:30px;border-radius:8px;flex:0 0 auto"></div>
+              <div style="flex:1">
+                <div class="sk" style="width:70%;height:9px;margin-bottom:6px"></div>
+                <div class="sk" style="width:86%;height:6px"></div>
+              </div>
+            </div>
+            <div class="ws-quick-item">
+              <div class="sk" style="width:30px;height:30px;border-radius:8px;flex:0 0 auto"></div>
+              <div style="flex:1">
+                <div class="sk" style="width:58%;height:9px;margin-bottom:6px"></div>
+                <div class="sk" style="width:90%;height:6px"></div>
+              </div>
+            </div>
+          </div>
+          <div class="ws-head">
+            <div class="sk" style="width:118px;height:15px"></div>
+            <div class="sk" style="width:74px;height:7px"></div>
+          </div>
+          <div class="ws-grid">
+            <div class="ws-card">
+              <div class="sk ws-cover"></div>
+              <div class="ws-card-body">
+                <div class="sk" style="width:76%;height:11px"></div>
+                <div class="sk" style="width:100%;height:7px"></div>
+                <div class="sk" style="width:62%;height:7px"></div>
+              </div>
+            </div>
+            <div class="ws-card">
+              <div class="sk ws-cover"></div>
+              <div class="ws-card-body">
+                <div class="sk" style="width:64%;height:11px"></div>
+                <div class="sk" style="width:92%;height:7px"></div>
+                <div class="sk" style="width:70%;height:7px"></div>
+              </div>
+            </div>
+            <div class="ws-card">
+              <div class="sk ws-cover"></div>
+              <div class="ws-card-body">
+                <div class="sk" style="width:84%;height:11px"></div>
+                <div class="sk" style="width:96%;height:7px"></div>
+                <div class="sk" style="width:54%;height:7px"></div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-fade"></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>实现要点：</b>骨架直接复用工作区现有栅格类（<b>studio-hero / studio-quick-actions / grid-cols-3</b>），
+      不另写一套尺寸；故事卡片封面使用 <b>aspect-[3/4]</b>，与真实卡片一致。
+    </div>
+  </section>
+
+  <!-- 04 Square list -->
+  <section>
+    <div class="section-head">
+      <span class="section-no">04</span>
+      <div>
+        <h2>小说广场</h2>
+        <p>SquarePage · 列表 / 搜索 / 翻页</p>
+      </div>
+    </div>
+    <p class="section-intro">
+      当前已有骨架，但 6 个 192px 高的纯色块与真实「左封面 + 右信息」横向卡片完全不同，加载完成会有明显跳变。
+      方案改为与 StoryCard 同构的卡片骨架：封面比例、徽标、标题、三行简介、底部章节与字数占位。
+    </p>
+    <div class="compare">
+      <div class="compare-card">
+        <div class="compare-label"><span>当前实现</span><span class="tag-current">等高灰块</span></div>
+        <div class="mock">
+          <div class="sq-head">
+            <div class="sk" style="width:150px;height:18px"></div>
+            <div class="sk" style="width:92px;height:7px"></div>
+          </div>
+          <div class="sq-grid">
+            <div class="flat-skel sk"></div>
+            <div class="flat-skel sk"></div>
+            <div class="flat-skel sk"></div>
+            <div class="flat-skel sk"></div>
+          </div>
+          <div class="mock-fade"></div>
+        </div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-label"><span>方案效果</span><span class="tag-new">卡片同构</span></div>
+        <div class="mock">
+          <div class="sq-head">
+            <div class="sk" style="width:150px;height:18px"></div>
+            <div class="sk" style="width:240px;height:7px"></div>
+          </div>
+          <div class="sq-grid">
+            <div class="sq-card">
+              <div class="sk sq-cover"></div>
+              <div class="sq-info">
+                <div class="sq-row">
+                  <div class="sk" style="width:46px;height:17px;border-radius:5px"></div>
+                  <div class="sk" style="width:42px;height:7px"></div>
+                </div>
+                <div class="sk" style="width:74%;height:13px;margin-top:4px"></div>
+                <div class="sk" style="width:100%;height:7px"></div>
+                <div class="sk" style="width:90%;height:7px"></div>
+                <div class="sk" style="width:62%;height:7px"></div>
+                <div class="sq-foot">
+                  <div class="sk" style="width:38px;height:7px"></div>
+                  <div class="sk" style="width:42px;height:7px"></div>
+                  <div class="sk" style="width:34px;height:7px;margin-left:auto"></div>
+                </div>
+              </div>
+            </div>
+            <div class="sq-card">
+              <div class="sk sq-cover"></div>
+              <div class="sq-info">
+                <div class="sq-row">
+                  <div class="sk" style="width:46px;height:17px;border-radius:5px"></div>
+                  <div class="sk" style="width:42px;height:7px"></div>
+                </div>
+                <div class="sk" style="width:62%;height:13px;margin-top:4px"></div>
+                <div class="sk" style="width:96%;height:7px"></div>
+                <div class="sk" style="width:82%;height:7px"></div>
+                <div class="sk" style="width:70%;height:7px"></div>
+                <div class="sq-foot">
+                  <div class="sk" style="width:38px;height:7px"></div>
+                  <div class="sk" style="width:42px;height:7px"></div>
+                  <div class="sk" style="width:34px;height:7px;margin-left:auto"></div>
+                </div>
+              </div>
+            </div>
+            <div class="sq-card">
+              <div class="sk sq-cover"></div>
+              <div class="sq-info">
+                <div class="sq-row">
+                  <div class="sk" style="width:46px;height:17px;border-radius:5px"></div>
+                  <div class="sk" style="width:42px;height:7px"></div>
+                </div>
+                <div class="sk" style="width:82%;height:13px;margin-top:4px"></div>
+                <div class="sk" style="width:88%;height:7px"></div>
+                <div class="sk" style="width:94%;height:7px"></div>
+                <div class="sk" style="width:58%;height:7px"></div>
+                <div class="sq-foot">
+                  <div class="sk" style="width:38px;height:7px"></div>
+                  <div class="sk" style="width:42px;height:7px"></div>
+                  <div class="sk" style="width:34px;height:7px;margin-left:auto"></div>
+                </div>
+              </div>
+            </div>
+            <div class="sq-card">
+              <div class="sk sq-cover"></div>
+              <div class="sq-info">
+                <div class="sq-row">
+                  <div class="sk" style="width:46px;height:17px;border-radius:5px"></div>
+                  <div class="sk" style="width:42px;height:7px"></div>
+                </div>
+                <div class="sk" style="width:68%;height:13px;margin-top:4px"></div>
+                <div class="sk" style="width:92%;height:7px"></div>
+                <div class="sk" style="width:76%;height:7px"></div>
+                <div class="sk" style="width:84%;height:7px"></div>
+                <div class="sq-foot">
+                  <div class="sk" style="width:38px;height:7px"></div>
+                  <div class="sk" style="width:42px;height:7px"></div>
+                  <div class="sk" style="width:34px;height:7px;margin-left:auto"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-fade"></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>交互边界：</b>骨架只在首次进入、搜索、切换分类与翻页时出现；已加载内容的局部刷新保留原列表，不回到整块骨架。
+    </div>
+  </section>
+
+  <!-- 05 Automation -->
+  <section>
+    <div class="section-head">
+      <span class="section-no">05</span>
+      <div>
+        <h2>定时任务</h2>
+        <p>AutomationCenterPage · 任务列表 + 任务详情</p>
+      </div>
+    </div>
+    <p class="section-intro">
+      当前左侧列表与右侧详情各显示一个居中转圈，右侧还会整块闪烁「正在加载任务…」。
+      方案：左侧保留搜索与筛选，任务行按真实结构占位；右侧按标题、状态、任务说明卡、执行记录逐层占位。
+    </p>
+    <div class="compare">
+      <div class="compare-card">
+        <div class="compare-label"><span>当前实现</span><span class="tag-current">双栏转圈</span></div>
+        <div class="mock mock--flush">
+          <div class="auto">
+            <aside class="auto-list">
+              <div class="sk" style="width:100%;height:34px;border-radius:8px"></div>
+              <div class="auto-chips">
+                <div class="sk" style="width:42px;height:22px;border-radius:999px"></div>
+                <div class="sk" style="width:54px;height:22px;border-radius:999px"></div>
+                <div class="sk" style="width:48px;height:22px;border-radius:999px"></div>
+              </div>
+              <div style="display:flex;justify-content:center;padding-top:52px">
+                <div class="spinner"></div>
+              </div>
+            </aside>
+            <section class="auto-detail" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--text-secondary);font-size:12px">
+              <div class="spinner"></div>
+              <span>正在加载任务…</span>
+            </section>
+          </div>
+        </div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-label"><span>方案效果</span><span class="tag-new">双栏同构</span></div>
+        <div class="mock mock--flush">
+          <div class="auto">
+            <aside class="auto-list">
+              <div class="sk" style="width:100%;height:34px;border-radius:8px"></div>
+              <div class="auto-chips">
+                <div class="sk" style="width:42px;height:22px;border-radius:999px"></div>
+                <div class="sk" style="width:54px;height:22px;border-radius:999px"></div>
+                <div class="sk" style="width:48px;height:22px;border-radius:999px"></div>
+              </div>
+              <div class="auto-task">
+                <div class="sk auto-task-icon"></div>
+                <div style="flex:1;min-width:0">
+                  <div class="sk" style="width:72%;height:9px;margin-bottom:6px"></div>
+                  <div class="sk" style="width:88%;height:6px"></div>
+                </div>
+              </div>
+              <div class="auto-task">
+                <div class="sk auto-task-icon"></div>
+                <div style="flex:1;min-width:0">
+                  <div class="sk" style="width:58%;height:9px;margin-bottom:6px"></div>
+                  <div class="sk" style="width:74%;height:6px"></div>
+                </div>
+              </div>
+              <div class="auto-task">
+                <div class="sk auto-task-icon"></div>
+                <div style="flex:1;min-width:0">
+                  <div class="sk" style="width:80%;height:9px;margin-bottom:6px"></div>
+                  <div class="sk" style="width:66%;height:6px"></div>
+                </div>
+              </div>
+              <div class="auto-task">
+                <div class="sk auto-task-icon"></div>
+                <div style="flex:1;min-width:0">
+                  <div class="sk" style="width:64%;height:9px;margin-bottom:6px"></div>
+                  <div class="sk" style="width:82%;height:6px"></div>
+                </div>
+              </div>
+            </aside>
+            <section class="auto-detail">
+              <div class="auto-detail-head">
+                <div class="sk" style="width:56px;height:19px;border-radius:999px"></div>
+                <div class="sk" style="width:68%;height:20px"></div>
+                <div class="sk" style="width:38%;height:8px"></div>
+              </div>
+              <div class="auto-info">
+                <div class="sk" style="width:68px;height:7px"></div>
+                <div class="sk" style="width:100%;height:8px"></div>
+                <div class="sk" style="width:92%;height:8px"></div>
+                <div class="sk" style="width:74%;height:8px"></div>
+                <div class="sk" style="width:56%;height:7px;margin-top:8px"></div>
+              </div>
+              <div class="sk" style="width:84px;height:13px;margin-bottom:11px"></div>
+              <div class="auto-run">
+                <div style="flex:1">
+                  <div class="sk" style="width:112px;height:8px;margin-bottom:6px"></div>
+                  <div class="sk" style="width:66%;height:6px"></div>
+                </div>
+                <div class="sk" style="width:48px;height:17px;border-radius:999px"></div>
+              </div>
+              <div class="auto-run">
+                <div style="flex:1">
+                  <div class="sk" style="width:96px;height:8px;margin-bottom:6px"></div>
+                  <div class="sk" style="width:54%;height:6px"></div>
+                </div>
+                <div class="sk" style="width:48px;height:17px;border-radius:999px"></div>
+              </div>
+              <div class="auto-run">
+                <div style="flex:1">
+                  <div class="sk" style="width:128px;height:8px;margin-bottom:6px"></div>
+                  <div class="sk" style="width:72%;height:6px"></div>
+                </div>
+                <div class="sk" style="width:48px;height:17px;border-radius:999px"></div>
+              </div>
+            </section>
+          </div>
+          <div class="mock-fade"></div>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>静态部分保留：</b>左侧搜索框与筛选按钮在加载期间直接可用（本就是本地状态）；骨架只占据任务行区域。
+      右侧仅在「切换任务且详情未就绪」时使用骨架，其余等待仍沿用现有轻量提示。
+    </div>
+  </section>
+
+  <!-- 06 Detail -->
+  <section>
+    <div class="section-head">
+      <span class="section-no">06</span>
+      <div>
+        <h2>作品详情（建议同步覆盖）</h2>
+        <p>SquarePage · 从广场进入作品</p>
+      </div>
+    </div>
+    <p class="section-intro">
+      该页当前是居中转圈 +「正在打开作品」。它同属固定数据加载，建议一并替换为封面、标题信息与章节列表骨架，
+      避免从广场卡片进入详情时两次出现不同形态的等待。
+    </p>
+    <div class="compare">
+      <div class="compare-card">
+        <div class="compare-label"><span>当前实现</span><span class="tag-current">转圈</span></div>
+        <div class="mock">
+          <div class="center-state">
+            <div class="spinner"></div>
+            <span>正在打开作品</span>
+          </div>
+        </div>
+      </div>
+      <div class="compare-card">
+        <div class="compare-label"><span>方案效果</span><span class="tag-new">详情骨架</span></div>
+        <div class="mock">
+          <div class="detail">
+            <div class="sk detail-cover"></div>
+            <div class="detail-info">
+              <div class="sk" style="width:54px;height:17px;border-radius:5px"></div>
+              <div class="sk" style="width:72%;height:22px"></div>
+              <div class="sk" style="width:44%;height:8px"></div>
+              <div class="sk" style="width:100%;height:8px;margin-top:6px"></div>
+              <div class="sk" style="width:96%;height:8px"></div>
+              <div class="sk" style="width:80%;height:8px"></div>
+              <div style="display:flex;gap:8px;margin:10px 0 4px">
+                <div class="sk" style="width:62px;height:26px;border-radius:7px"></div>
+                <div class="sk" style="width:62px;height:26px;border-radius:7px"></div>
+                <div class="sk" style="width:62px;height:26px;border-radius:7px"></div>
+              </div>
+              <div class="chapter">
+                <div class="sk" style="width:20px;height:8px"></div>
+                <div class="sk" style="width:46%;height:8px"></div>
+                <div class="sk" style="width:34px;height:7px;margin-left:auto"></div>
+              </div>
+              <div class="chapter">
+                <div class="sk" style="width:20px;height:8px"></div>
+                <div class="sk" style="width:58%;height:8px"></div>
+                <div class="sk" style="width:34px;height:7px;margin-left:auto"></div>
+              </div>
+              <div class="chapter">
+                <div class="sk" style="width:20px;height:8px"></div>
+                <div class="sk" style="width:40%;height:8px"></div>
+                <div class="sk" style="width:34px;height:7px;margin-left:auto"></div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-fade"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 Coverage table -->
+  <section>
+    <div class="section-head">
+      <span class="section-no">07</span>
+      <div>
+        <h2>覆盖范围与改动清单</h2>
+        <p>第一批只处理命名过的固定加载场景。</p>
+      </div>
+    </div>
+    <table class="coverage">
+      <thead>
+        <tr>
+          <th>场景</th>
+          <th>当前位置</th>
+          <th>改动后</th>
+          <th>优先级</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>故事创作工作区</td>
+          <td>整页图标脉冲</td>
+          <td class="after">顶栏 + Hero + 快捷入口 + 故事卡片骨架</td>
+          <td>P0</td>
+        </tr>
+        <tr>
+          <td>小说广场列表</td>
+          <td>等高灰色块</td>
+          <td class="after">StoryCard 同构卡片骨架 × 6</td>
+          <td>P0</td>
+        </tr>
+        <tr>
+          <td>定时任务列表 / 详情</td>
+          <td>双栏转圈</td>
+          <td class="after">任务行 + 详情信息 + 执行记录骨架</td>
+          <td>P0</td>
+        </tr>
+        <tr>
+          <td>小说广场作品详情</td>
+          <td>居中转圈</td>
+          <td class="after">封面 + 信息 + 章节列表骨架</td>
+          <td>P1</td>
+        </tr>
+        <tr>
+          <td>我的作品</td>
+          <td>已有骨架，高光过淡</td>
+          <td class="after">迁移到 .skeleton 统一色板</td>
+          <td>P1</td>
+        </tr>
+        <tr>
+          <td>漫画生图占位</td>
+          <td>.shimmer-bg 生成中占位</td>
+          <td class="after">保持不变（表示生成进度，不是数据加载）</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 08 Implementation -->
+  <section>
+    <div class="section-head">
+      <span class="section-no">08</span>
+      <div>
+        <h2>实施方式</h2>
+        <p>一个原语，四个页面组合；不引入依赖。</p>
+      </div>
+    </div>
+    <div class="impl-grid">
+      <div class="impl-card">
+        <h3>改动文件</h3>
+        <ul class="file-list">
+          <li><code>frontend/src/index.css</code><span>新增 skeleton token、keyframes、.skeleton 与 reduced-motion 规则</span></li>
+          <li><code>frontend/src/ui/Skeleton.tsx</code><span>新增轻量 Skeleton 组件（div + aria-hidden）</span></li>
+          <li><code>components/HomePage.tsx</code><span>loading 分支替换为工作区骨架组合</span></li>
+          <li><code>components/SquarePage.tsx</code><span>列表骨架替换灰块；详情页增加骨架</span></li>
+          <li><code>components/automations/AutomationCenterPage.tsx</code><span>列表与详情加载区域替换为骨架</span></li>
+          <li><code>components/MyWorksPage.tsx</code><span>现有 shimmer-bg 迁移为 .skeleton</span></li>
+        </ul>
+      </div>
+      <div class="impl-card">
+        <h3>验收标准</h3>
+        <ul class="check-list">
+          <li>四个场景首次进入不再出现转圈或空白，骨架形状与最终内容一致。</li>
+          <li>深色 / 浅色主题下亮带均可见，但不高于背景文字对比度。</li>
+          <li>prefers-reduced-motion 开启时无移动亮带，仅保留静态骨架。</li>
+          <li>加载完成无布局跳动；翻页 / 搜索 / 切换任务时交互不阻塞。</li>
+          <li>容器带 aria-busy，骨架形状 aria-hidden，并提供 sr-only 加载文案。</li>
+          <li>不会为等待而人为增加延时；数据返回后立即卸载骨架。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top:18px">
+<pre><code><span class="c">// frontend/src/ui/Skeleton.tsx</span>
+import type { ComponentPropsWithoutRef } from 'react';
+
+export function Skeleton({
+  className = '',
+  ...props
+}: ComponentPropsWithoutRef&lt;'div'&gt;) {
+  return (
+    &lt;div
+      aria-hidden="true"
+      className={`skeleton ${className}`}
+      {...props}
+    /&gt;
+  );
+}
+
+<span class="c">// 页面侧只负责“摆形状”，不重复定义颜色与动画：</span>
+&lt;Skeleton className="h-3 w-2/3 rounded-lg" /&gt;
+&lt;Skeleton className="aspect-[3/4] w-full rounded-md" /&gt;</code></pre>
+    </div>
+
+    <div class="note">
+      <b>实施顺序：</b>先落地 token 与原语 → 小说广场列表（最直观）→ 定时任务双栏 → 故事工作区整页 →
+      作品详情与我的作品迁移。每步可单独截图对比，确认后再进入下一步。
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span>ArtVerse · Skeleton Loading Proposal</span>
+    <span>v1 预览稿 · 等待审核后实施</span>
+  </footer>
+</div>
+
+<script>
+  const root = document.documentElement;
+  const button = document.getElementById('themeToggle');
+  const icon = document.getElementById('themeIcon');
+  const text = document.getElementById('themeText');
+
+  function syncThemeLabel() {
+    const light = root.dataset.mode === 'light';
+    icon.textContent = light ? '☀' : '☾';
+    text.textContent = light ? '切到深色' : '切到浅色';
+  }
+
+  button.addEventListener('click', () => {
+    root.dataset.mode = root.dataset.mode === 'light' ? 'dark' : 'light';
+    syncThemeLabel();
+  });
+
+  syncThemeLabel();
+</script>
+</body>
+</html>

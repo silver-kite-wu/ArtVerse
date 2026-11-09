@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 type Mode = 'dark' | 'light';
 type ThemePreference = Mode | 'system';
-export type ThemeOrigin = { x: number; y: number };
+type ThemeOrigin = { x: number; y: number };
 const KEY = 'artverse.mode';
 const listeners = new Set<() => void>();
 const media = window.matchMedia('(prefers-color-scheme: light)');

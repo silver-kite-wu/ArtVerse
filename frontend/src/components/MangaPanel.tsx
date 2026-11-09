@@ -822,7 +822,7 @@ export default function MangaPanel({ chapter, onChapterRefresh, onBeforeGenerate
                 disabled={!hasSourceContent}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
                            btn-accent disabled:opacity-40
-                           disabled:cursor-not-allowed transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(241,72,30,0.3)]"
+                           disabled:cursor-not-allowed transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_16px_rgba(0,0,0,0.3)]"
               >
                 {scenes.length > 0 ? <RefreshCw size={13} /> : <Sparkles size={13} />}
                 {scenes.length > 0 ? 'AI 重写分镜' : '分镜生成'}
@@ -943,7 +943,7 @@ export default function MangaPanel({ chapter, onChapterRefresh, onBeforeGenerate
                   onClick={handleGenerateImages}
                   disabled={requestNeedsReview}
                   className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg
-                             bg-accent-secondary hover:bg-accent-secondary/80 text-white transition-colors shadow-sm"
+                             bg-accent hover:bg-accent-hover text-accent-ink transition-colors shadow-sm"
                 >
                   <Sparkles size={13} />
                   {existingImages.length > 0 ? '重新生成漫画' : '生成漫画'}
@@ -1005,7 +1005,7 @@ export default function MangaPanel({ chapter, onChapterRefresh, onBeforeGenerate
                   <div
                     className={`shrink-0 rounded-full transition-all duration-500 ${
                       segFilled
-                        ? 'bg-accent-secondary shadow-[0_0_6px_rgba(241,72,30,0.4)]'
+                        ? 'bg-accent-secondary shadow-[0_0_6px_rgba(0,0,0,0.4)]'
                         : 'bg-border'
                     }`}
                     style={{ width: 10, height: 10 }}
@@ -1029,7 +1029,7 @@ export default function MangaPanel({ chapter, onChapterRefresh, onBeforeGenerate
             <div
               className={`shrink-0 rounded-full transition-all duration-500 ${
                 liveProgress.current >= liveProgress.total
-                  ? 'bg-accent-secondary shadow-[0_0_6px_rgba(241,72,30,0.4)]'
+                  ? 'bg-accent-secondary shadow-[0_0_6px_rgba(0,0,0,0.4)]'
                   : 'bg-border'
               }`}
               style={{ width: 10, height: 10 }}

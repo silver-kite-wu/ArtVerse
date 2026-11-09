@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bell, CalendarClock, Check, CheckCheck, ChevronDown, ChevronRight, CircleAlert, Clock3, Image, Loader2, Pause, Pencil, Play, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, Bell, CalendarClock, Check, CheckCheck, ChevronDown, ChevronRight, CircleAlert, Clock3, Image, Pause, Pencil, Play, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
 import { authFetch } from '../../api/auth';
 import { imageGenUrl } from '../../api/knowledgeAndImage';
 import { listAutomations, getAutomation, changeAutomation, deleteAutomation, runAutomationNow, listAutomationRuns, getAutomationRun, actOnAutomationRun, listAutomationNotifications, readAutomationNotification, readAllAutomationNotifications, deleteAutomationNotification, clearAutomationNotifications, automationStateLabel, automationRule, automationTime, type AutomationPlan, type AutomationRun, type AutomationRunDetail, type AutomationNotification } from '../../api/automations';
@@ -11,12 +11,81 @@ import AgentQuestion from '../AgentQuestion';
 import MarkdownRenderer from '../MarkdownRenderer';
 import { useToast } from '../../ui/toast/useToast';
 import { useConfirm } from '../../ui/confirm/useConfirm';
+import Skeleton from '../../ui/Skeleton';
 import { randomUUID } from '../../utils/browserSecurity';
 
 interface Props { automationId?: string; runId?: string }
 const button = 'inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-bg-base disabled:opacity-40';
 function navigate(planId?: string, runId?: string) { window.location.hash = planId ? `#/automations/${planId}${runId ? `?run=${runId}` : ''}` : '#/automations'; }
 function State({ value }: { value: string }) { return <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${['WAITING_USER', 'FAILED', 'PARTIAL_FAILED'].includes(value) ? 'bg-warning/10 text-warning' : ['SUCCEEDED', 'ACTIVE'].includes(value) ? 'bg-accent/10 text-accent' : 'bg-bg-base text-text-secondary'}`}>{automationStateLabel[value] ?? value}</span>; }
+
+function AutomationListSkeleton() {
+  return (
+    <div className="space-y-2" role="status" aria-busy="true" aria-label="正在加载任务列表">
+      <span className="sr-only">正在加载任务列表…</span>
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="mb-2 flex items-start rounded-2xl border border-transparent p-4">
+          <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+          <div className="ml-3 min-w-0 flex-1">
+            <Skeleton className="h-4 w-2/3 rounded" />
+            <Skeleton className="mt-2 h-3 w-5/6 rounded" />
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-3 w-24 rounded" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AutomationDetailSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-4xl p-5 sm:p-8" role="status" aria-busy="true" aria-label="正在加载任务详情">
+      <span className="sr-only">正在加载任务详情…</span>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <Skeleton className="h-6 w-16 rounded-full" />
+          <Skeleton className="mt-3 h-8 w-2/3 rounded-lg" />
+          <Skeleton className="mt-3 h-3 w-2/5 rounded" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-20 rounded-xl" />
+          <Skeleton className="h-9 w-24 rounded-xl" />
+        </div>
+      </div>
+      <div className="my-6 rounded-2xl border border-border bg-bg-surface p-5">
+        <Skeleton className="h-3 w-16 rounded" />
+        <div className="mt-3 space-y-2">
+          <Skeleton className="h-4 w-full rounded" />
+          <Skeleton className="h-4 w-11/12 rounded" />
+          <Skeleton className="h-4 w-2/3 rounded" />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-4">
+          <Skeleton className="h-3 w-28 rounded" />
+          <Skeleton className="h-3 w-20 rounded" />
+          <Skeleton className="h-3 w-24 rounded" />
+        </div>
+      </div>
+      <div className="mb-4 flex items-center justify-between">
+        <Skeleton className="h-5 w-20 rounded" />
+        <Skeleton className="h-3 w-16 rounded" />
+      </div>
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-bg-surface px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-4 w-40 rounded" />
+              <Skeleton className="mt-2 h-3 w-56 max-w-full rounded" />
+            </div>
+            <Skeleton className="h-5 w-14 shrink-0 rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function AutomationCenterPage({ automationId, runId }: Props) {
   const toast = useToast();
@@ -185,11 +254,11 @@ export default function AutomationCenterPage({ automationId, runId }: Props) {
     <div className="flex min-h-0 flex-1">
       <aside className={`${automationId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-border md:w-80 xl:w-96`}>
         <div className="space-y-3 px-5 py-4"><label className="flex items-center gap-2 rounded-xl border border-border bg-bg-surface px-3 py-2.5"><Search size={16} className="text-text-muted" /><input aria-label="搜索定时任务" placeholder="搜索任务……" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} className="min-w-0 flex-1 bg-transparent text-sm outline-none" /></label><div className="flex flex-wrap gap-1">{[['', '全部'], ['ACTIVE', '启用中'], ['PAUSED', '已暂停'], ['attention', '待处理'], ['ARCHIVED', '已归档']].map(([value, text]) => <button key={value} onClick={() => { setFilter(value); setPage(0); }} aria-pressed={filter === value} className={`rounded-full px-3 py-1.5 text-xs ${filter === value ? 'bg-accent/10 font-semibold text-accent' : 'text-text-secondary hover:bg-bg-surface'}`}>{text}</button>)}</div></div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">{loading && <div className="flex justify-center py-10"><Loader2 className="animate-spin text-accent" /></div>}{!loading && plans.length === 0 && <div className="px-5 py-10 text-center"><Clock3 size={30} className="mx-auto text-text-muted" /><p className="mt-4 text-sm font-medium">{search || filter ? '没有符合条件的任务' : '还没有安排任务'}</p><p className="mt-2 text-xs leading-5 text-text-muted">预约一次生图，或让创作助手定期检查你的作品。</p><button className="mt-4 text-sm font-medium text-accent" onClick={() => setComposer('create')}>创建第一个任务</button></div>}{plans.map(item => <div key={item.id} className={`group mb-2 flex w-full items-start rounded-2xl border transition-colors ${item.id === automationId ? 'border-accent/30 bg-accent/5' : 'border-transparent hover:border-border hover:bg-bg-surface'}`}><button type="button" onClick={() => navigate(item.id)} className="min-w-0 flex-1 p-4 text-left"><div className="flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-bg-surface text-accent">{item.definition.taskType === 'IMAGE' ? <Image size={17} /> : <Sparkles size={17} />}</span><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{item.definition.name}</h2><p className="mt-1 truncate text-xs text-text-muted">{item.definition.taskType === 'IMAGE' ? '生图任务' : 'Agent 任务'} · {automationRule(item.definition.schedule)}</p></div></div><div className="mt-3 flex items-center justify-between gap-2"><State value={item.status} /><span className="text-[0.6875rem] text-text-secondary">{item.nextRunAt ? `下次 ${automationTime(item.nextRunAt, item.definition.schedule.timezone)}` : item.status === 'ACTIVE' ? '本次任务已登记' : '暂无后续执行'}</span></div></button><button type="button" aria-label={`删除任务：${item.definition.name}`} disabled={!!busy} className="mr-2 mt-4 shrink-0 rounded-lg p-1.5 text-text-muted opacity-60 transition-colors hover:bg-bg-base hover:text-warning group-hover:opacity-100 disabled:opacity-30" onClick={() => void removeTask(item)}><Trash2 size={15} /></button></div>)}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">{loading && <AutomationListSkeleton />}{!loading && plans.length === 0 && <div className="px-5 py-10 text-center"><Clock3 size={30} className="mx-auto text-text-muted" /><p className="mt-4 text-sm font-medium">{search || filter ? '没有符合条件的任务' : '还没有安排任务'}</p><p className="mt-2 text-xs leading-5 text-text-muted">预约一次生图，或让创作助手定期检查你的作品。</p><button className="mt-4 text-sm font-medium text-accent" onClick={() => setComposer('create')}>创建第一个任务</button></div>}{plans.map(item => <div key={item.id} className={`group mb-2 flex w-full items-start rounded-2xl border transition-colors ${item.id === automationId ? 'border-accent/30 bg-accent/5' : 'border-transparent hover:border-border hover:bg-bg-surface'}`}><button type="button" onClick={() => navigate(item.id)} className="min-w-0 flex-1 p-4 text-left"><div className="flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-bg-surface text-accent">{item.definition.taskType === 'IMAGE' ? <Image size={17} /> : <Sparkles size={17} />}</span><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{item.definition.name}</h2><p className="mt-1 truncate text-xs text-text-muted">{item.definition.taskType === 'IMAGE' ? '生图任务' : 'Agent 任务'} · {automationRule(item.definition.schedule)}</p></div></div><div className="mt-3 flex items-center justify-between gap-2"><State value={item.status} /><span className="text-[0.6875rem] text-text-secondary">{item.nextRunAt ? `下次 ${automationTime(item.nextRunAt, item.definition.schedule.timezone)}` : item.status === 'ACTIVE' ? '本次任务已登记' : '暂无后续执行'}</span></div></button><button type="button" aria-label={`删除任务：${item.definition.name}`} disabled={!!busy} className="mr-2 mt-4 shrink-0 rounded-lg p-1.5 text-text-muted opacity-60 transition-colors hover:bg-bg-base hover:text-warning group-hover:opacity-100 disabled:opacity-30" onClick={() => void removeTask(item)}><Trash2 size={15} /></button></div>)}</div>
         <div className="flex items-center justify-between border-t border-border px-5 py-3 text-xs text-text-secondary"><button disabled={page === 0} className="disabled:opacity-30" onClick={() => setPage(page - 1)}>上一页</button><span>第 {page + 1} 页</span><button disabled={!more} className="disabled:opacity-30" onClick={() => setPage(page + 1)}>下一页</button></div>
       </aside>
       <section className={`${automationId ? 'flex' : 'hidden md:flex'} min-w-0 flex-1 flex-col overflow-y-auto`}>
-        {automationId && plan?.id !== automationId ? <div role="status" className="m-auto flex flex-col items-center gap-3 p-8 text-sm text-text-muted"><Loader2 size={26} className="animate-spin text-accent" />正在加载任务…</div> : !automationId || !plan ? <div className="m-auto max-w-sm p-8 text-center"><CalendarClock size={48} strokeWidth={1} className="mx-auto text-accent/60" /><h2 className="mt-6 text-xl font-medium">把重复的创作交给时间</h2><p className="mt-3 text-sm leading-7 text-text-muted">选择左侧任务查看设置和执行记录。你也可以定时检查分镜、准备小说草稿，或预约生成图片。</p></div> : <div className="mx-auto w-full max-w-4xl p-5 sm:p-8">
+        {automationId && plan?.id !== automationId ? <AutomationDetailSkeleton /> : !automationId || !plan ? <div className="m-auto max-w-sm p-8 text-center"><CalendarClock size={48} strokeWidth={1} className="mx-auto text-accent/60" /><h2 className="mt-6 text-xl font-medium">把重复的创作交给时间</h2><p className="mt-3 text-sm leading-7 text-text-muted">选择左侧任务查看设置和执行记录。你也可以定时检查分镜、准备小说草稿，或预约生成图片。</p></div> : <div className="mx-auto w-full max-w-4xl p-5 sm:p-8">
           <button className="mb-5 flex items-center gap-1 text-xs text-text-secondary md:hidden" onClick={() => navigate()}><ArrowLeft size={14} />返回任务列表</button>
           <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="mb-3"><State value={plan.status} /></div><h2 className="text-2xl font-semibold">{plan.definition.name}</h2><p className="mt-2 text-xs text-text-secondary">{automationRule(plan.definition.schedule)}</p></div><div className="flex flex-wrap gap-2">{!['COMPLETED', 'ARCHIVED'].includes(plan.status) && <><button className={button} disabled={!!busy} onClick={() => setComposer('edit')} aria-label="编辑任务"><Pencil size={15} /></button><button className={button} disabled={!!busy} onClick={() => { void act('lifecycle', () => changeAutomation(plan, plan.status === 'PAUSED' ? 'resume' : 'pause')); }}>{plan.status === 'PAUSED' ? <Play size={15} /> : <Pause size={15} />}{plan.status === 'PAUSED' ? '恢复' : '暂停'}</button></>}{plan.status !== 'ARCHIVED' && <button className={button} disabled={!!busy} onClick={() => { void act('run-now', async () => { const result = await runAutomationNow(plan.id, keyFor('run-now')); setSelectedRun(result.id); }); }}><Play size={15} />立即执行</button>}<button className={`${button} text-text-muted hover:text-warning`} disabled={!!busy} onClick={() => void removeTask(plan)}><Trash2 size={15} />删除任务</button></div></div>
           <div className="my-6 rounded-2xl border border-border bg-bg-surface p-5"><h3 className="mb-2 text-xs font-medium text-text-muted">任务说明</h3><p className="whitespace-pre-wrap text-sm leading-7">{plan.definition.instruction || '生成指定章节缺失的图片'}</p><div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-4 text-xs text-text-secondary"><span>下次执行：{plan.nextRunAt ? automationTime(plan.nextRunAt, plan.definition.schedule.timezone) : '暂无后续时间'}</span><span>{plan.definition.payload.model}</span><span>{plan.definition.taskType === 'IMAGE' ? `每次最多 ${plan.definition.limits.maxImagesPerRun} 张` : `每次最多 ${plan.definition.limits.maxModelCallsPerRun} 次模型调用`}</span>{plan.definition.payload.storyId && <a className="text-accent" href={`#/editor/${plan.definition.payload.storyId}`}>打开作品 ↗</a>}</div></div>

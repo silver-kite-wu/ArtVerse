@@ -43,7 +43,7 @@ import static org.mockito.Mockito.mock;
         MangaAgentConversationService.class, ResultFinalizer.class, ExecutionFactVerifier.class,
         AgentAutomationClaimIntegrationTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AgentAutomationClaimIntegrationTest {
     @Container static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
             DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));

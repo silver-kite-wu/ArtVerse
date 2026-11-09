@@ -28,19 +28,27 @@ public class NovelDraftReviewService {
     public NovelContentArtifactService.CommitView decide(Long userId, Long chapterId, UUID conversationId,
             UUID requestId, UUID artifactId, String decision, String content, Long baseVersion, String expectedContentHash) {
         return decideInternal(userId, chapterId, conversationId, requestId, artifactId, decision, content,
-                baseVersion, expectedContentHash, false);
+                baseVersion, expectedContentHash, false, false);
+    }
+
+    /** 完全访问权限下由服务端自动确认草稿，审核记录标记为 AI 自动审批。 */
+    @Transactional
+    public NovelContentArtifactService.CommitView autoConfirm(Long userId, Long chapterId, UUID conversationId,
+            UUID requestId, UUID artifactId, String content, Long baseVersion, String expectedContentHash) {
+        return decideInternal(userId, chapterId, conversationId, requestId, artifactId, "confirm", content,
+                baseVersion, expectedContentHash, false, true);
     }
 
     @Transactional
     public NovelContentArtifactService.CommitView decideForContinuation(Long userId, Long chapterId, UUID conversationId,
             UUID requestId, UUID artifactId, String decision, String content, Long baseVersion, String expectedContentHash) {
         return decideInternal(userId, chapterId, conversationId, requestId, artifactId, decision, content,
-                baseVersion, expectedContentHash, true);
+                baseVersion, expectedContentHash, true, false);
     }
 
     private NovelContentArtifactService.CommitView decideInternal(Long userId, Long chapterId, UUID conversationId,
             UUID requestId, UUID artifactId, String decision, String content, Long baseVersion, String expectedContentHash,
-            boolean continueAgent) {
+            boolean continueAgent, boolean automatic) {
         var scope = preparation.resolve(userId, chapterId, conversationId);
         runService.lockAutomationAuthorDecision(userId, chapterId, requestId);
         var run = runs.findForUpdate(scope.id(), requestId)
@@ -53,10 +61,14 @@ public class NovelDraftReviewService {
         }
         var result = artifacts.review(userId, chapterId, requestId, artifactId, decision, content, baseVersion, expectedContentHash);
         var receipt = artifacts.reviewReceipt(userId, chapterId, requestId, artifactId);
-        if (effects != null) effects.recordAuthorReview(userId, chapterId, requestId, artifactId, receipt);
-        project(scope, run, requestId, receipt, continueAgent);
+        if (effects != null) {
+            if (automatic) effects.recordAiAutoReview(userId, chapterId, requestId, artifactId, receipt);
+            else effects.recordAuthorReview(userId, chapterId, requestId, artifactId, receipt);
+        }
+        project(scope, run, requestId, receipt, continueAgent, automatic);
         if (!continueAgent && run.getStatus() == MangaAgentRunStatus.WAITING_USER) {
-            String reply = "discard".equals(decision) ? "已放弃本次修改，章节正文未改变。" : "已按审阅结果保存小说原文。";
+            String reply = "discard".equals(decision) ? "已放弃本次修改，章节正文未改变。"
+                    : automatic ? "已按「完全访问」权限自动确认修改并写入正文。" : "已按审阅结果保存小说原文。";
             preparation.saveMessage(scope, MessageRole.ASSISTANT, reply, requestId, "{}");
             runService.markSucceeded(scope.reference(), requestId, reply);
         }
@@ -73,17 +85,21 @@ public class NovelDraftReviewService {
                 .orElseThrow(() -> new BusinessException(404, "修改任务不存在"));
         var receipt = artifacts.reviewReceipt(userId, chapterId, requestId, artifactId);
         if (effects != null) effects.recordAuthorReview(userId, chapterId, requestId, artifactId, receipt);
-        project(scope, run, requestId, receipt, continueAgent);
+        project(scope, run, requestId, receipt, continueAgent, false);
         return receipt;
     }
 
     private void project(StoryChatPreparationService.Scope scope, com.artverse.domain.MangaAgentRun run,
-                         UUID requestId, Map<String, Object> receipt, boolean continueAgent) {
+                         UUID requestId, Map<String, Object> receipt, boolean continueAgent, boolean automatic) {
         if (runService.recordReviewReceipt(scope.reference(), requestId, receipt, continueAgent)) {
+            Map<String, Object> data = new java.util.LinkedHashMap<>(receipt);
+            data.put("reviewer", automatic ? "AI_AUTO" : "AUTHOR");
             runService.appendEvent(run, "run_event", Map.of(
                     "type", "review_saved", "phase", "review", "label",
-                    "COMMITTED".equals(receipt.get("status")) ? "人工审核已确认，正文已保存" : "人工审核已放弃，正文未改变",
-                    "status", "succeeded", "data", receipt));
+                    "COMMITTED".equals(receipt.get("status"))
+                            ? automatic ? "AI 自动审批已确认，正文已保存" : "人工审核已确认，正文已保存"
+                            : automatic ? "AI 自动审批已放弃，正文未改变" : "人工审核已放弃，正文未改变",
+                    "status", "succeeded", "data", data));
         }
     }
 }

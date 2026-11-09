@@ -6,6 +6,7 @@ import com.artverse.agent.AgentRunEvent;
 import com.artverse.agent.AgentRunRequest;
 import com.artverse.agent.AgentTaskType;
 import com.artverse.agent.AgentAnswerDelivery;
+import com.artverse.agent.AiPermissionMode;
 import com.artverse.application.workflow.MangaWorkflowExecutionContext.ExecutionClaim;
 import com.artverse.agent.gateway.AgentSessionTurns;
 import com.artverse.agent.BusinessSkillSelection;
@@ -79,6 +80,12 @@ public class StoryChatAgentService {
     private final ExecutorService executor;
     private final StoryChatPreparationService preparation;
     private final NovelDraftReviewService draftReviews;
+    private AiPermissionService aiPermissions;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setAiPermissions(AiPermissionService permissions) {
+        this.aiPermissions = java.util.Objects.requireNonNull(permissions);
+    }
 
     public void runBackground(MangaAgentConversation conversation,String message,UUID requestId,UserProviderConfig config) {
         runBackground(conversation, message, requestId, config, null);
@@ -360,6 +367,11 @@ public class StoryChatAgentService {
                         .filter(item -> "VALIDATED".equals(item.status()))
                         .reduce((left, right) -> right);
                 if (draft.isPresent()) {
+                    if (autoConfirm(request)) {
+                        String done = autoConfirmDraft(conversation, snapshot, requestId, draft.get(), originalClaim);
+                        sink.sendDone(runRef.get(), done, requestId);
+                        return;
+                    }
                     preparation.saveOwnedAssistantResult(scopeOf(conversation), reply.isEmpty() ? "修改草稿已生成，请在正文区审阅后确认。" : reply.toString(),
                             requestId, writeSkillVersions(request.businessSkillSelection()), com.artverse.domain.ChatMessageCompletionStatus.PARTIAL, originalClaim);
                     // Persist waiting even when the model omitted ask_user or its external pause was lost.
@@ -388,6 +400,26 @@ public class StoryChatAgentService {
             } catch (BusinessException stale) { failure.addSuppressed(stale); }
             throw failure;
         }
+    }
+
+    /** 完全访问权限下，正文草稿由服务端自动确认；审核记录标记为 AI 自动审批。 */
+    private boolean autoConfirm(AgentRunRequest request) {
+        return aiPermissions != null && aiPermissions.resolve(request) == AiPermissionMode.FULL;
+    }
+
+    private String autoConfirmDraft(MangaAgentConversation conversation, StoryChatContextSnapshot snapshot, UUID requestId,
+                                    NovelContentArtifactService.ArtifactView draft, ExecutionClaim claim) {
+        // 先进入可审阅状态，复用与人工确认相同的正文写入与版本投影流程。
+        runService.markWaiting(conversation, requestId, new AgentUserInputRequest(
+                "请在正文区审阅本章修改。", List.of(), false,
+                "artifact_id=" + draft.artifactId(), "BUSINESS_CONFIRMATION"), claim);
+        var payload = draft.payload();
+        String content = String.valueOf(payload.getOrDefault("content", ""));
+        Long baseVersion = payload.get("base_version") instanceof Number number ? number.longValue() : null;
+        String expectedHash = String.valueOf(payload.getOrDefault("content_hash", ""));
+        draftReviews.autoConfirm(snapshot.userId(), snapshot.chapterId(), conversation.getConversationUuid(),
+                requestId, draft.artifactId(), content, baseVersion, expectedHash);
+        return "已按「完全访问」权限自动确认草稿并写入正文。";
     }
 
     private AgentRunRequest agentRequest(StoryChatContextSnapshot snapshot, StoryChatRoute route,

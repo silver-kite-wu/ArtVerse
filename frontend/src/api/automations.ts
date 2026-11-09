@@ -36,6 +36,7 @@ export interface AutomationDefinition {
   expectedVersion?: number;
   origin?: string;
   sourceConversationId?: string;
+  permissionMode?: 'MANUAL' | 'AUTO' | 'FULL';
 }
 export interface AutomationPlan {
   id: string; status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED'; version: number;

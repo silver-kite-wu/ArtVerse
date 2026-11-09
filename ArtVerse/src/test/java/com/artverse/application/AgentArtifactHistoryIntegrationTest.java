@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.*;
         MangaAgentRunService.class, MangaAgentRunSnapshotReader.class, AgentRunLeaseService.class,
         AgentOutboxService.class, AgentToolEffectService.class, AgentArtifactHistoryIntegrationTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AgentArtifactHistoryIntegrationTest {
     @Container static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
             DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));

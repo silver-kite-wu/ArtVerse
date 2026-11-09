@@ -1,69 +1,29 @@
-/* Shared studio surfaces. Semantic colors also theme the editor and settings. */
+/* Shared studio surfaces. Semantic colors come from index.css; only the
+   studio-specific surfaces and the always-dark welcome hero are declared here. */
 :root {
-  --color-bg-base: #171d1c;
-  --color-bg-surface: #202725;
-  --color-bg-raised: #28312e;
-  --color-bg-muted: #232c28;
-  --color-bg-overlay: rgb(9 17 14 / 76%);
-  --color-text-primary: #edece4;
-  --color-text-secondary: #b0b8ae;
-  --color-text-muted: #8e9a90;
-  --color-border: #343e37;
-  --color-border-strong: #4d5b4f;
-  --color-accent: #e2a080;
-  --color-accent-hover: #efb89c;
-  --color-accent-muted: rgb(226 160 128 / 14%);
-  --color-accent-soft: rgb(226 160 128 / 7%);
-  --color-accent-secondary: #4c6859;
-  --color-accent-secondary-hover: #64816e;
-  --color-accent-tertiary: #becfa6;
-  --glass-bg: #202725;
-  --glass-border: #343e37;
-  --glass-shine: transparent;
   --font-body: 'Geist', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-display: 'Geist', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --shadow-xs: 0 1px 2px rgb(0 0 0 / 4%);
-  --shadow-sm: 0 2px 6px rgb(0 0 0 / 7%);
-  --shadow-md: 0 8px 24px rgb(0 0 0 / 12%);
-  --shadow-lg: 0 16px 40px rgb(0 0 0 / 16%);
-  --shadow-glow: 0 3px 8px rgb(0 0 0 / 8%);
-  --studio-sidebar-bg: #1c2320;
-  --studio-note-bg: #26342b;
-  --studio-sage: #bfd1b6;
+  --studio-sidebar-bg: #0c0c0e;
+  --studio-note-bg: #1a1a1d;
+  --studio-sage: #c2beb2;
+  --studio-hero-bg: #0e0e10;
+  --studio-hero-border: #2a2a2f;
+  --studio-hero-text: #f7f3ec;
+  --studio-hero-copy: #b9b9b4;
+  --studio-hero-hl: #e7dec9;
+  --studio-hero-dots: rgba(255, 255, 255, 0.04);
 }
 
 [data-mode='light'] {
-  --color-bg-base: #f8f7f3;
-  --color-bg-surface: #ffffff;
-  --color-bg-raised: #f2f1eb;
-  --color-bg-muted: #eeede6;
-  --color-bg-overlay: rgb(25 35 29 / 40%);
-  --color-text-primary: #28382f;
-  --color-text-secondary: #69736b;
-  --color-text-muted: #7b8279;
-  --color-border: #e7e9e0;
-  --color-border-strong: #cbd1c3;
-  --color-accent: #a75134;
-  --color-accent-hover: #8e4027;
-  --color-accent-muted: #f4e9e0;
-  --color-accent-soft: #fbf5ef;
-  --color-accent-secondary: #365747;
-  --color-accent-secondary-hover: #254636;
-  --color-accent-tertiary: #4e7154;
-  --color-amber-accent: #a77a29;
-  --color-warning: #a77a29;
-  --color-success: #287a54;
-  --glass-bg: #ffffff;
-  --glass-border: #e7e9e0;
-  --glass-shine: transparent;
-  --shadow-xs: 0 1px 2px rgb(35 48 36 / 3%);
-  --shadow-sm: 0 2px 6px rgb(35 48 36 / 4%);
-  --shadow-md: 0 8px 24px rgb(35 48 36 / 7%);
-  --shadow-lg: 0 16px 40px rgb(35 48 36 / 10%);
-  --shadow-glow: 0 3px 8px rgb(35 48 36 / 5%);
-  --studio-sidebar-bg: #f0f2eb;
-  --studio-note-bg: #e7ecdf;
-  --studio-sage: #4c6653;
+  --studio-sidebar-bg: #efeee8;
+  --studio-note-bg: #e9e7df;
+  --studio-sage: #6b6b72;
+  --studio-hero-bg: #17171a;
+  --studio-hero-border: #2b2b30;
+  --studio-hero-text: #f7f3ec;
+  --studio-hero-copy: #c2c2bd;
+  --studio-hero-hl: #e7dec9;
+  --studio-hero-dots: rgba(255, 255, 255, 0.045);
 }
 
 html { color-scheme: dark; scrollbar-gutter: auto; }
@@ -73,7 +33,7 @@ button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
 button, a { touch-action: manipulation; }
 .studio-wordmark { font-family: 'Playfair Display', Georgia, serif; letter-spacing: -.055em; }
 .studio-sidebar { background: var(--studio-sidebar-bg); }
-.studio-logo { color: #faf7ed; background: #365747; }
+.studio-logo { color: var(--color-accent-ink); background: var(--color-accent); }
 .studio-nav-item { min-height: 46px; }
 .studio-nav-item.is-active { background: var(--color-accent-muted); }
 .studio-sidebar nav { scrollbar-width: none; }
@@ -82,30 +42,29 @@ button, a { touch-action: manipulation; }
 .studio-sidebar[data-collapsed='true'] nav { padding-right: 12px; padding-left: 12px; }
 .studio-sidebar[data-collapsed='true'] .studio-nav-item { justify-content: center; padding-right: 0; padding-left: 0; }
 .studio-sidebar[data-collapsed='true'] .studio-account { padding-right: 12px; padding-left: 12px; }
-.studio-avatar { background: var(--color-bg-surface); color: var(--studio-sage); border: 1px solid var(--color-border); }
 .studio-mobile-nav { position: absolute; inset: auto 0 0; width: 100%; background: var(--color-bg-surface); }
 .studio-topbar { display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 40px; background: var(--color-bg-surface); border-bottom: 1px solid var(--color-border); }
 .studio-button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 0 17px; border-radius: 8px; font-size: 13px; font-weight: 500; text-decoration: none; transition: background .2s, transform .2s, box-shadow .2s; }
-.studio-button-primary { background: #a75134; color: #fffaf5; box-shadow: 0 2px 4px rgb(72 35 20 / 8%); }
-.studio-button-primary:hover { background: #8e4027; box-shadow: 0 4px 12px rgb(72 35 20 / 15%); transform: translateY(-1px); }
+.studio-button-primary { background: var(--color-accent); color: var(--color-accent-ink); box-shadow: var(--shadow-xs); }
+.studio-button-primary:hover { background: var(--color-accent-hover); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 .studio-button:disabled { opacity: .5; transform: none; }
-.studio-hero { position: relative; display: flex; align-items: center; min-height: 324px; overflow: hidden; border: 1px solid #3d594c; border-radius: 16px; background: #294a40; color: #f5f1e4; }
-.studio-hero::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(#c8c9ac 0.55px, transparent 0.55px); background-size: 6px 6px; opacity: .045; pointer-events: none; }
+.studio-hero { position: relative; display: flex; align-items: center; min-height: 324px; overflow: hidden; border: 1px solid var(--studio-hero-border); border-radius: 16px; background: radial-gradient(ellipse 55% 70% at 82% 50%, var(--color-accent-soft), transparent 65%), var(--studio-hero-bg); color: var(--studio-hero-text); }
+.studio-hero::before { content: ''; position: absolute; inset: 0; background-image: radial-gradient(var(--studio-hero-dots) 0.55px, transparent 0.55px); background-size: 6px 6px; opacity: .9; pointer-events: none; }
 .studio-hero-copy { position: relative; z-index: 1; flex-shrink: 0; padding: 34px 0 36px 38px; }
-.studio-eyebrow { display: inline-flex; align-items: center; gap: 8px; color: #d7d6b9; font-size: 9px; font-weight: 500; letter-spacing: .2em; }
-.studio-eyebrow > span { width: 5px; height: 5px; border-radius: 50%; background: #d8b687; }
+.studio-eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--studio-hero-copy); font-size: 9px; font-weight: 500; letter-spacing: .2em; }
+.studio-eyebrow > span { width: 5px; height: 5px; border-radius: 50%; background: var(--studio-hero-hl); }
 .studio-hero h1, .studio-hero h2 { margin: 17px 0 0; font-size: clamp(28px, 2.9vw, 43px); font-weight: 500; line-height: 1.47; letter-spacing: .015em; }
-.studio-hero h1 span, .studio-hero h2 span { color: #e8be99; }
-.studio-hero-copy > p { margin-top: 15px; color: #d0d8cd; font-size: 12px; line-height: 1.95; }
-.studio-hero-cta { display: inline-flex; align-items: center; gap: 16px; min-height: 38px; margin-top: 23px; padding: 0 16px; border: 1px solid #acb69b; border-radius: 6px; color: #f6f1e4; font-size: 12px; transition: background .2s, border-color .2s; }
-.studio-hero-cta:hover { background: #ffffff12; border-color: #f0d6af; }
+.studio-hero h1 span, .studio-hero h2 span { color: var(--studio-hero-hl); }
+.studio-hero-copy > p { margin-top: 15px; color: var(--studio-hero-copy); font-size: 12px; line-height: 1.95; }
+.studio-hero-cta { display: inline-flex; align-items: center; gap: 16px; min-height: 38px; margin-top: 23px; padding: 0 16px; border: 1px solid color-mix(in srgb, var(--studio-hero-hl) 52%, transparent); border-radius: 6px; color: var(--studio-hero-text); font-size: 12px; transition: background .2s, border-color .2s; }
+.studio-hero-cta:hover { background: var(--color-accent-soft); border-color: var(--studio-hero-hl); }
 .studio-artwork { position: absolute; right: 2%; bottom: 6px; width: 52%; height: 96%; }
-.studio-hero-footnote { position: absolute; right: 25px; bottom: 17px; color: #b5c1a8; font-size: 7px; letter-spacing: .22em; }
+.studio-hero-footnote { position: absolute; right: 25px; bottom: 17px; color: var(--studio-hero-copy); opacity: .7; font-size: 7px; letter-spacing: .22em; }
 .studio-square-toolbar { margin-top: 12px; border-bottom: 1px solid var(--color-border); }
 .studio-library { margin-top: 21px; scroll-margin-top: 92px; }
 .studio-library:focus { outline: none; }
 .studio-story-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.studio-story-card { box-shadow: 0 2px 5px rgb(25 40 30 / 2%); }
+.studio-story-card { box-shadow: var(--shadow-xs); }
 .studio-story-card > a { gap: 20px; padding: 20px; }
 .studio-story-card .fanqie-book-cover { border-radius: 5px 9px 9px 5px; background: var(--studio-note-bg); }
 .studio-story-card h3 { font-size: 17px; font-weight: 600; }
@@ -137,11 +96,11 @@ button, a { touch-action: manipulation; }
 .studio-theme-backdrop { display: none; }
 .studio-theme-sidebar:not(.is-open) { border: 0; }
 .studio-skip-link:focus { position: absolute; left: 16px; top: 8px; z-index: 30; padding: 10px; background: var(--color-bg-surface); }
-.fanqie-cta-primary { color: #fffaf5; background: #a75134; }
-.btn-accent { background: #a75134; box-shadow: var(--shadow-xs); }
-.btn-accent:hover, .fanqie-cta-primary:hover { background: #8e4027; box-shadow: var(--shadow-sm); }
+.fanqie-cta-primary { color: var(--color-accent-ink); background: var(--color-accent); }
+.btn-accent { background: var(--color-accent); color: var(--color-accent-ink); box-shadow: var(--shadow-xs); }
+.btn-accent:hover, .fanqie-cta-primary:hover { background: var(--color-accent-hover); box-shadow: var(--shadow-sm); }
 .panel-frame:hover { box-shadow: var(--shadow-md); }
-.bg-accent.text-white { background-color: #a75134; }
+.bg-accent.text-white { background-color: var(--color-accent); color: var(--color-accent-ink); }
 
 @media (min-width: 1600px) {
   .studio-hero { min-height: 360px; }

@@ -48,9 +48,65 @@ import OverlayPortal from '../ui/OverlayPortal';
 import StudioArtwork from './StudioArtwork';
 import { useToast } from '../ui/toast/useToast';
 import { useConfirm } from '../ui/confirm/useConfirm';
+import Skeleton from '../ui/Skeleton';
 
 interface Props {
   onSelectStory: (story: Story) => void;
+}
+
+function HomeSkeleton() {
+  return (
+    <div className="studio-workspace h-full overflow-y-auto bg-bg-base text-text-primary" role="status" aria-busy="true" aria-label="正在加载创作空间">
+      <span className="sr-only">正在加载创作空间…</span>
+      <header className="studio-workspace-header border-b border-border bg-bg-surface/95">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-9 w-9 rounded-lg" />
+            <div>
+              <Skeleton className="h-4 w-24 rounded" />
+              <Skeleton className="mt-2 h-3 w-36 rounded" />
+            </div>
+          </div>
+          <div className="ml-auto mr-2">
+            <Skeleton className="h-9 w-20 rounded-lg" />
+          </div>
+          <Skeleton className="h-9 w-24 rounded-lg" />
+        </div>
+      </header>
+      <main className="studio-page mx-auto max-w-[1440px] px-5 py-7 sm:px-8 lg:px-10">
+        <Skeleton className="h-[286px] w-full rounded-xl" />
+        <div className="studio-quick-actions">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="flex items-center gap-3">
+              <Skeleton className="h-[42px] w-[42px] shrink-0 rounded-[11px]" />
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-3.5 w-24 rounded" />
+                <Skeleton className="mt-2 h-2.5 w-32 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mb-5 flex items-end justify-between">
+          <div>
+            <Skeleton className="h-6 w-28 rounded-lg" />
+            <Skeleton className="mt-1.5 h-3 w-16 rounded" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="panel-frame flex min-w-0 overflow-hidden sm:block">
+              <Skeleton className="aspect-[3/4] w-[120px] shrink-0 rounded-none sm:w-full" />
+              <div className="min-w-0 flex-1 space-y-2 p-4">
+                <Skeleton className="h-5 w-2/3 rounded" />
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-3 w-4/5 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
 }
 
 export default function HomePage({ onSelectStory }: Props) {
@@ -369,14 +425,7 @@ export default function HomePage({ onSelectStory }: Props) {
   };
 
   if (loading) {
-    return (
-      <div className="h-dvh bg-bg-base flex items-center justify-center text-text-secondary">
-        <div className="flex flex-col items-center gap-3">
-          <BookOpenText size={40} className="animate-pulse text-accent/40" />
-          <span className="text-sm">加载中…</span>
-        </div>
-      </div>
-    );
+    return <HomeSkeleton />;
   }
 
   return (

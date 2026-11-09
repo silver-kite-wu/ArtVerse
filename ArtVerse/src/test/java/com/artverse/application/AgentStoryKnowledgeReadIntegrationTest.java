@@ -55,7 +55,7 @@ import static org.mockito.Mockito.*;
         StoryContextReadTools.class, KnowledgeReadTools.class, ReferenceAssetReadTools.class,
         KnowledgeCandidateReadTools.class, AgentStoryKnowledgeReadIntegrationTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AgentStoryKnowledgeReadIntegrationTest {
     @Container static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
             DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));

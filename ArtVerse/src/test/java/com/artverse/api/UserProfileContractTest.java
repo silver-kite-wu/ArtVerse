@@ -31,7 +31,7 @@ class UserProfileContractTest {
         user = new User(); user.setId(9L); user.setUsername("alice"); user.setEmail("alice@example.test");
         when(current.requireCurrentUser()).thenReturn(user);
         var mapper = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
-        mvc = MockMvcBuilders.standaloneSetup(new UserController(current, mock(ApiKeyService.class), profiles, storage, cookies))
+        mvc = MockMvcBuilders.standaloneSetup(new UserController(current, mock(ApiKeyService.class), mock(AiPermissionService.class), profiles, storage, cookies))
                 .setControllerAdvice(new ApiResponseAdvice())
                 .setMessageConverters(new ByteArrayHttpMessageConverter(), new MappingJackson2HttpMessageConverter(mapper)).build();
     }

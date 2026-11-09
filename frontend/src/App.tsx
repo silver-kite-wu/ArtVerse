@@ -293,7 +293,6 @@ export default function App() {
           + (active ? 'text-accent' : 'text-text-muted hover:text-text-secondary')
         }
       >
-        {active && <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-accent" />}
         <span className={active ? 'scale-110 transition-transform duration-300' : 'transition-transform duration-300'}>
           {icon}
         </span>

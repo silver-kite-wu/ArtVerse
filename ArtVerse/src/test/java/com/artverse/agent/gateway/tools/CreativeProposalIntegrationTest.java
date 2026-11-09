@@ -42,7 +42,7 @@ import static com.artverse.application.imagequeue.ImageProtocol.*;
         KnowledgeCandidateService.class,KnowledgeService.class,KnowledgeSchema.class,KnowledgeFactService.class,KnowledgeProjectionService.class,
         AgentToolEffectService.class,MangaAgentRunService.class,MangaAgentRunSnapshotReader.class,AgentRunLeaseService.class,
         ImageProposalTokens.class,ImageProposalService.class,AgentArtifactAccessService.class,CreativeProposalIntegrationTest.Config.class})
-@Transactional(propagation=Propagation.NOT_SUPPORTED) @Testcontainers
+@Transactional(propagation=Propagation.NOT_SUPPORTED) @Testcontainers(disabledWithoutDocker = true)
 class CreativeProposalIntegrationTest {
     @Container static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>(DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));
     @DynamicPropertySource static void database(DynamicPropertyRegistry r) {

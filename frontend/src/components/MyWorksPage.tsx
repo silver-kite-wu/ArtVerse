@@ -10,6 +10,7 @@ import {
 } from '../api';
 import { useConfirm } from '../ui/confirm/useConfirm';
 import { useToast } from '../ui/toast/useToast';
+import Skeleton from '../ui/Skeleton';
 
 type Format = 'novel' | 'manga';
 type PageView = 'list' | 'detail' | 'reader';
@@ -310,17 +311,18 @@ export default function MyWorksPage() {
     if (next) void openReader(next.id);
   };
 
-  if (loading) return <div className="flex flex-1 flex-col bg-bg-base">
+  if (loading) return <div className="flex flex-1 flex-col bg-bg-base" role="status" aria-busy="true" aria-label="正在加载作品">
+    <span className="sr-only">正在加载作品…</span>
     <div className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 md:px-8 md:py-7">
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {Array.from({ length: 4 }).map((_, index) => (
           <div key={index} className="grid min-w-0 grid-cols-[88px_1fr] gap-3 rounded-xl border border-border bg-bg-surface p-3 sm:grid-cols-[104px_1fr] sm:gap-4">
-            <div className="aspect-[3/4] rounded-lg bg-bg-raised shimmer-bg" />
+            <Skeleton className="aspect-[3/4] rounded-lg" />
             <div className="flex min-w-0 flex-col gap-2.5 py-0.5">
-              <div className="h-5 w-1/2 rounded-lg bg-bg-raised shimmer-bg" />
-              <div className="h-3 w-full rounded-lg bg-bg-raised shimmer-bg" />
-              <div className="h-3 w-2/3 rounded-lg bg-bg-raised shimmer-bg" />
-              <div className="mt-auto h-3 w-1/3 rounded-lg bg-bg-raised shimmer-bg" />
+              <Skeleton className="h-5 w-1/2 rounded-lg" />
+              <Skeleton className="h-3 w-full rounded-lg" />
+              <Skeleton className="h-3 w-2/3 rounded-lg" />
+              <Skeleton className="mt-auto h-3 w-1/3 rounded-lg" />
             </div>
           </div>
         ))}

@@ -236,6 +236,7 @@ class MangaWorkflowExecutionClaimTest {
         when(repository.findByUserIdAndChapterIdAndRequestId(1L, 7L, run.getRequestId())).thenReturn(Optional.of(run));
         when(repository.findForUpdate(9L, run.getRequestId())).thenReturn(Optional.of(run));
         when(repository.findByConversationIdAndRequestId(9L, run.getRequestId())).thenReturn(Optional.of(run));
+        when(repository.findById(run.getId())).thenReturn(Optional.of(run));
         when(repository.findForUpdateById(run.getId())).thenReturn(Optional.of(run));
         var jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
         when(jdbc.queryForList(contains("SELECT r.id"), any(Object[].class)))

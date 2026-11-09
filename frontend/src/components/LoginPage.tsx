@@ -476,7 +476,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
           aria-describedby={isModal ? dialogDescriptionId : undefined}
           className="relative flex h-[min(46rem,calc(100dvh-2rem))] flex-col overflow-hidden rounded-[32px] border border-border/80 bg-bg-raised/95 p-5 shadow-2xl sm:p-7"
         >
-          <div className="pointer-events-none absolute inset-x-12 top-0 h-28 rounded-full bg-[radial-gradient(circle,rgba(241,72,30,0.22)_0%,rgba(241,72,30,0.08)_32%,rgba(241,72,30,0)_76%)] blur-2xl" />
+          <div className="pointer-events-none absolute inset-x-12 top-0 h-28 rounded-full bg-[radial-gradient(circle,rgba(233,231,225,0.22)_0%,rgba(233,231,225,0.08)_32%,rgba(233,231,225,0)_76%)] blur-2xl" />
           <div className="pointer-events-none absolute inset-0 rounded-[32px] bg-gradient-to-b from-white/[0.03] via-transparent to-transparent" />
 
           <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1 sm:gap-6">
@@ -494,7 +494,7 @@ export default function LoginPage({ onAuthSuccess, variant = 'page', message, on
             </div>
 
             {passwordLoginMode && message && (
-              <p className="rounded-[20px] border border-accent/25 bg-[linear-gradient(135deg,rgba(241,72,30,0.10),rgba(241,72,30,0.03))] px-4 py-3 text-sm text-accent">
+              <p className="rounded-[20px] border border-accent/25 bg-[linear-gradient(135deg,rgba(233,231,225,0.10),rgba(233,231,225,0.03))] px-4 py-3 text-sm text-accent">
                 {message}
               </p>
             )}

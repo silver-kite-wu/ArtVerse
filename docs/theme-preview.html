@@ -1,0 +1,2077 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ArtVerse · 黑色主题 / 亮色主题改版预览</title>
+<style>
+  /* ──────────────────────────────────────────────────────────
+     Design tokens — proposed for ArtVerse
+     ────────────────────────────────────────────────────────── */
+  :root,
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0A0A0B;
+    --surface: #121214;
+    --raised: #1A1A1D;
+    --elevated: #202024;
+    --overlay: rgba(5, 5, 6, .82);
+    --text: #F2F2EF;
+    --text-2: #A8A8A2;
+    --muted: #7C7C83;
+    --border: #232327;
+    --border-2: #35353B;
+    --accent: #E9E7E1;
+    --accent-2: #FFFFFF;
+    --accent-ink: #0A0A0B;
+    --accent-muted: rgba(233, 231, 225, .12);
+    --accent-soft: rgba(233, 231, 225, .055);
+    --success: #6FBF9E;
+    --warning: #D4AC63;
+    --danger: #E07A7A;
+    --info: #9AAFBF;
+    --sidebar: #0C0C0E;
+    --note: #1A1A1D;
+    --hero: #0E0E10;
+    --hero-border: #2A2A2F;
+    --hero-text: #F7F3EC;
+    --hero-copy: #B9B9B4;
+    --hero-hl: #E7DEC9;
+    --glass: rgba(18, 18, 20, .86);
+    --glass-border: rgba(255, 255, 255, .06);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .40);
+    --shadow-md: 0 12px 32px rgba(0, 0, 0, .45);
+    --ring: 0 0 0 3px rgba(233, 231, 225, .18);
+    --cover-edge: rgba(255, 255, 255, .07);
+    --grid-dot: rgba(255, 255, 255, .035);
+    --stage-bg: #101012;
+    --stage-ink: rgba(247, 243, 236, .06);
+    --stage-note: rgba(194, 194, 189, .55);
+    --modal-shadow: 0 24px 64px rgba(0, 0, 0, .42);
+    --pv-bg: #0D0D0F;
+    --pv-border: rgba(255, 255, 255, .08);
+  }
+  [data-theme="light"] {
+    color-scheme: light;
+    --bg: #F5F4F0;
+    --surface: #FFFFFF;
+    --raised: #F0EFEA;
+    --elevated: #FFFFFF;
+    --overlay: rgba(18, 18, 20, .38);
+    --text: #1A1A1C;
+    --text-2: #55555C;
+    --muted: #73737A;
+    --border: #E4E2DB;
+    --border-2: #CFCCC3;
+    --accent: #1A1A1C;
+    --accent-2: #000000;
+    --accent-ink: #FFFFFF;
+    --accent-muted: rgba(26, 26, 28, .08);
+    --accent-soft: rgba(26, 26, 28, .04);
+    --success: #2E7D5F;
+    --warning: #8C5E0B;
+    --danger: #B23A3A;
+    --info: #4A6478;
+    --sidebar: #EFEEE8;
+    --note: #E9E7DF;
+    --hero: #17171A;
+    --hero-border: #2B2B30;
+    --hero-text: #F7F3EC;
+    --hero-copy: #C2C2BD;
+    --hero-hl: #E7DEC9;
+    --glass: rgba(255, 255, 255, .86);
+    --glass-border: rgba(20, 20, 22, .07);
+    --shadow-sm: 0 1px 2px rgba(20, 20, 22, .06);
+    --shadow-md: 0 12px 32px rgba(20, 20, 22, .10);
+    --ring: 0 0 0 3px rgba(26, 26, 28, .16);
+    --cover-edge: rgba(0, 0, 0, .10);
+    --grid-dot: rgba(20, 20, 22, .05);
+    --stage-bg: #ECEAE4;
+    --stage-ink: rgba(26, 26, 28, .07);
+    --stage-note: rgba(85, 85, 92, .55);
+    --modal-shadow: 0 24px 64px rgba(20, 20, 22, .16);
+    --pv-bg: #F0EFEA;
+    --pv-border: rgba(20, 20, 22, .10);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scrollbar-gutter: stable; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Geist", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color .3s ease, color .3s ease;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 60% 30% at 50% -8%, var(--accent-soft), transparent 65%),
+      radial-gradient(ellipse 40% 30% at 100% 100%, var(--accent-soft), transparent 70%);
+  }
+  ::selection { background: var(--accent-muted); color: var(--text); }
+  button { font: inherit; cursor: pointer; }
+  a { color: inherit; text-decoration: none; }
+  .ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .ic-sm { width: 15px; height: 15px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  /* ── Preview chrome ───────────────────────────────────────── */
+  .preview-bar {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    background: color-mix(in srgb, var(--pv-bg) 86%, transparent);
+    border-bottom: 1px solid var(--pv-border);
+    backdrop-filter: blur(16px) saturate(130%);
+  }
+  .preview-bar-inner {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 12px 28px;
+  }
+  .pv-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .pv-mark {
+    display: grid;
+    place-items: center;
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: 700 20px/1 "Playfair Display", Georgia, serif;
+  }
+  .pv-brand strong { display: block; font-size: 13px; letter-spacing: .02em; }
+  .pv-brand small { display: block; margin-top: 3px; font: 500 9px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+  .pv-links { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+  .pv-links a {
+    padding: 7px 11px;
+    border-radius: 7px;
+    font-size: 12px;
+    color: var(--text-2);
+    transition: background .18s, color .18s;
+  }
+  .pv-links a:hover { background: var(--raised); color: var(--text); }
+  .pv-actions { display: flex; align-items: center; gap: 12px; }
+  .pv-badge {
+    padding: 6px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--raised);
+  }
+  .seg-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+    transition: background .18s, color .18s;
+  }
+  .seg-btn:hover { color: var(--text); }
+  .seg-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+  .seg-btn.active .ic { color: var(--accent); }
+
+  /* ── Page scaffolding ─────────────────────────────────────── */
+  .pv-wrap { max-width: 1480px; margin: 0 auto; padding: 34px 28px 90px; }
+  .pv-section { margin-bottom: 78px; scroll-margin-top: 96px; }
+  .section-head { max-width: 780px; margin-bottom: 28px; }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font: 600 9px/1 "Roboto Mono", Consolas, monospace;
+    letter-spacing: .18em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .section-head h2 { margin: 12px 0 0; font-size: clamp(22px, 2.2vw, 30px); font-weight: 500; letter-spacing: .01em; line-height: 1.4; }
+  .section-head p { margin: 12px 0 0; max-width: 680px; font-size: 13px; line-height: 1.9; color: var(--text-2); }
+  .muted { color: var(--muted); }
+  .mono { font-family: "Roboto Mono", Consolas, monospace; font-size: .92em; }
+
+  /* ── Overview cards ───────────────────────────────────────── */
+  .principle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 30px; }
+  .principle {
+    position: relative;
+    overflow: hidden;
+    padding: 22px 22px 24px;
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    background: var(--surface);
+  }
+  .principle::after {
+    content: "";
+    position: absolute;
+    top: -44px; right: -44px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--accent-soft), transparent 70%);
+  }
+  .principle-index { font: 600 10px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .16em; color: var(--muted); }
+  .principle h3 { margin: 16px 0 8px; font-size: 15px; font-weight: 600; }
+  .principle p { margin: 0; font-size: 12px; line-height: 1.85; color: var(--text-2); }
+  .principle .mini-swatch-row { display: flex; gap: 5px; margin-top: 16px; }
+  .mini-swatch { width: 24px; height: 8px; border-radius: 3px; border: 1px solid var(--border); }
+
+  /* ── Token table ──────────────────────────────────────────── */
+  .token-layout { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, .85fr); gap: 20px; align-items: start; }
+  .token-table {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    background: var(--surface);
+  }
+  .token-row {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 11px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .token-row:last-child { border-bottom: 0; }
+  .token-row.head {
+    padding-top: 13px;
+    padding-bottom: 13px;
+    background: var(--raised);
+    color: var(--muted);
+    font: 600 9px/1 "Roboto Mono", Consolas, monospace;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .token-name { display: flex; align-items: center; gap: 10px; color: var(--text-2); }
+  .token-name b { color: var(--text); font-weight: 500; }
+  .token-cell { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); }
+  .swatch { width: 16px; height: 16px; flex-shrink: 0; border: 1px solid var(--border-2); border-radius: 5px; }
+  .token-cell code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; }
+
+  .ladder-card {
+    padding: 22px;
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    background: var(--surface);
+  }
+  .ladder-card h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+  .ladder-card > p { margin: 0 0 18px; font-size: 11px; line-height: 1.7; color: var(--muted); }
+  .ladder { display: flex; flex-direction: column; gap: 5px; }
+  .ladder-step {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    height: 42px;
+    padding: 0 13px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 11px;
+  }
+  .ladder-step span:first-child { display: flex; align-items: center; gap: 8px; }
+  .ladder-step small { font-family: "Roboto Mono", Consolas, monospace; font-size: 9px; color: var(--muted); }
+  .accent-use { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .pill.outline { background: transparent; border: 1px solid var(--border); color: var(--text-2); }
+
+  /* ── Page tabs + browser frame ────────────────────────────── */
+  .page-tabs { display: flex; align-items: center; gap: 5px; margin-bottom: 14px; }
+  .page-tabs button {
+    min-height: 36px;
+    padding: 0 15px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    transition: .18s;
+  }
+  .page-tabs button:hover { background: var(--raised); color: var(--text); }
+  .page-tabs button.active { border-color: var(--border); background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+  .page-tabs button.active .ic { color: var(--accent); }
+  .tab-note { margin-left: auto; font-size: 10px; color: var(--muted); }
+  .browser {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--bg);
+    box-shadow: var(--shadow-md);
+  }
+  .browser-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 38px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--raised);
+  }
+  .window-dots { display: flex; gap: 5px; }
+  .window-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-2); display: block; }
+  .window-dots i:first-child { background: var(--accent); opacity: .7; }
+  .browser-url {
+    flex: 1;
+    max-width: 460px;
+    margin: 0 auto;
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--muted);
+    font: 10px/1 "Roboto Mono", Consolas, monospace;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .browser-bar .ic { color: var(--muted); }
+
+  /* ── App shell ────────────────────────────────────────────── */
+  .app-shell {
+    display: grid;
+    grid-template-columns: 246px minmax(0, 1fr);
+    min-height: 820px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--border);
+    background: var(--sidebar);
+  }
+  .sb-brand { display: flex; align-items: center; gap: 11px; height: 90px; padding: 0 18px; }
+  .sb-logo {
+    display: grid;
+    place-items: center;
+    width: 42px; height: 42px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: 700 23px/1 "Playfair Display", Georgia, serif;
+  }
+  .sb-brand-text { min-width: 0; flex: 1; }
+  .sb-wordmark { font: 600 20px/1 "Playfair Display", Georgia, serif; letter-spacing: -.04em; }
+  .sb-wordmark .dot { color: var(--accent); }
+  .sb-brand-text small { display: block; margin-top: 8px; font-size: 9px; letter-spacing: .12em; color: var(--muted); }
+  .sb-collapse {
+    display: grid;
+    place-items: center;
+    width: 28px; height: 28px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+  }
+  .sb-collapse:hover { background: var(--raised); color: var(--text); }
+  .sb-nav { display: flex; flex-direction: column; gap: 4px; padding: 14px; overflow-y: auto; }
+  .sb-label { margin: 8px 0 8px; padding: 0 11px; font: 600 9px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+  .sb-label + .sb-label, .sb-label.mt { margin-top: 24px; }
+  .sb-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-height: 42px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    text-align: left;
+    transition: background .18s, color .18s;
+  }
+  .sb-item:hover { background: var(--accent-soft); color: var(--text); }
+  .sb-item.is-active { background: var(--accent-muted); color: var(--accent); font-weight: 600; }
+  .sb-item.is-active::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 50%;
+    width: 2px; height: 16px;
+    border-radius: 2px;
+    background: var(--accent);
+    transform: translateY(-50%);
+  }
+  .sb-item .ic { width: 17px; height: 17px; }
+  .sb-note {
+    margin: 10px 16px 16px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--note);
+  }
+  .sb-note .ic { color: var(--accent); width: 19px; height: 19px; }
+  .sb-note strong { display: block; margin-top: 13px; font-size: 12px; font-weight: 600; }
+  .sb-note p { margin: 7px 0 0; font-size: 10px; line-height: 1.75; color: var(--text-2); }
+  .sb-note a { display: inline-flex; align-items: center; gap: 4px; margin-top: 11px; font-size: 10px; font-weight: 600; color: var(--accent); }
+  .sb-account { margin-top: auto; padding: 12px 14px 16px; border-top: 1px solid var(--border); }
+  .sb-user { display: flex; align-items: center; gap: 10px; padding: 7px; border-radius: 9px; }
+  .sb-avatar {
+    display: grid;
+    place-items: center;
+    width: 34px; height: 34px;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: var(--raised);
+    border: 1px solid var(--border-2);
+    color: var(--accent);
+    font: 600 14px/1 "Playfair Display", Georgia, serif;
+  }
+  .sb-user strong { display: block; font-size: 12px; font-weight: 600; }
+  .sb-user small { display: block; margin-top: 4px; font-size: 9px; color: var(--muted); }
+  .sb-theme { display: flex; align-items: center; gap: 9px; margin-top: 6px; padding: 7px; border-radius: 9px; font-size: 11px; color: var(--text-2); }
+  .sb-theme .ic { color: var(--muted); }
+  .sb-theme span { flex: 1; }
+  .switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 36px; height: 20px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid var(--border-2);
+    border-radius: 999px;
+    background: var(--raised);
+    transition: background .2s, border-color .2s;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    left: 2px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgba(0,0,0,.2);
+    transition: transform .2s;
+  }
+  .switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(16px); background: var(--accent-ink); }
+
+  /* ── Shared page chrome ───────────────────────────────────── */
+  .app-main { min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+  .panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  .panel[hidden] { display: none; }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 68px;
+    padding: 14px 34px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .crumb { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 12px; }
+  .crumb .ic { color: var(--muted); width: 16px; height: 16px; }
+  .crumb b { font-weight: 600; }
+  .crumb .sep { color: var(--border-2); }
+  .crumb .muted { font-size: 10px; white-space: nowrap; }
+  .page-body { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 34px 0; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 0 15px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background .18s, border-color .18s, color .18s, transform .18s, box-shadow .18s;
+  }
+  .btn .ic { width: 16px; height: 16px; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 8px var(--accent-muted); }
+  .btn-primary:hover { background: var(--accent-2); transform: translateY(-1px); }
+  .btn-secondary { border-color: var(--border); background: var(--surface); color: var(--text-2); }
+  .btn-secondary:hover { border-color: var(--border-2); color: var(--text); }
+  .btn-ghost { color: var(--text-2); }
+  .btn-ghost:hover { background: var(--raised); color: var(--text); }
+  .btn-danger { border-color: color-mix(in srgb, var(--danger) 40%, transparent); color: var(--danger); background: transparent; }
+  .btn-danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+  .btn:disabled { opacity: .42; cursor: not-allowed; transform: none; }
+
+  /* ── Hero ─────────────────────────────────────────────────── */
+  .hero {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 306px;
+    overflow: hidden;
+    border: 1px solid var(--hero-border);
+    border-radius: 18px;
+    background:
+      radial-gradient(ellipse 55% 70% at 82% 50%, var(--accent-soft), transparent 65%),
+      var(--hero);
+    color: var(--hero-text);
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(var(--grid-dot) .6px, transparent .6px);
+    background-size: 7px 7px;
+    opacity: .9;
+    pointer-events: none;
+  }
+  .hero-copy { position: relative; z-index: 2; flex: 0 0 auto; max-width: 56%; padding: 30px 0 32px 38px; }
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--hero-copy);
+    font: 600 9px/1 "Roboto Mono", Consolas, monospace;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+  }
+  .hero-eyebrow i { width: 5px; height: 5px; border-radius: 50%; background: var(--hero-hl); }
+  .hero h1 {
+    margin: 16px 0 0;
+    font-size: clamp(27px, 2.7vw, 39px);
+    font-weight: 500;
+    line-height: 1.46;
+    letter-spacing: .01em;
+  }
+  .hero h1 span { color: var(--hero-hl); }
+  .hero-copy p { margin: 14px 0 0; font-size: 11px; line-height: 1.95; color: var(--hero-copy); }
+  .hero-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 13px;
+    min-height: 37px;
+    margin-top: 21px;
+    padding: 0 15px;
+    border: 1px solid color-mix(in srgb, var(--hero-hl) 52%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--hero-text);
+    font-size: 11px;
+    transition: background .2s, border-color .2s;
+  }
+  .hero-cta:hover { background: var(--accent-soft); border-color: var(--hero-hl); }
+  .hero-art { position: absolute; right: 1.5%; bottom: 4px; width: 51%; height: 95%; color: var(--hero-hl); }
+  .hero-footnote { position: absolute; right: 24px; bottom: 15px; font: 500 6px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .22em; color: color-mix(in srgb, var(--hero-copy) 70%, transparent); }
+
+  /* ── Square page ──────────────────────────────────────────── */
+  .square-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 18px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .format-tabs { display: flex; align-items: center; gap: 5px; }
+  .format-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    transition: .18s;
+  }
+  .format-tab:hover { background: var(--raised); color: var(--text); }
+  .format-tab.active { background: var(--text); color: var(--bg); }
+  .format-tab .count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 20px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--raised);
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 700;
+  }
+  .format-tab.active .count { background: color-mix(in srgb, var(--bg) 14%, transparent); color: var(--bg); }
+  .search-wrap { position: relative; display: flex; gap: 7px; width: 322px; }
+  .search-wrap .ic { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); width: 15px; height: 15px; }
+  .search-input {
+    width: 100%;
+    height: 38px;
+    padding: 0 12px 0 33px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 11px;
+    outline: none;
+    transition: border-color .16s, box-shadow .16s;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--accent); box-shadow: var(--ring); }
+  .search-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 38px;
+    padding: 0 15px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-2);
+    font-size: 11px;
+  }
+  .search-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .library-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 22px 0 14px; }
+  .library-head h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+  .library-head h2 span { margin-left: 10px; font: 500 8px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .12em; color: var(--muted); }
+  .library-head p { margin: 7px 0 0; font-size: 10px; color: var(--muted); }
+  .library-count { flex-shrink: 0; font-size: 10px; color: var(--muted); }
+  .story-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+  .story-card {
+    display: flex;
+    gap: 16px;
+    min-height: 172px;
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    transition: border-color .2s, transform .2s, box-shadow .2s;
+  }
+  .story-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .cover {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 100px;
+    height: 142px;
+    flex-shrink: 0;
+    overflow: hidden;
+    padding: 11px 10px 10px 13px;
+    border: 1px solid var(--cover-edge);
+    border-radius: 4px 9px 9px 4px;
+    color: #F6EDE3;
+  }
+  .cover::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 7px;
+    background: linear-gradient(90deg, rgba(0,0,0,.42), transparent);
+  }
+  .cover::after {
+    content: "";
+    position: absolute;
+    right: -26px; bottom: -30px;
+    width: 92px; height: 92px;
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 50%;
+  }
+  .cover .c-tag { position: relative; font: 600 7px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .16em; opacity: .72; }
+  .cover .c-title { position: relative; font: 600 13px/1.25 "Playfair Display", Georgia, "Songti SC", serif; letter-spacing: -.02em; }
+  .cover.c1 { background: radial-gradient(circle at 78% 18%, #E7DEC9 0 14%, transparent 15%), linear-gradient(160deg, #2C2C31, #101012 68%); }
+  .cover.c2 { background: radial-gradient(circle at 70% 80%, #33505F 0 17%, transparent 18%), linear-gradient(155deg, #1D2B33, #0B0F12 70%); }
+  .cover.c3 { background: radial-gradient(circle at 24% 24%, #C39451 0 13%, transparent 14%), linear-gradient(150deg, #2B2419, #100E0A 70%); }
+  .cover.c4 { background: radial-gradient(circle at 76% 30%, #6E68C9 0 13%, transparent 14%), linear-gradient(160deg, #1E1C34, #0C0B14 70%); }
+  .cover.c5 { background: radial-gradient(circle at 30% 72%, #7C8B5C 0 15%, transparent 16%), linear-gradient(150deg, #20251A, #0C0E08 70%); }
+  .cover.c6 { background: radial-gradient(circle at 72% 22%, #5D8FB0 0 14%, transparent 15%), linear-gradient(160deg, #1A2A32, #0A1013 70%); }
+  .story-info { display: flex; min-width: 0; flex: 1; flex-direction: column; padding: 2px 0; }
+  .story-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .tag-accent { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 9px; font-weight: 600; }
+  .story-date { font-size: 9px; color: var(--muted); white-space: nowrap; }
+  .story-info h3 { margin: 10px 0 0; overflow: hidden; font: 600 15px/1.3 "Playfair Display", Georgia, "Songti SC", serif; text-overflow: ellipsis; white-space: nowrap; }
+  .story-info > p {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 7px 0 0;
+    color: var(--text-2);
+    font-size: 10px;
+    line-height: 1.75;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .story-meta { display: flex; align-items: center; gap: 9px; margin-top: auto; padding-top: 9px; font-size: 9px; color: var(--muted); }
+  .story-meta .divider { width: 1px; height: 10px; background: var(--border-2); }
+  .story-read { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; color: var(--accent); font-weight: 600; }
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 22px; }
+  .page-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-2);
+    font-size: 11px;
+  }
+  .page-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .page-btn:disabled { opacity: .4; cursor: not-allowed; border-color: var(--border); color: var(--text-2); }
+  .page-indicator { font-size: 11px; color: var(--muted); }
+  .page-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 30px;
+    padding: 16px 0 20px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 9px;
+  }
+  .page-footer .sb-wordmark { color: var(--text-2); font-size: 16px; }
+  .page-footer .mono { font-size: 7px; letter-spacing: .12em; }
+
+  /* ── Workspace page ───────────────────────────────────────── */
+  .ws-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 72px;
+    padding: 14px 34px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .ws-title { display: flex; align-items: center; gap: 11px; }
+  .ws-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+  .ws-title h1 { margin: 0; font-size: 13px; font-weight: 600; }
+  .ws-title p { margin: 4px 0 0; font-size: 9px; color: var(--muted); }
+  .ws-actions { display: flex; align-items: center; gap: 8px; }
+  .quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin: 18px 0 24px; }
+  .quick-card {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-width: 0;
+    padding: 16px 14px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--surface);
+    text-align: left;
+    transition: border-color .2s, transform .2s;
+  }
+  .quick-card:hover { border-color: var(--border-2); transform: translateY(-2px); }
+  .quick-icon { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+  .quick-icon.is-sage { background: color-mix(in srgb, var(--info) 14%, transparent); color: var(--info); }
+  .quick-icon.is-gold { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); }
+  .quick-copy { min-width: 0; flex: 1; }
+  .quick-copy strong { display: block; font-size: 11px; font-weight: 600; }
+  .quick-copy small { display: block; margin-top: 5px; font-size: 9px; line-height: 1.6; color: var(--muted); }
+  .quick-card > .ic { color: var(--muted); width: 15px; height: 15px; }
+  .recent-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .recent-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .recent-head h2 span { margin-left: 8px; font: 500 8px/1 "Roboto Mono", Consolas, monospace; color: var(--muted); letter-spacing: .1em; }
+  .recent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+  .recent-card {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--surface);
+    transition: border-color .2s;
+  }
+  .recent-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+  .mini-cover {
+    width: 42px; height: 58px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border: 1px solid var(--cover-edge);
+    border-radius: 3px 6px 6px 3px;
+  }
+  .mini-cover.c1 { background: radial-gradient(circle at 80% 20%, #E7DEC9 0 12%, transparent 13%), linear-gradient(160deg, #2C2C31, #101012 70%); }
+  .mini-cover.c2 { background: radial-gradient(circle at 68% 76%, #33505F 0 15%, transparent 16%), linear-gradient(155deg, #1D2B33, #0B0F12 70%); }
+  .mini-cover.c4 { background: radial-gradient(circle at 76% 30%, #6E68C9 0 12%, transparent 13%), linear-gradient(160deg, #1E1C34, #0C0B14 70%); }
+  .recent-copy { min-width: 0; flex: 1; }
+  .recent-copy h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px/1.3 "Playfair Display", Georgia, "Songti SC", serif; }
+  .recent-copy p { margin: 5px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: var(--muted); }
+  .recent-meta { display: flex; gap: 8px; margin-top: 7px; font-size: 8px; color: var(--muted); }
+  .recent-open { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; color: var(--accent); font-size: 9px; font-weight: 600; }
+
+  /* ── Editor page ──────────────────────────────────────────── */
+  .ed-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 56px;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .ed-back { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); }
+  .ed-back:hover { background: var(--raised); color: var(--text); }
+  .ed-crumb { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 10px; color: var(--muted); }
+  .ed-crumb b { color: var(--text); font-weight: 500; }
+  .ed-crumb .ic { width: 12px; height: 12px; }
+  .ed-status { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px; font-size: 9px; color: var(--muted); white-space: nowrap; }
+  .ed-status i { width: 5px; height: 5px; border-radius: 50%; background: var(--success); }
+  .ed-actions { display: flex; align-items: center; gap: 6px; }
+  .ed-body { display: grid; grid-template-columns: minmax(0, 1fr) 282px 44px; min-height: 640px; flex: 1; }
+  .ed-canvas { min-width: 0; overflow: hidden; padding: 30px 40px 40px; background: var(--bg); }
+  .chapter-kicker { font: 600 9px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .16em; color: var(--accent); }
+  .chapter-title { margin: 12px 0 0; font: 500 26px/1.4 "Playfair Display", Georgia, "Songti SC", serif; letter-spacing: .01em; }
+  .chapter-meta { display: flex; gap: 9px; margin: 10px 0 24px; font-size: 9px; color: var(--muted); }
+  .chapter-meta .divider { width: 1px; height: 9px; background: var(--border-2); align-self: center; }
+  .prose { max-width: 640px; font-size: 13px; line-height: 2.1; color: var(--text); }
+  .prose p { margin: 0 0 15px; }
+  .prose p:first-of-type::first-letter { float: left; margin: 4px 8px 0 0; font: 600 40px/1 "Playfair Display", Georgia, "Songti SC", serif; color: var(--accent); }
+  .prose .soft { color: var(--text-2); }
+  .prose mark { padding: 1px 3px; border-radius: 3px; background: var(--accent-muted); color: var(--text); }
+  .prose .quote { margin: 20px 0; padding: 12px 0 12px 14px; border-left: 2px solid var(--accent); color: var(--text-2); font-size: 12px; line-height: 1.9; }
+  .ed-progress { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; font-size: 9px; color: var(--muted); }
+  .ed-progress i { display: block; width: 80px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .ed-progress i::after { content: ""; display: block; width: 62%; height: 100%; background: var(--accent); }
+
+  .ai-panel { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border); background: var(--surface); }
+  .ai-head { display: flex; align-items: center; gap: 8px; padding: 13px 14px; border-bottom: 1px solid var(--border); }
+  .ai-head .ai-dot { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); }
+  .ai-head strong { font-size: 11px; font-weight: 600; }
+  .ai-model { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 9px; }
+  .ai-body { display: flex; flex-direction: column; gap: 11px; flex: 1; overflow: hidden; padding: 14px; }
+  .ai-msg { padding: 10px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); font-size: 10px; line-height: 1.75; color: var(--text-2); }
+  .ai-msg.user { margin-left: 26px; border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); background: var(--accent-soft); color: var(--text); }
+  .ai-msg strong { display: block; margin-bottom: 5px; font-size: 9px; font-weight: 600; color: var(--muted); }
+  .ai-msg .hl { color: var(--accent); }
+  .ai-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .ai-actions button { padding: 4px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text-2); font-size: 8px; }
+  .ai-actions button:first-child { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
+  .ai-composer { margin: 0 12px 12px; padding: 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--raised); }
+  .ai-composer:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+  .ai-composer span { display: block; min-height: 34px; font-size: 9px; line-height: 1.7; color: var(--muted); }
+  .ai-composer-foot { display: flex; align-items: center; gap: 6px; padding-top: 4px; }
+  .ai-composer-foot small { font-size: 8px; color: var(--muted); }
+  .ai-send { display: grid; place-items: center; width: 24px; height: 24px; margin-left: auto; border: 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink); }
+  .ed-toolbar { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; border-left: 1px solid var(--border); background: var(--surface); }
+  .tool-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+  .tool-btn:hover { background: var(--raised); color: var(--text); }
+  .tool-btn.active { background: var(--accent-muted); color: var(--accent); }
+  .ed-toolbar .spacer { flex: 1; }
+
+  /* ── Login modal ──────────────────────────────────────────── */
+  .modal-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    min-height: 560px;
+    margin-top: 18px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background:
+      radial-gradient(ellipse 50% 40% at 50% 0%, var(--accent-soft), transparent 70%),
+      linear-gradient(180deg, var(--stage-bg), var(--bg));
+  }
+  .modal-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid-dot) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-dot) 1px, transparent 1px);
+    background-size: 46px 46px;
+    opacity: .8;
+  }
+  .modal-watermark {
+    position: absolute;
+    right: -40px; bottom: -64px;
+    font: 700 260px/1 "Playfair Display", Georgia, serif;
+    letter-spacing: -.08em;
+    color: var(--stage-ink);
+    user-select: none;
+    pointer-events: none;
+  }
+  .modal-stage-note { position: absolute; left: 22px; bottom: 18px; font: 500 8px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .2em; color: var(--stage-note); }
+  .login-card {
+    position: relative;
+    z-index: 1;
+    width: 412px;
+    max-width: calc(100% - 32px);
+    padding: 26px 28px 24px;
+    border: 1px solid var(--border-2);
+    border-radius: 16px;
+    background: var(--elevated);
+    box-shadow: var(--modal-shadow);
+  }
+  .login-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .login-head h3 { margin: 0; font: 600 21px/1.3 "Playfair Display", Georgia, "Songti SC", serif; }
+  .login-head p { margin: 7px 0 0; font-size: 10px; color: var(--muted); }
+  .login-close { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); }
+  .login-close:hover { background: var(--raised); color: var(--text); }
+  .login-tabs { display: flex; gap: 20px; margin: 20px 0 18px; border-bottom: 1px solid var(--border); }
+  .login-tab { position: relative; padding: 0 0 10px; border: 0; background: transparent; color: var(--muted); font-size: 11px; font-weight: 500; }
+  .login-tab.active { color: var(--text); }
+  .login-tab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; margin-bottom: 7px; font-size: 10px; font-weight: 500; color: var(--text-2); }
+  .input {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--raised);
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .input.focus { border-color: var(--accent); box-shadow: var(--ring); color: var(--text); background: var(--surface); }
+  .input.focus .caret { width: 1px; height: 15px; background: var(--accent); animation: blink 1s steps(2, start) infinite; }
+  @keyframes blink { to { opacity: 0; } }
+  .input .eye { margin-left: auto; color: var(--muted); font-size: 9px; }
+  .login-notice {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 15px;
+    padding: 9px 11px;
+    border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 9px;
+  }
+  .login-submit { width: 100%; min-height: 42px; margin-top: 4px; }
+  .login-foot { margin: 14px 0 0; text-align: center; font-size: 8px; line-height: 1.7; color: var(--muted); }
+  .login-foot a { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ── Mobile preview ───────────────────────────────────────── */
+  .mobile-preview { margin-top: 30px; padding-top: 24px; border-top: 1px solid var(--border); }
+  .mobile-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+  .mobile-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .mobile-head p { margin: 6px 0 0; font-size: 10px; color: var(--muted); }
+  .mobile-head .pill { min-height: 24px; }
+  .mobile-grid { display: grid; grid-template-columns: repeat(2, 366px); justify-content: center; gap: 24px; }
+  .phone {
+    position: relative;
+    padding: 9px;
+    border: 1px solid var(--border-2);
+    border-radius: 38px;
+    background: var(--raised);
+    box-shadow: var(--shadow-md);
+  }
+  .phone::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: 15px;
+    width: 76px; height: 5px;
+    border-radius: 999px;
+    background: var(--border-2);
+    transform: translateX(-50%);
+  }
+  .phone-screen {
+    display: flex;
+    flex-direction: column;
+    height: 634px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    background: var(--bg);
+  }
+  .m-status { display: flex; align-items: center; justify-content: space-between; padding: 23px 20px 6px; font: 600 9px/1 "Roboto Mono", Consolas, monospace; color: var(--text-2); }
+  .m-status .m-sig { display: flex; align-items: center; gap: 4px; }
+  .m-status .m-sig i { display: block; width: 10px; height: 6px; border-radius: 1px; background: var(--text-2); opacity: .7; }
+  .m-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 16px 11px; }
+  .m-brand { display: flex; align-items: center; gap: 7px; font: 600 13px/1 "Playfair Display", Georgia, serif; letter-spacing: -.03em; }
+  .m-brand .m-logo { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: var(--accent); color: var(--accent-ink); font-size: 12px; }
+  .m-brand .dot { color: var(--accent); }
+  .m-nav .ic { color: var(--text-2); }
+  .m-hero { position: relative; overflow: hidden; margin: 0 14px; padding: 17px 16px 16px; border: 1px solid var(--hero-border); border-radius: 15px; background: var(--hero); color: var(--hero-text); }
+  .m-hero .hero-eyebrow { font-size: 7px; letter-spacing: .17em; }
+  .m-hero h4 { position: relative; z-index: 2; margin: 9px 0 0; max-width: 200px; font-size: 19px; font-weight: 500; line-height: 1.5; }
+  .m-hero h4 span { color: var(--hero-hl); }
+  .m-hero p { position: relative; z-index: 2; margin: 8px 0 0; max-width: 190px; font-size: 8px; line-height: 1.8; color: var(--hero-copy); }
+  .m-art { position: absolute; right: -34px; bottom: 4px; width: 162px; height: 122px; opacity: .92; }
+  .m-tabs { display: flex; gap: 5px; padding: 12px 14px 6px; }
+  .m-tab { display: inline-flex; align-items: center; gap: 5px; height: 29px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: 9px; font-weight: 500; }
+  .m-tab.active { background: var(--text); color: var(--bg); }
+  .m-tab .count { font-size: 8px; opacity: .65; }
+  .m-list { display: flex; flex-direction: column; gap: 9px; padding: 7px 14px 0; overflow: hidden; }
+  .m-card { display: flex; gap: 10px; padding: 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  .m-card .cover { width: 54px; height: 76px; padding: 6px 5px 5px 7px; border-radius: 3px 6px 6px 3px; }
+  .m-card .cover .c-tag { font-size: 5px; }
+  .m-card .cover .c-title { font-size: 8px; }
+  .m-copy { min-width: 0; flex: 1; padding-top: 1px; }
+  .m-copy .m-card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 7px; color: var(--muted); }
+  .m-copy h5 { margin: 5px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 11px/1.3 "Playfair Display", Georgia, "Songti SC", serif; }
+  .m-copy p { margin: 4px 0 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 8px; line-height: 1.6; color: var(--text-2); }
+  .m-bottom-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    margin-top: auto;
+    padding: 8px 12px 11px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .m-bottom-nav .m-nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 7px; color: var(--muted); }
+  .m-bottom-nav .m-nav-item.active { color: var(--accent); }
+  .m-bottom-nav .ic { width: 15px; height: 15px; }
+  .m-ed-top { display: flex; align-items: center; gap: 8px; padding: 11px 14px 9px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .m-ed-top .ic { color: var(--text-2); width: 15px; height: 15px; }
+  .m-ed-top strong { flex: 1; font-size: 10px; font-weight: 600; text-align: center; }
+  .m-ed-top .m-save { display: inline-flex; align-items: center; gap: 4px; font-size: 7px; color: var(--success); }
+  .m-ed-top .m-save i { width: 4px; height: 4px; border-radius: 50%; background: var(--success); }
+  .m-ed-body { padding: 22px 18px; overflow: hidden; }
+  .m-ed-body .chapter-kicker { font-size: 7px; }
+  .m-ed-body h4 { margin: 8px 0 0; font: 500 20px/1.4 "Playfair Display", Georgia, "Songti SC", serif; }
+  .m-ed-body .m-meta { margin: 7px 0 16px; font-size: 7px; color: var(--muted); }
+  .m-prose { font-size: 10px; line-height: 2.05; color: var(--text); }
+  .m-prose p { margin: 0 0 10px; }
+  .m-prose p:first-of-type::first-letter { float: left; margin: 2px 5px 0 0; font: 600 25px/1 "Playfair Display", Georgia, "Songti SC", serif; color: var(--accent); }
+  .m-prose mark { padding: 1px 2px; border-radius: 2px; background: var(--accent-muted); color: var(--text); }
+  .m-sheet {
+    margin: auto 12px 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--elevated);
+    box-shadow: var(--shadow-md);
+  }
+  .m-sheet-head { display: flex; align-items: center; gap: 6px; font-size: 8px; font-weight: 600; }
+  .m-sheet-head .ai-dot { width: 17px; height: 17px; border-radius: 5px; }
+  .m-sheet-head .ai-dot .ic { width: 10px; height: 10px; }
+  .m-sheet p { margin: 6px 0 0; font-size: 8px; line-height: 1.7; color: var(--text-2); }
+  .m-ed-tools { display: flex; align-items: center; justify-content: space-around; padding: 8px 14px 10px; border-top: 1px solid var(--border); background: var(--surface); }
+  .m-ed-tools .ic { width: 16px; height: 16px; }
+  .m-ed-tools .active { color: var(--accent); }
+  .m-ed-tools .send { display: grid; place-items: center; width: 27px; height: 27px; border: 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink); }
+
+  /* ── Components section ───────────────────────────────────── */
+  .comp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .comp-card { padding: 22px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); }
+  .comp-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 18px; }
+  .comp-head h4 { margin: 0; font-size: 12px; font-weight: 600; }
+  .comp-head span { font: 500 8px/1 "Roboto Mono", Consolas, monospace; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; }
+  .comp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+  .comp-row + .comp-row { margin-top: 14px; }
+  .comp-label { width: 100%; margin-bottom: 2px; font-size: 9px; color: var(--muted); }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 24px;
+    padding: 0 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-2);
+    font-size: 9px;
+    font-weight: 500;
+  }
+  .chip.accent { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: var(--accent-soft); color: var(--accent); }
+  .chip.success { border-color: color-mix(in srgb, var(--success) 34%, transparent); background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); }
+  .chip.warning { border-color: color-mix(in srgb, var(--warning) 34%, transparent); background: color-mix(in srgb, var(--warning) 10%, transparent); color: var(--warning); }
+  .chip.danger { border-color: color-mix(in srgb, var(--danger) 34%, transparent); background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); }
+  .chip.info { border-color: color-mix(in srgb, var(--info) 34%, transparent); background: color-mix(in srgb, var(--info) 10%, transparent); color: var(--info); }
+  .toast {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 13px;
+    border: 1px solid var(--border-2);
+    border-radius: 9px;
+    background: var(--elevated);
+    color: var(--text);
+    font-size: 10px;
+    box-shadow: var(--shadow-md);
+  }
+  .toast .dot { display: grid; place-items: center; width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; }
+  .toast.success .dot { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+  .toast.error .dot { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+  .toast + .toast { margin-top: 9px; }
+  .empty-mini { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px; border: 1px dashed var(--border-2); border-radius: 10px; text-align: center; }
+  .empty-mini .e-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--accent-soft); color: var(--accent); }
+  .empty-mini p { margin: 0; max-width: 250px; font-size: 9px; line-height: 1.7; color: var(--muted); }
+  .empty-mini .btn { min-height: 28px; padding: 0 10px; font-size: 9px; }
+  .status-list { display: flex; flex-direction: column; gap: 7px; }
+  .status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--raised);
+    font-size: 9px;
+    color: var(--text-2);
+  }
+  .status-line i { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .status-line code { margin-left: auto; font-size: 8px; color: var(--muted); }
+
+  /* ── Scope & checklist ───────────────────────────────────── */
+  .scope-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+  .scope-card { padding: 24px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); }
+  .scope-card h3 { margin: 0 0 15px; font-size: 13px; font-weight: 600; }
+  .scope-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 11px; }
+  .scope-list li { display: flex; gap: 11px; font-size: 11px; line-height: 1.7; color: var(--text-2); }
+  .scope-num { display: grid; place-items: center; width: 19px; height: 19px; flex-shrink: 0; margin-top: 1px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font: 600 9px/1 "Roboto Mono", Consolas, monospace; }
+  .scope-list code { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--raised); color: var(--text); font: 10px/1.6 "Roboto Mono", Consolas, monospace; }
+  .check-list { display: flex; flex-direction: column; gap: 11px; }
+  .check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--raised);
+    font-size: 11px;
+    line-height: 1.65;
+    color: var(--text-2);
+  }
+  .check-box { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; border: 1px solid var(--border-2); border-radius: 4px; background: var(--surface); }
+  .check-row strong { color: var(--text); font-weight: 600; }
+  .scope-note {
+    margin-top: 16px;
+    padding: 13px 15px;
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 10px;
+    line-height: 1.8;
+  }
+  .preview-foot { padding-top: 26px; border-top: 1px solid var(--border); color: var(--muted); font-size: 10px; line-height: 1.9; }
+  .preview-foot b { color: var(--text-2); font-weight: 600; }
+
+  /* ── Responsive ───────────────────────────────────────────── */
+  @media (max-width: 1240px) {
+    .pv-links { display: none; }
+    .token-layout { grid-template-columns: 1fr; }
+    .app-shell { grid-template-columns: 218px minmax(0, 1fr); }
+    .ed-body { grid-template-columns: minmax(0, 1fr) 260px 40px; }
+    .ed-canvas { padding: 26px 28px 32px; }
+  }
+  @media (max-width: 980px) {
+    .principle-grid { grid-template-columns: 1fr; }
+    .app-shell { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .story-grid, .comp-grid, .scope-grid, .recent-grid { grid-template-columns: 1fr; }
+    .ed-body { grid-template-columns: minmax(0, 1fr) 240px; }
+    .ed-toolbar { display: none; }
+    .pv-badge { display: none; }
+    .pv-wrap { padding: 26px 18px 70px; }
+    .preview-bar-inner { padding: 11px 18px; gap: 14px; }
+    .quick-grid { grid-template-columns: 1fr; }
+    .page-footer > :last-child { display: none; }
+    .mobile-grid { grid-template-columns: 1fr; justify-items: center; }
+    .phone { width: 100%; max-width: 366px; }
+  }
+  @media (max-width: 720px) {
+    .topbar, .ws-header { padding-left: 16px; padding-right: 16px; }
+    .page-body { padding-left: 16px; padding-right: 16px; }
+    .hero-copy { padding: 24px 20px; }
+    .hero-art { width: 58%; right: -8%; opacity: .5; }
+    .story-grid { grid-template-columns: 1fr; }
+    .square-toolbar { flex-direction: column; align-items: stretch; }
+    .search-wrap { width: 100%; }
+    .ed-body { grid-template-columns: 1fr; }
+    .ai-panel { display: none; }
+    .token-row { grid-template-columns: 1fr 1fr; }
+    .token-row > :nth-child(3) { display: none; }
+    .token-row.head > :nth-child(3) { display: none; }
+    .preview-bar-inner { flex-wrap: wrap; }
+    .pv-actions { margin-left: auto; }
+    .page-tabs { flex-wrap: wrap; }
+    .tab-note { display: none; }
+    .login-card { padding: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Icon sprite -->
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.2v14"/><path d="M3.5 5.5H8a4 4 0 0 1 4 4v10.7a4 4 0 0 0-4-4H3.5z"/><path d="M20.5 5.5H16a4 4 0 0 0-4 4v10.7a4 4 0 0 1 4-4h4.5z"/></symbol>
+  <symbol id="i-brush" viewBox="0 0 24 24"><path d="M9.5 14.5 3 21"/><path d="m9.5 14.5 2 2"/><path d="M13.5 4.5 19.5 10.5l-8 8H5.5v-6z"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.3 4.1 5.3 4.1 8.5s-1.5 6.2-4.1 8.5c-2.6-2.3-4.1-5.3-4.1-8.5S9.4 5.8 12 3.5Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6.5 3h7.5l4 4v14h-11.5z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4.5 12h15M13.5 6l6 6-6 6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.3A8.6 8.6 0 0 1 9.7 3.5a8.7 8.7 0 1 0 10.8 10.8Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.7 5.1L19 10l-5.3 1.9L12 17l-1.7-5.1L5 10l5.3-1.9z"/><path d="M19 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4.5 16v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V16"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m4 12 8 4 8-4M4 16.5l8 4 8-4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 10.5 13.5"/><path d="m21 3-6.5 18-4-8.5L2 8.5z"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M4.5 5.5h15v10.5h-9L6 20v-4H4.5z"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9 4.5v15"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M10 17h10"/><circle cx="15" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="9.5" r="1.6"/><path d="m4.5 17 5-5 4 3.5 3-2.5 3.5 3.5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3.5h11l3 3v14H5z"/><path d="M8.5 3.5v5h7v-5M8.5 20.5v-6h7v6"/></symbol>
+
+  <symbol id="pv-artwork" viewBox="0 0 520 330">
+    <defs>
+      <linearGradient id="pv-sky" x1="300" y1="30" x2="300" y2="280" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#2E2E33"/><stop offset=".52" stop-color="#1A1A1E"/><stop offset="1" stop-color="#0C0C0E"/>
+      </linearGradient>
+      <linearGradient id="pv-paper" x1="190" y1="190" x2="280" y2="292" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#F0EFEA"/><stop offset="1" stop-color="#BDBAB2"/>
+      </linearGradient>
+      <clipPath id="pv-arch"><path d="M221 277V115a91 91 0 0 1 182 0v162Z"/></clipPath>
+    </defs>
+    <circle cx="322" cy="162" r="147" stroke="#E7DEC9" stroke-opacity=".14"/>
+    <circle cx="322" cy="162" r="124" stroke="#E7DEC9" stroke-opacity=".10"/>
+    <path d="M210 278V115a102 102 0 0 1 204 0v163" stroke="#55555C" stroke-opacity=".8"/>
+    <g clip-path="url(#pv-arch)">
+      <path d="M221 24h182v254H221z" fill="url(#pv-sky)"/>
+      <circle cx="339" cy="102" r="31" fill="#E7DEC9"/>
+      <circle cx="339" cy="102" r="46" stroke="#E7DEC9" stroke-opacity=".20"/>
+      <path d="m188 219 81-91 53 62 46-44 70 80v72H188Z" fill="#3A3A40"/>
+      <path d="m191 271 73-69 47 31 62-64 68 97v34H191Z" fill="#26262B"/>
+      <path d="m255 300 52-69 28 8 34-33-25 49-43 45Z" fill="#1F1F24"/>
+      <path d="m340 276 48-40 50 34v30h-98Z" fill="#141417"/>
+    </g>
+    <ellipse cx="282" cy="296" rx="184" ry="15" fill="#000" fill-opacity=".45"/>
+    <g transform="rotate(-13 175 228)">
+      <rect x="122" y="124" width="90" height="154" rx="5" fill="#3A3A40"/>
+      <path d="M130 125v151" stroke="#7A746A" stroke-width="2"/>
+      <rect x="142" y="146" width="48" height="67" rx="24" stroke="#D9D2C2" stroke-opacity=".65"/>
+      <circle cx="166" cy="173" r="11" fill="#D9D2C2"/>
+      <path d="m145 201 21-19 22 19M145 235h44m-35 8h26" stroke="#D9D2C2" stroke-opacity=".7"/>
+    </g>
+    <path d="m172 261 100-20 124 28-102 35Z" fill="#4A4A50"/>
+    <path d="m172 253 100-21 124 29v8l-102 28-122-28Z" fill="#D9D5CB"/>
+    <path d="m172 253 100-21 124 29-102 29Z" fill="#F4F2EC"/>
+    <path d="M282 244c-25-23-59-34-105-30l-14 39c50-1 89 10 121 27 28-19 66-27 111-25l-15-39c-41-4-74 6-98 28Z" fill="url(#pv-paper)"/>
+    <path d="m282 244 2 36m-93-53c32 0 58 7 79 19m-81-9c32 1 57 8 80 20m24-10c22-14 45-20 74-20m-72 31c22-13 46-19 75-20" stroke="#9A9A9C" stroke-opacity=".6" stroke-width="1.5"/>
+    <path d="M424 279c-4-37 1-70 16-101m-14 75c-21-5-31-18-31-37 20 4 30 16 31 37m1-22c17-1 29-12 34-30-20 0-31 11-34 30m8-29c-12-8-16-19-12-34 13 9 17 20 12 34" stroke="#7C7C82" stroke-width="2" fill="#3F3F45"/>
+    <path d="m411 274 30-1-5 25h-20Z" fill="#55555C"/>
+    <path d="m109 93 3 9 9 3-9 3-3 9-3-9-9-3 9-3ZM440 118l2 6 7 2-7 2-2 7-2-7-6-2 6-2Z" fill="#E7DEC9"/>
+    <circle cx="170" cy="75" r="3" fill="#E7DEC9" fill-opacity=".65"/>
+  </symbol>
+</svg>
+
+<header class="preview-bar">
+  <div class="preview-bar-inner">
+    <div class="pv-brand">
+      <span class="pv-mark">A</span>
+      <div>
+        <strong>ArtVerse 主题改版 · 预览稿</strong>
+        <small>Theme Preview / Dark &amp; Light</small>
+      </div>
+    </div>
+    <nav class="pv-links" aria-label="预览目录">
+      <a href="#overview">设计变量</a>
+      <a href="#pages">整页预览</a>
+      <a href="#components">组件状态</a>
+      <a href="#scope">改动范围</a>
+    </nav>
+    <div class="pv-actions">
+      <span class="pv-badge">预览版 · 未修改项目代码</span>
+      <div class="seg" role="group" aria-label="切换预览主题">
+        <button type="button" class="seg-btn" data-theme-btn="light"><svg class="ic ic-sm"><use href="#i-sun"/></svg>亮色</button>
+        <button type="button" class="seg-btn active" data-theme-btn="dark"><svg class="ic ic-sm"><use href="#i-moon"/></svg>暗色</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="pv-wrap">
+
+  <!-- 01 Overview -->
+  <section class="pv-section" id="overview">
+    <div class="section-head">
+      <span class="eyebrow">01 / Design Direction</span>
+      <h2>曜石黑与纸白：把舞台留给作品</h2>
+      <p>保留 ArtVerse 的品牌识别与页面结构，把偏暖的棕绿底调整为更中性的「黑 / 白」双主题。暗色不再用棕褐色，改为接近纯黑的曜石黑；亮色去掉米黄纸感，改为干净的纸白。强调态不再使用任何彩色，统一以暖白／近黑的高对比明度表达，高亮、选中与焦点环只做中性明度差。</p>
+    </div>
+
+    <div class="principle-grid">
+      <article class="principle">
+        <span class="principle-index">01 / SURFACE</span>
+        <h3>真黑，但不刺眼</h3>
+        <p>基底使用 #0A0A0B 而非纯黑，避免 OLED 拖影与高对比疲劳；表面按 4 级明度递进，用 1px 描边区分层级，阴影只在浮层保留。</p>
+        <div class="mini-swatch-row" aria-hidden="true">
+          <i class="mini-swatch" style="background:#0A0A0B"></i>
+          <i class="mini-swatch" style="background:#121214"></i>
+          <i class="mini-swatch" style="background:#1A1A1D"></i>
+          <i class="mini-swatch" style="background:#202024"></i>
+        </div>
+      </article>
+      <article class="principle">
+        <span class="principle-index">02 / ACCENT</span>
+        <h3>只用明度，不用彩色</h3>
+        <p>暗色主操作为暖白 #E9E7E1 配近黑字（10.4:1），亮色主操作为近黑 #1A1A1C 配白字（15:1）；高亮、选中与焦点态都只用中性明度，不再出现蓝色。</p>
+        <div class="mini-swatch-row" aria-hidden="true">
+          <i class="mini-swatch" style="background:#E9E7E1"></i>
+          <i class="mini-swatch" style="background:#FFFFFF"></i>
+          <i class="mini-swatch" style="background:#1A1A1C"></i>
+          <i class="mini-swatch" style="background:#000000"></i>
+        </div>
+      </article>
+      <article class="principle">
+        <span class="principle-index">03 / CONTRAST</span>
+        <h3>文字对比度按 AA 校准</h3>
+        <p>主文字在两种主题下均超过 15:1，次级文字超过 7:1，弱化文字保持 4.5:1 以上；正文不使用低透明度灰，阅读区单独保留纸面层级。</p>
+        <div class="mini-swatch-row" aria-hidden="true">
+          <i class="mini-swatch" style="background:#F2F2EF"></i>
+          <i class="mini-swatch" style="background:#A8A8A2"></i>
+          <i class="mini-swatch" style="background:#7C7C83"></i>
+          <i class="mini-swatch" style="background:#1A1A1C"></i>
+        </div>
+      </article>
+    </div>
+
+    <div class="token-layout">
+      <div class="token-table" role="table" aria-label="主题变量对照">
+        <div class="token-row head" role="row">
+          <span>Semantic Token</span><span>Current</span><span>New / Dark</span><span>New / Light</span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>页面基底</b> bg-base</span>
+          <span class="token-cell"><i class="swatch" style="background:#171d1c"></i><code>#171D1C</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#0A0A0B"></i><code>#0A0A0B</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#F5F4F0"></i><code>#F5F4F0</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>内容表面</b> bg-surface</span>
+          <span class="token-cell"><i class="swatch" style="background:#202725"></i><code>#202725</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#121214"></i><code>#121214</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#FFFFFF"></i><code>#FFFFFF</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>抬升表面</b> bg-raised</span>
+          <span class="token-cell"><i class="swatch" style="background:#28312e"></i><code>#28312E</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#1A1A1D"></i><code>#1A1A1D</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#F0EFEA"></i><code>#F0EFEA</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>主要文字</b> text-primary</span>
+          <span class="token-cell"><i class="swatch" style="background:#edece4"></i><code>#EDECE4</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#F2F2EF"></i><code>#F2F2EF</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#1A1A1C"></i><code>#1A1A1C</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>次级文字</b> text-secondary</span>
+          <span class="token-cell"><i class="swatch" style="background:#b0b8ae"></i><code>#B0B8AE</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#A8A8A2"></i><code>#A8A8A2</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#55555C"></i><code>#55555C</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>弱化文字</b> text-muted</span>
+          <span class="token-cell"><i class="swatch" style="background:#8e9a90"></i><code>#8E9A90</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#7C7C83"></i><code>#7C7C83</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#73737A"></i><code>#73737A</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>分隔线</b> border</span>
+          <span class="token-cell"><i class="swatch" style="background:#343e37"></i><code>#343E37</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#232327"></i><code>#232327</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#E4E2DB"></i><code>#E4E2DB</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>强调色</b> accent</span>
+          <span class="token-cell"><i class="swatch" style="background:#e2a080"></i><code>#E2A080</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#E9E7E1"></i><code>#E9E7E1</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#1A1A1C"></i><code>#1A1A1C</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>主视觉</b> hero</span>
+          <span class="token-cell"><i class="swatch" style="background:#294a40"></i><code>#294A40</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#0E0E10"></i><code>#0E0E10</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#17171A"></i><code>#17171A</code></span>
+        </div>
+        <div class="token-row" role="row">
+          <span class="token-name"><b>状态色</b> status</span>
+          <span class="token-cell"><i class="swatch" style="background:#287a54"></i><code>#287A54</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#2FD3A0"></i><code>#2FD3A0</code></span>
+          <span class="token-cell"><i class="swatch" style="background:#0C8A6B"></i><code>#0C8A6B</code></span>
+        </div>
+      </div>
+
+      <aside class="ladder-card">
+        <h4>表面层级 / Surface Ladder</h4>
+        <p>页面、卡片、输入框与浮层使用固定 4 级，不靠阴影堆叠。</p>
+        <div class="ladder">
+          <div class="ladder-step" style="background:var(--bg)"><span><i class="swatch" style="background:var(--bg)"></i>0 · 页面基底</span><small>bg-base</small></div>
+          <div class="ladder-step" style="background:var(--surface)"><span><i class="swatch" style="background:var(--surface)"></i>1 · 内容表面</span><small>bg-surface</small></div>
+          <div class="ladder-step" style="background:var(--raised)"><span><i class="swatch" style="background:var(--raised)"></i>2 · 输入 / 内嵌</span><small>bg-raised</small></div>
+          <div class="ladder-step" style="background:var(--elevated)"><span><i class="swatch" style="background:var(--elevated)"></i>3 · 浮层 / 弹窗</span><small>bg-elevated</small></div>
+        </div>
+        <div class="accent-use">
+          <span class="pill">主按钮</span>
+          <span class="pill">选中导航</span>
+          <span class="pill">焦点环</span>
+          <span class="pill outline">阅读进度</span>
+          <span class="pill outline">标签强调</span>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 02 Pages -->
+  <section class="pv-section" id="pages">
+    <div class="section-head">
+      <span class="eyebrow">02 / Full Pages</span>
+      <h2>整页预览：同一套结构，两种光影</h2>
+      <p>点击右上角切换亮暗模式，或在侧栏示例中直接拨动开关。下方可切换三个代表性页面：作品广场、故事工作区与章节编辑。主视觉区在两种模式下都保持深色，以保留品牌戏剧感。</p>
+    </div>
+
+    <div class="page-tabs" role="group" aria-label="切换页面预览">
+      <button type="button" class="active" data-page-btn="square"><svg class="ic ic-sm"><use href="#i-globe"/></svg>作品广场</button>
+      <button type="button" data-page-btn="workspace"><svg class="ic ic-sm"><use href="#i-book"/></svg>故事工作区</button>
+      <button type="button" data-page-btn="editor"><svg class="ic ic-sm"><use href="#i-file"/></svg>章节编辑</button>
+      <span class="tab-note">桌面端 1440 · 侧栏 246px</span>
+    </div>
+
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+        <span class="browser-url" id="browser-url">artverse / #/square?format=novel</span>
+        <svg class="ic ic-sm" aria-hidden="true"><use href="#i-panel"/></svg>
+      </div>
+
+      <div class="app-shell">
+        <aside class="sidebar" aria-label="侧栏示例">
+          <div class="sb-brand">
+            <div class="sb-logo" aria-hidden="true">A</div>
+            <div class="sb-brand-text">
+              <div class="sb-wordmark">ArtVerse<span class="dot">.</span></div>
+              <small>让想象，自由生长</small>
+            </div>
+            <button type="button" class="sb-collapse" aria-label="收起侧栏"><svg class="ic ic-sm"><use href="#i-panel"/></svg></button>
+          </div>
+          <nav class="sb-nav" aria-label="主导航示例">
+            <p class="sb-label">创作空间 / CREATE</p>
+            <button type="button" class="sb-item" data-nav="workspace"><svg class="ic"><use href="#i-book"/></svg>故事工作区</button>
+            <button type="button" class="sb-item"><svg class="ic"><use href="#i-brush"/></svg>AI 生图</button>
+            <button type="button" class="sb-item"><svg class="ic"><use href="#i-calendar"/></svg>定时任务</button>
+            <p class="sb-label mt">探索更多 / EXPLORE</p>
+            <button type="button" class="sb-item is-active" data-nav="square"><svg class="ic"><use href="#i-globe"/></svg>作品广场</button>
+            <button type="button" class="sb-item"><svg class="ic"><use href="#i-file"/></svg>作品管理</button>
+          </nav>
+          <div class="sb-note">
+            <svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg>
+            <strong>故事，从一个想法开始</strong>
+            <p>让 AI 成为灵感搭档，<br />把脑海中的世界带到眼前。</p>
+            <a href="#pages">开启创作 <svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></a>
+          </div>
+          <div class="sb-account">
+            <div class="sb-user">
+              <div class="sb-avatar" aria-hidden="true">A</div>
+              <div><strong>登录账号</strong><small>登录，留住每一次灵感</small></div>
+            </div>
+            <div class="sb-theme">
+              <svg class="ic ic-sm" aria-hidden="true"><use href="#i-moon"/></svg>
+              <span>深色模式</span>
+              <button type="button" class="switch" role="switch" aria-checked="true" aria-label="切换深色模式"></button>
+            </div>
+          </div>
+        </aside>
+
+        <div class="app-main">
+
+          <!-- Square -->
+          <div class="panel" data-page="square">
+            <div class="topbar">
+              <div class="crumb">
+                <svg class="ic" aria-hidden="true"><use href="#i-compass"/></svg>
+                <b>作品广场</b><span class="sep">/</span><span class="muted">发现值得读的故事</span>
+              </div>
+              <button type="button" class="btn btn-primary"><svg class="ic"><use href="#i-plus"/></svg>开始创作</button>
+            </div>
+            <div class="page-body">
+              <div class="hero">
+                <div class="hero-copy">
+                  <span class="hero-eyebrow"><i></i>A UNIVERSE OF STORIES</span>
+                  <h1>每一个故事，<br />都是一扇<span>新的门。</span></h1>
+                  <p>在文字里相遇，在画面中远行。<br />发现创作者笔下的世界，让下一次灵感在这里发生。</p>
+                  <button type="button" class="hero-cta">探索故事 <svg class="ic"><use href="#i-arrow-right"/></svg></button>
+                </div>
+                <svg class="hero-art" viewBox="0 0 520 330" fill="none" aria-hidden="true"><use href="#pv-artwork"/></svg>
+                <span class="hero-footnote">IMAGINATION, UNBOUND.</span>
+              </div>
+
+              <div class="square-toolbar">
+                <div class="format-tabs" role="group" aria-label="作品类型">
+                  <button type="button" class="format-tab active"><svg class="ic ic-sm"><use href="#i-book"/></svg>小说<span class="count">24</span></button>
+                  <button type="button" class="format-tab"><svg class="ic ic-sm"><use href="#i-image"/></svg>漫画<span class="count">12</span></button>
+                </div>
+                <form class="search-wrap" onsubmit="return false">
+                  <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+                  <input class="search-input" placeholder="搜索小说标题或简介" aria-label="搜索小说" />
+                  <button type="submit" class="search-btn">搜索</button>
+                </form>
+              </div>
+
+              <div class="library-head">
+                <div>
+                  <h2>发现好故事<span>THE READING ROOM</span></h2>
+                  <p>用文字构筑世界，总有一个故事与你共鸣。</p>
+                </div>
+                <span class="library-count">24 部小说 · 第 1 页</span>
+              </div>
+
+              <div class="story-grid">
+                <article class="story-card">
+                  <div class="cover c1"><span class="c-tag">NOVEL</span><span class="c-title">长夜<br />将明</span></div>
+                  <div class="story-info">
+                    <div class="story-top"><span class="tag-accent">小说</span><span class="story-date">11 月 2 日</span></div>
+                    <h3>长夜将明</h3>
+                    <p>雨夜的城市里，一名失眠的抄写员发现了能改写记忆的旧档案。</p>
+                    <div class="story-meta"><span>32 章</span><span class="divider"></span><span>128,400 字</span><span class="story-read">阅读 <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></span></div>
+                  </div>
+                </article>
+                <article class="story-card">
+                  <div class="cover c2"><span class="c-tag">NOVEL</span><span class="c-title">雾港<br />来信</span></div>
+                  <div class="story-info">
+                    <div class="story-top"><span class="tag-accent">小说</span><span class="story-date">10 月 28 日</span></div>
+                    <h3>雾港来信</h3>
+                    <p>一封迟到十七年的信，把海港小镇的三代人重新拉回同一场雾里。</p>
+                    <div class="story-meta"><span>18 章</span><span class="divider"></span><span>64,200 字</span><span class="story-read">阅读 <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></span></div>
+                  </div>
+                </article>
+                <article class="story-card">
+                  <div class="cover c3"><span class="c-tag">NOVEL</span><span class="c-title">山海<br />食记</span></div>
+                  <div class="story-info">
+                    <div class="story-top"><span class="tag-accent">小说</span><span class="story-date">10 月 20 日</span></div>
+                    <h3>山海食记</h3>
+                    <p>游方厨子带着一口旧锅，走过山海之间的城镇，也尝遍人心的滋味。</p>
+                    <div class="story-meta"><span>41 章</span><span class="divider"></span><span>156,800 字</span><span class="story-read">阅读 <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></span></div>
+                  </div>
+                </article>
+                <article class="story-card">
+                  <div class="cover c4"><span class="c-tag">NOVEL</span><span class="c-title">第零号<br />观测站</span></div>
+                  <div class="story-info">
+                    <div class="story-top"><span class="tag-accent">小说</span><span class="story-date">10 月 14 日</span></div>
+                    <h3>第零号观测站</h3>
+                    <p>在太阳系边缘，一个被注销的观测站仍在向地球发送无人能懂的信号。</p>
+                    <div class="story-meta"><span>26 章</span><span class="divider"></span><span>98,600 字</span><span class="story-read">阅读 <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></span></div>
+                  </div>
+                </article>
+                <article class="story-card">
+                  <div class="cover c5"><span class="c-tag">NOVEL</span><span class="c-title">春分<br />之后</span></div>
+                  <div class="story-info">
+                    <div class="story-top"><span class="tag-accent">小说</span><span class="story-date">10 月 8 日</span></div>
+                    <h3>春分之后</h3>
+                    <p>小城照相馆的最后一年，老板用底片替陌生人保管那些说不出口的告别。</p>
+                    <div class="story-meta"><span>22 章</span><span class="divider"></span><span>72,300 字</span><span class="story-read">阅读 <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></span></div>
+                  </div>
+                </article>
+                <article class="story-card">
+                  <div class="cover c6"><span class="c-tag">NOVEL</span><span class="c-title">纸船与<br />星河</span></div>
+                  <div class="story-info">
+                    <div class="story-top"><span class="tag-accent">小说</span><span class="story-date">10 月 1 日</span></div>
+                    <h3>纸船与星河</h3>
+                    <p>折纸船的孩子相信，只要把愿望放进河里，星星就会替他把信带到远方。</p>
+                    <div class="story-meta"><span>16 章</span><span class="divider"></span><span>48,900 字</span><span class="story-read">阅读 <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></span></div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="pagination">
+                <button type="button" class="page-btn" disabled><svg class="ic ic-sm"><use href="#i-chevron-left"/></svg>上一页</button>
+                <span class="page-indicator">1 / 2</span>
+                <button type="button" class="page-btn">下一页<svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></button>
+              </div>
+
+              <footer class="page-footer">
+                <span class="sb-wordmark">ArtVerse<span class="dot" style="color:var(--accent)">.</span></span>
+                <span>让好故事被看见，让想象不止于想象。</span>
+                <span class="mono">MADE FOR YOUR IMAGINATION</span>
+              </footer>
+            </div>
+          </div>
+
+          <!-- Workspace -->
+          <div class="panel" data-page="workspace" hidden>
+            <header class="ws-header">
+              <div class="ws-title">
+                <div class="ws-icon"><svg class="ic"><use href="#i-book"/></svg></div>
+                <div><h1>故事工作区</h1><p>管理故事、角色与创作设定</p></div>
+              </div>
+              <div class="ws-actions">
+                <button type="button" class="btn btn-secondary"><svg class="ic"><use href="#i-upload"/></svg>导入</button>
+                <button type="button" class="btn btn-primary"><svg class="ic"><use href="#i-plus"/></svg>新建小说</button>
+              </div>
+            </header>
+            <div class="page-body">
+              <div class="hero">
+                <div class="hero-copy">
+                  <span class="hero-eyebrow"><i></i>YOUR CREATIVE STUDIO</span>
+                  <h1>让脑海中的世界，<br /><span>跃然纸上。</span></h1>
+                  <p>一个想法，一段故事，一个全新的世界。<br />和 AI 一起，从第一行文字走向无限可能。</p>
+                  <button type="button" class="hero-cta"><svg class="ic ic-sm"><use href="#i-plus"/></svg>开始新的故事</button>
+                </div>
+                <svg class="hero-art" viewBox="0 0 520 330" fill="none" aria-hidden="true"><use href="#pv-artwork"/></svg>
+                <span class="hero-footnote">A LITTLE SPARK. A WHOLE NEW WORLD.</span>
+              </div>
+
+              <div class="quick-grid">
+                <button type="button" class="quick-card">
+                  <span class="quick-icon"><svg class="ic"><use href="#i-plus"/></svg></span>
+                  <span class="quick-copy"><strong>写下新故事</strong><small>从灵感开始，构建你的世界</small></span>
+                  <svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                <button type="button" class="quick-card">
+                  <span class="quick-icon is-sage"><svg class="ic"><use href="#i-sparkles"/></svg></span>
+                  <span class="quick-copy"><strong>让灵感成画</strong><small>用 AI 将想象变成独特画面</small></span>
+                  <svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                <button type="button" class="quick-card">
+                  <span class="quick-icon is-gold"><svg class="ic"><use href="#i-upload"/></svg></span>
+                  <span class="quick-copy"><strong>继续已有创作</strong><small>导入作品包，续写精彩篇章</small></span>
+                  <svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+              </div>
+
+              <div class="recent-head">
+                <h2>最近的故事<span>3 STORIES</span></h2>
+                <span class="library-count">全部作品 →</span>
+              </div>
+              <div class="recent-grid">
+                <div class="recent-card">
+                  <div class="mini-cover c1"></div>
+                  <div class="recent-copy"><h3>长夜将明</h3><p>雨夜的城市里，一名失眠的抄写员…</p><div class="recent-meta"><span>32 章</span><span>最近编辑 2 小时前</span></div></div>
+                  <span class="recent-open">进入 <svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></span>
+                </div>
+                <div class="recent-card">
+                  <div class="mini-cover c2"></div>
+                  <div class="recent-copy"><h3>雾港来信</h3><p>一封迟到十七年的信，把海港小镇…</p><div class="recent-meta"><span>18 章</span><span>最近编辑 昨天</span></div></div>
+                  <span class="recent-open">进入 <svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></span>
+                </div>
+                <div class="recent-card">
+                  <div class="mini-cover c4"></div>
+                  <div class="recent-copy"><h3>第零号观测站</h3><p>在太阳系边缘，一个被注销的观测站…</p><div class="recent-meta"><span>26 章</span><span>最近编辑 3 天前</span></div></div>
+                  <span class="recent-open">进入 <svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></span>
+                </div>
+                <div class="recent-card">
+                  <div class="mini-cover c3"></div>
+                  <div class="recent-copy"><h3>山海食记</h3><p>游方厨子带着一口旧锅，走过山海…</p><div class="recent-meta"><span>41 章</span><span>最近编辑 5 天前</span></div></div>
+                  <span class="recent-open">进入 <svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Editor -->
+          <div class="panel" data-page="editor" hidden>
+            <div class="ed-topbar">
+              <button type="button" class="ed-back" aria-label="返回工作区"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
+              <div class="ed-crumb"><span>故事工作区</span><svg class="ic"><use href="#i-chevron-right"/></svg><span>长夜将明</span><svg class="ic"><use href="#i-chevron-right"/></svg><b>第三章</b></div>
+              <span class="ed-status"><i></i>已保存 · 12:40</span>
+              <div class="ed-actions">
+                <button type="button" class="btn btn-ghost"><svg class="ic"><use href="#i-clock"/></svg>版本</button>
+                <button type="button" class="btn btn-secondary"><svg class="ic"><use href="#i-save"/></svg>保存</button>
+              </div>
+            </div>
+            <div class="ed-body">
+              <div class="ed-canvas">
+                <span class="chapter-kicker">CHAPTER 03</span>
+                <h1 class="chapter-title">雨夜的访客</h1>
+                <div class="chapter-meta"><span>2,480 字</span><span class="divider"></span><span>第 3 / 32 章</span><span class="divider"></span><span>最后保存 12:40</span></div>
+                <div class="prose">
+                  <p>雨从傍晚开始下，一直没有停。<br />窗外的霓虹被水汽泡得发软，红色和绿色沿着玻璃往下淌，像两封没有寄出的信。</p>
+                  <p class="soft">抄写员把最后一页档案压进抽屉，听见门铃响了三声。不是急促的按法，也不是礼貌的等待——每一声之间，都隔着刚好能让人犹豫的长度。</p>
+                  <p>他没有立刻起身。<mark>桌上那盏旧台灯忽明忽暗，灯罩边缘积着一圈被烤黄的尘。</mark>在这个城市里，深夜来访通常意味着一件事：有人希望你忘记什么。</p>
+                  <div class="quote">“你这里，还收旧信吗？”<br />门外的人这样问。声音很轻，却像一滴水落进很深的井里。</div>
+                  <p>他拉开门。雨的气味先一步涌进来，带着铁锈、旧纸和某种说不清的甜。陌生人没有打伞，肩头湿透，怀里抱着一个用牛皮纸包好的方盒。</p>
+                  <p class="soft">盒子上没有地址，只有一行被雨水晕开的字：<br />“请在长夜结束之前，把它读完。”</p>
+                </div>
+                <div class="ed-progress"><i></i>本章完成度 62%</div>
+              </div>
+
+              <aside class="ai-panel" aria-label="AI 助手示例">
+                <div class="ai-head">
+                  <span class="ai-dot"><svg class="ic ic-sm"><use href="#i-sparkles"/></svg></span>
+                  <strong>AI 助手</strong>
+                  <span class="ai-model">长篇模式 <svg class="ic ic-sm"><use href="#i-chevron-right"/></svg></span>
+                </div>
+                <div class="ai-body">
+                  <div class="ai-msg user"><strong>你</strong>把这一段的雨夜氛围再压一压，保留人物动作，别写成纯景物描写。</div>
+                  <div class="ai-msg"><strong>AI · 情境改写</strong>可以。先收紧三处：一是把“霓虹”换成更具体的<span class="hl">便利店灯箱</span>；二是让雨声参与人物动作，例如钥匙插进锁孔时的停顿；三是把陌生人的台词后移，先写他<span class="hl">鞋底带进来的水痕</span>。</div>
+                  <div class="ai-actions"><button type="button">采用</button><button type="button">重写</button><button type="button">对比</button></div>
+                </div>
+                <div class="ai-composer">
+                  <span>和 AI 一起续写这一章…</span>
+                  <div class="ai-composer-foot"><small>Claude · 长篇创作</small><button type="button" class="ai-send" aria-label="发送"><svg class="ic ic-sm"><use href="#i-send"/></svg></button></div>
+                </div>
+              </aside>
+
+              <div class="ed-toolbar" aria-label="编辑器工具栏">
+                <button type="button" class="tool-btn active" aria-label="AI 助手"><svg class="ic"><use href="#i-message"/></svg></button>
+                <button type="button" class="tool-btn" aria-label="AI 生图"><svg class="ic"><use href="#i-sparkles"/></svg></button>
+                <button type="button" class="tool-btn" aria-label="素材"><svg class="ic"><use href="#i-layers"/></svg></button>
+                <button type="button" class="tool-btn" aria-label="历史版本"><svg class="ic"><use href="#i-clock"/></svg></button>
+                <div class="spacer"></div>
+                <button type="button" class="tool-btn" aria-label="设置"><svg class="ic"><use href="#i-settings"/></svg></button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-preview">
+      <div class="mobile-head">
+        <div>
+          <h3>移动端同源适配</h3>
+          <p>侧栏收起为底部导航，作品卡片改为单列；编辑器保留 AI 底部面板。</p>
+        </div>
+        <span class="pill">375 × 812</span>
+      </div>
+      <div class="mobile-grid">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="m-status"><span>9:41</span><span class="m-sig"><i></i><i></i><i></i></span></div>
+            <div class="m-nav">
+              <span class="m-brand"><span class="m-logo">A</span>ArtVerse<span class="dot">.</span></span>
+              <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+            </div>
+            <div class="m-hero">
+              <span class="hero-eyebrow"><i></i>A UNIVERSE OF STORIES</span>
+              <h4>每一个故事，<br />都是一扇<span>新的门。</span></h4>
+              <p>在文字里相遇，在画面中远行。</p>
+              <svg class="m-art" viewBox="0 0 520 330" fill="none" aria-hidden="true"><use href="#pv-artwork"/></svg>
+            </div>
+            <div class="m-tabs">
+              <button type="button" class="m-tab active">小说 <span class="count">24</span></button>
+              <button type="button" class="m-tab">漫画 <span class="count">12</span></button>
+            </div>
+            <div class="m-list">
+              <div class="m-card">
+                <div class="cover c1"><span class="c-tag">NOVEL</span><span class="c-title">长夜<br />将明</span></div>
+                <div class="m-copy">
+                  <div class="m-card-top"><span class="tag-accent" style="font-size:7px;padding:2px 5px">小说</span><span>11 月 2 日</span></div>
+                  <h5>长夜将明</h5>
+                  <p>雨夜的城市里，一名失眠的抄写员发现了能改写记忆的旧档案。</p>
+                </div>
+              </div>
+              <div class="m-card">
+                <div class="cover c2"><span class="c-tag">NOVEL</span><span class="c-title">雾港<br />来信</span></div>
+                <div class="m-copy">
+                  <div class="m-card-top"><span class="tag-accent" style="font-size:7px;padding:2px 5px">小说</span><span>10 月 28 日</span></div>
+                  <h5>雾港来信</h5>
+                  <p>一封迟到十七年的信，把海港小镇的三代人重新拉回同一场雾里。</p>
+                </div>
+              </div>
+              <div class="m-card">
+                <div class="cover c3"><span class="c-tag">NOVEL</span><span class="c-title">山海<br />食记</span></div>
+                <div class="m-copy">
+                  <div class="m-card-top"><span class="tag-accent" style="font-size:7px;padding:2px 5px">小说</span><span>10 月 20 日</span></div>
+                  <h5>山海食记</h5>
+                  <p>游方厨子带着一口旧锅，走过山海之间的城镇，也尝遍人心的滋味。</p>
+                </div>
+              </div>
+            </div>
+            <div class="m-bottom-nav">
+              <span class="m-nav-item active"><svg class="ic"><use href="#i-globe"/></svg>广场</span>
+              <span class="m-nav-item"><svg class="ic"><use href="#i-book"/></svg>故事</span>
+              <span class="m-nav-item"><svg class="ic"><use href="#i-brush"/></svg>创作</span>
+              <span class="m-nav-item"><svg class="ic"><use href="#i-user"/></svg>我的</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="m-status"><span>9:41</span><span class="m-sig"><i></i><i></i><i></i></span></div>
+            <div class="m-ed-top">
+              <svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+              <strong>雨夜的访客</strong>
+              <span class="m-save"><i></i>已保存</span>
+            </div>
+            <div class="m-ed-body">
+              <span class="chapter-kicker">CHAPTER 03</span>
+              <h4>雨夜的访客</h4>
+              <div class="m-meta">2,480 字 · 第 3 / 32 章</div>
+              <div class="m-prose">
+                <p>雨从傍晚开始下，一直没有停。窗外的霓虹被水汽泡得发软，红色和绿色沿着玻璃往下淌，像两封没有寄出的信。</p>
+                <p>抄写员把最后一页档案压进抽屉，听见门铃响了三声。不是急促的按法，也不是礼貌的等待——每一声之间，都隔着刚好能让人犹豫的长度。</p>
+                <p><mark>桌上那盏旧台灯忽明忽暗，灯罩边缘积着一圈被烤黄的尘。</mark>在这个城市里，深夜来访通常意味着一件事：有人希望你忘记什么。</p>
+              </div>
+            </div>
+            <div class="m-sheet">
+              <div class="m-sheet-head"><span class="ai-dot"><svg class="ic"><use href="#i-sparkles"/></svg></span>AI 建议</div>
+              <p>门铃的三声可以更具体：第一声时他停下笔，第二声时灯闪了一下，第三声之后才起身。</p>
+            </div>
+            <div class="m-ed-tools">
+              <svg class="ic active" aria-hidden="true"><use href="#i-message"/></svg>
+              <svg class="ic" aria-hidden="true"><use href="#i-sparkles"/></svg>
+              <svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg>
+              <svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>
+              <button type="button" class="send" aria-label="发送"><svg class="ic"><use href="#i-send"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 Components -->
+  <section class="pv-section" id="components">
+    <div class="section-head">
+      <span class="eyebrow">03 / Components &amp; States</span>
+      <h2>控件、状态与浮层的统一表达</h2>
+      <p>所有控件沿用现有的语义 token，只更新配色与描边。主按钮在暗色下使用深色字，亮色下使用白字，保证对比度；输入框聚焦只改变描边并叠一圈低透明度光晕。</p>
+    </div>
+
+    <div class="comp-grid">
+      <article class="comp-card">
+        <div class="comp-head"><h4>按钮 / Buttons</h4><span>Action</span></div>
+        <div class="comp-row">
+          <button type="button" class="btn btn-primary">开始创作</button>
+          <button type="button" class="btn btn-secondary">导入作品</button>
+          <button type="button" class="btn btn-ghost">取消</button>
+          <button type="button" class="btn btn-danger">删除</button>
+          <button type="button" class="btn btn-primary" disabled>不可用</button>
+        </div>
+        <div class="comp-row">
+          <button type="button" class="btn btn-primary" style="min-height:34px;font-size:11px"><svg class="ic ic-sm"><use href="#i-plus"/></svg>新建小说</button>
+          <button type="button" class="btn btn-secondary" style="min-height:34px;font-size:11px"><svg class="ic ic-sm"><use href="#i-upload"/></svg>导入</button>
+          <span class="pill">主按钮文字：暗色深字 / 亮色白字</span>
+        </div>
+      </article>
+
+      <article class="comp-card">
+        <div class="comp-head"><h4>输入 / Inputs</h4><span>Field</span></div>
+        <div class="comp-row">
+          <div style="width:100%">
+            <label class="comp-label" for="pv-input-default">默认</label>
+            <input id="pv-input-default" class="search-input" style="padding-left:12px" placeholder="输入小说名称" />
+          </div>
+          <div style="width:100%">
+            <label class="comp-label" for="pv-input-focus">聚焦</label>
+            <input id="pv-input-focus" class="search-input" style="padding-left:12px;border-color:var(--accent);box-shadow:var(--ring)" value="长夜将明" />
+          </div>
+          <div style="width:100%">
+            <label class="comp-label" for="pv-input-error">错误</label>
+            <input id="pv-input-error" class="search-input" style="padding-left:12px;border-color:var(--danger)" placeholder="该邮箱已被注册" aria-invalid="true" />
+            <p style="margin:6px 0 0;font-size:9px;color:var(--danger)">请使用另一个邮箱，或直接登录。</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="comp-card">
+        <div class="comp-head"><h4>标签 / Chips</h4><span>Semantics</span></div>
+        <div class="comp-row">
+          <span class="chip accent"><svg class="ic ic-sm"><use href="#i-sparkles"/></svg>生成中</span>
+          <span class="chip success"><svg class="ic ic-sm"><use href="#i-check"/></svg>已保存</span>
+          <span class="chip warning"><svg class="ic ic-sm"><use href="#i-clock"/></svg>待审核</span>
+          <span class="chip danger"><svg class="ic ic-sm"><use href="#i-x"/></svg>失败</span>
+          <span class="chip info">版本 v3</span>
+        </div>
+        <div class="comp-row">
+          <span class="chip">小说</span>
+          <span class="chip">32 章</span>
+          <span class="chip">128,400 字</span>
+          <span class="chip accent">编辑中</span>
+        </div>
+        <div class="comp-row">
+          <span class="comp-label">状态色板</span>
+        </div>
+        <div class="status-list">
+          <div class="status-line"><i style="background:var(--success)"></i>成功 / 已保存<code>success</code></div>
+          <div class="status-line"><i style="background:var(--warning)"></i>等待处理<code>warning</code></div>
+          <div class="status-line"><i style="background:var(--danger)"></i>失败 / 删除<code>danger</code></div>
+          <div class="status-line"><i style="background:var(--info)"></i>信息 / 次要强调<code>info</code></div>
+        </div>
+      </article>
+
+      <article class="comp-card">
+        <div class="comp-head"><h4>反馈 / Feedback</h4><span>Feedback</span></div>
+        <div class="toast success"><span class="dot"><svg class="ic ic-sm"><use href="#i-check"/></svg></span>作品已保存，新版本已生成。</div>
+        <div class="toast error"><span class="dot"><svg class="ic ic-sm"><use href="#i-x"/></svg></span>连接超时，请检查网络后重试。</div>
+        <div class="comp-row" style="margin-top:14px">
+          <div class="empty-mini" style="width:100%">
+            <span class="e-icon"><svg class="ic"><use href="#i-search"/></svg></span>
+            <p>没有找到符合条件的作品，换个关键词试试。</p>
+            <button type="button" class="btn btn-secondary">清除搜索</button>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <div class="modal-stage">
+      <div class="modal-watermark" aria-hidden="true">A</div>
+      <span class="modal-stage-note">AUTHENTICATION / MODAL</span>
+      <div class="login-card" role="dialog" aria-modal="true" aria-labelledby="pv-login-title">
+        <div class="login-head">
+          <div>
+            <h3 id="pv-login-title">欢迎回来</h3>
+            <p>登录后继续你的创作</p>
+          </div>
+          <button type="button" class="login-close" aria-label="关闭登录"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="login-tabs">
+          <button type="button" class="login-tab active">密码登录</button>
+          <button type="button" class="login-tab">邮箱验证码</button>
+        </div>
+        <div class="login-notice"><svg class="ic ic-sm"><use href="#i-sparkles"/></svg>请先登录后再使用该功能</div>
+        <div class="field">
+          <label>邮箱</label>
+          <div class="input focus"><span>writer@artverse.app</span><i class="caret"></i></div>
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <div class="input"><span class="muted">输入密码</span><span class="eye">显示</span></div>
+        </div>
+        <button type="button" class="btn btn-primary login-submit">登录</button>
+        <p class="login-foot">登录即表示同意 <a href="#components">服务条款</a> 与 <a href="#components">隐私政策</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 Scope -->
+  <section class="pv-section" id="scope">
+    <div class="section-head">
+      <span class="eyebrow">04 / Implementation</span>
+      <h2>审核通过后的改动范围</h2>
+      <p>本次只改配色与视觉细节，不动页面结构、路由与业务逻辑。现有主题切换能力（跟随系统 / 亮色 / 暗色）直接复用，默认仍为深色兜底。</p>
+    </div>
+
+    <div class="scope-grid">
+      <article class="scope-card">
+        <h3>将修改的文件</h3>
+        <ol class="scope-list">
+          <li><span class="scope-num">1</span><span><code>frontend/src/index.css</code> 更新 <code>@theme</code> 与 <code>:root</code>、<code>[data-mode="light"]</code> 的全部语义变量，调整环境光、滚动条、玻璃层与阴影。</span></li>
+          <li><span class="scope-num">2</span><span><code>frontend/src/studio.css</code> 覆盖当前棕绿主题：侧栏、主视觉、CTA、快捷入口、页脚与移动端断点。</span></li>
+          <li><span class="scope-num">3</span><span><code>frontend/src/profile.css</code> 同步账号菜单、个人页按钮与面板的背景和描边。</span></li>
+          <li><span class="scope-num">4</span><span><code>workspace.css / ai-composer.css / knowledge.css</code> 检查并清理残留的暖色硬编码，统一为语义变量。</span></li>
+          <li><span class="scope-num">5</span><span><code>StudioArtwork.tsx</code> 将山景、拱门与纸页插画改为「石墨灰 + 暖米白」的新配色，亮暗模式共用。</span></li>
+          <li><span class="scope-num">6</span><span><code>LoginPage / ImageEditor / MangaPanel</code> 中少量硬编码颜色改为 token；最后执行构建、ESLint 与浏览器截图回归。</span></li>
+        </ol>
+      </article>
+
+      <article class="scope-card">
+        <h3>需要你确认的点</h3>
+        <div class="check-list">
+          <div class="check-row"><span class="check-box" aria-hidden="true"></span><span><strong>配色方向</strong><br />曜石黑 + 纸白，去掉棕绿与米黄底。</span></div>
+          <div class="check-row"><span class="check-box" aria-hidden="true"></span><span><strong>强调色</strong><br />彻底去掉蓝色：暗色用暖白 #E9E7E1、亮色用近黑 #1A1A1C，高亮与选中只用中性明度。</span></div>
+          <div class="check-row"><span class="check-box" aria-hidden="true"></span><span><strong>主视觉</strong><br />Hero 在亮色模式下仍保持深色面板，突出插画与品牌感。</span></div>
+          <div class="check-row"><span class="check-box" aria-hidden="true"></span><span><strong>默认模式</strong><br />保留「跟随系统 + 深色兜底」，不改用户已保存的偏好。</span></div>
+        </div>
+        <div class="scope-note">回复「通过」即可进入实现；如需调整，请指出具体页面或色值（例如“亮色背景再冷一点”“强调色更偏红”），我会先更新预览再改动源码。</div>
+      </article>
+    </div>
+
+    <p class="preview-foot"><b>说明：</b>本页为静态高保真预览，未修改 <code>frontend</code> 源码，也未写入任何业务数据。预览中的文案（故事名、章节、账号）均为示例内容，仅用于评估配色与层级关系。</p>
+  </section>
+
+</main>
+
+<script>
+  (function () {
+    const root = document.documentElement;
+    const themeButtons = Array.from(document.querySelectorAll('[data-theme-btn]'));
+    const switches = Array.from(document.querySelectorAll('.switch'));
+    const pageButtons = Array.from(document.querySelectorAll('[data-page-btn]'));
+    const panels = Array.from(document.querySelectorAll('[data-page]'));
+    const navItems = Array.from(document.querySelectorAll('[data-nav]'));
+    const browserUrl = document.getElementById('browser-url');
+    const themeLabel = document.querySelector('.sb-theme span');
+    const themeIcon = document.querySelector('.sb-theme .ic use');
+
+    const urls = {
+      square: 'artverse / #/square?format=novel',
+      workspace: 'artverse / #/workspace',
+      editor: 'artverse / #/editor/1024'
+    };
+
+    function setTheme(theme) {
+      root.setAttribute('data-theme', theme);
+      themeButtons.forEach(button => {
+        const active = button.dataset.themeBtn === theme;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      switches.forEach(item => item.setAttribute('aria-checked', String(theme === 'dark')));
+      if (themeLabel) themeLabel.textContent = theme === 'dark' ? '深色模式' : '亮色模式';
+      if (themeIcon) themeIcon.setAttribute('href', theme === 'dark' ? '#i-moon' : '#i-sun');
+    }
+
+    themeButtons.forEach(button => {
+      button.addEventListener('click', () => setTheme(button.dataset.themeBtn));
+    });
+
+    switches.forEach(item => {
+      item.addEventListener('click', () => setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+    });
+
+    function setPage(page) {
+      pageButtons.forEach(button => button.classList.toggle('active', button.dataset.pageBtn === page));
+      panels.forEach(panel => { panel.hidden = panel.dataset.page !== page; });
+      navItems.forEach(item => item.classList.toggle('is-active', item.dataset.nav === page));
+      if (browserUrl) browserUrl.textContent = urls[page] || urls.square;
+    }
+
+    pageButtons.forEach(button => {
+      button.addEventListener('click', () => setPage(button.dataset.pageBtn));
+    });
+
+    // Stop anchor jumps inside mock forms / buttons from scrolling the page.
+    document.querySelectorAll('.browser form, .browser button, .login-card button, .comp-card button').forEach(item => {
+      if (item.tagName === 'BUTTON' && item.getAttribute('type') === 'submit') return;
+      item.addEventListener('click', event => event.preventDefault());
+    });
+
+    const params = new URLSearchParams(location.search);
+    const initialTheme = params.get('theme') === 'light' ? 'light' : 'dark';
+    const initialPage = ['square', 'workspace', 'editor'].includes(params.get('page')) ? params.get('page') : 'square';
+    setTheme(initialTheme);
+    setPage(initialPage);
+  })();
+</script>
+</body>
+</html>

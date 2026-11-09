@@ -85,7 +85,7 @@ import static org.mockito.Mockito.*;
         MangaContextTools.class, MangaChapterContextReader.class, MangaToolSupport.class,
         StoryboardArtifactIntegrationTest.Config.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class StoryboardArtifactIntegrationTest {
     @Container static final GenericContainer<?> redis = new GenericContainer<>("redis:7-alpine")
             .withExposedPorts(6379).withImagePullPolicy(ignored -> false);

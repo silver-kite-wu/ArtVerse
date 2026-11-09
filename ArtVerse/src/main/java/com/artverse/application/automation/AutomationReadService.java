@@ -147,7 +147,7 @@ public class AutomationReadService {
         requireDefinition(context,definition);
         return new Definition(definition.name(),definition.taskType(),definition.executorKey(),definition.instruction(),definition.schedule(),definition.limits(),
                 new Targets(context.storyId(),inputs.chapterIds(definition.payload(),definition.executorKey()),definition.payload().path("inputPolicy").asText("RESOLVE_AT_RUN")),
-                definition.misfirePolicy(),definition.overlapPolicy(),definition.maxLatenessSeconds());
+                definition.misfirePolicy(),definition.overlapPolicy(),definition.maxLatenessSeconds(),definition.permissionMode());
     }
     private ModelDisplay model(MangaAgentRuntimeContext context,AutomationDefinition definition) {
         Long id=definition.payload().hasNonNull("modelConfigId")?definition.payload().path("modelConfigId").asLong():null;

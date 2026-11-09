@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /** Real migrations/transactions and native Model/Harness. Never uses the user's database or a provider. */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AgentBudgetSqlIntegrationTest {
     @Container static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
             DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));

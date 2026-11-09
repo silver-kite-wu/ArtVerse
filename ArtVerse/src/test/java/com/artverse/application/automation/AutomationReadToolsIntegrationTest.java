@@ -43,7 +43,7 @@ import static org.mockito.Mockito.*;
 @Import({AgentToolEffectService.class,AutomationStore.class,AutomationService.class,AutomationReadService.class,AutomationReadTokens.class,
         AutomationScheduleCalculator.class,AutomationReadToolsIntegrationTest.Config.class})
 @Transactional(propagation=Propagation.NOT_SUPPORTED)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class AutomationReadToolsIntegrationTest {
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path workspace;
     @Container static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>(DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));

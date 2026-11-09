@@ -1,6 +1,7 @@
 package com.artverse.api;
 
 import com.artverse.api.dto.AuthDtos.*;
+import com.artverse.application.AiPermissionService;
 import com.artverse.application.ApiKeyService;
 import com.artverse.application.ApiKeyService.ProviderInfo;
 import com.artverse.application.CurrentUserService;
@@ -30,6 +31,7 @@ public class UserController {
 
     private final CurrentUserService currentUserService;
     private final ApiKeyService apiKeyService;
+    private final AiPermissionService aiPermissionService;
     private final UserProfileService userProfileService;
     private final ObjectStorageService objectStorageService;
     private final AuthCookieService authCookieService;
@@ -86,6 +88,20 @@ public class UserController {
                 request.newPassword(), request.confirmPassword());
         authCookieService.clearRefreshCookie(response);
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+    }
+
+    @GetMapping("/ai-assistant/permission")
+    public ResponseEntity<Map<String, String>> aiPermission() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(Map.of("permission_mode", aiPermissionService.get(currentUser().getId())));
+    }
+
+    @PutMapping("/ai-assistant/permission")
+    @RateLimit(windowSeconds = 60, maxRequests = 30, key = "ai-permission-update")
+    public ResponseEntity<Map<String, String>> updateAiPermission(@RequestBody Map<String, Object> body) {
+        String saved = aiPermissionService.save(currentUser().getId(), str(body, "permission_mode"));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(Map.of("permission_mode", saved));
     }
 
     @GetMapping("/provider-configs")

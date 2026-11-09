@@ -9,7 +9,6 @@ import {
   Compass,
   Image as ImageIcon,
   LibraryBig,
-  Loader2,
   Search,
   Settings2,
   Sparkles,
@@ -29,6 +28,7 @@ import {
 } from '../api';
 import { useTheme } from '../hooks/useTheme';
 import Switch from '../ui/Switch';
+import Skeleton from '../ui/Skeleton';
 
 const PAGE_SIZE = 12;
 
@@ -319,9 +319,10 @@ function SquareList({ route }: { route: Extract<SquareLocation, { kind: 'list' }
           </div>
 
           {loading ? (
-            <div className="studio-story-grid">
+            <div className="studio-story-grid" role="status" aria-busy="true" aria-label="正在加载作品列表">
+              <span className="sr-only">正在加载作品列表…</span>
               {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="h-48 rounded-2xl border border-border bg-bg-surface/50 shimmer-bg" />
+                <StoryCardSkeleton key={index} />
               ))}
             </div>
           ) : error ? (
@@ -389,6 +390,33 @@ function StoryCard({ story }: { story: SquareStory }) {
         </div>
       </a>
     </article>
+  );
+}
+
+function StoryCardSkeleton() {
+  return (
+    <div className="studio-story-card overflow-hidden rounded-xl border border-border bg-bg-surface">
+      <div className="flex min-h-48 w-full gap-4 p-4">
+        <Skeleton className="h-40 w-28 shrink-0 rounded-lg" />
+        <div className="flex min-w-0 flex-1 flex-col py-0.5">
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-6 w-12 rounded-md" />
+            <Skeleton className="h-3 w-10 rounded" />
+          </div>
+          <Skeleton className="mt-3 h-5 w-3/4 rounded-md" />
+          <div className="mt-2 space-y-2">
+            <Skeleton className="h-3 w-full rounded" />
+            <Skeleton className="h-3 w-11/12 rounded" />
+            <Skeleton className="h-3 w-2/3 rounded" />
+          </div>
+          <div className="mt-auto flex items-center gap-3 pt-3">
+            <Skeleton className="h-3 w-10 rounded" />
+            <Skeleton className="h-3 w-12 rounded" />
+            <Skeleton className="ml-auto h-3 w-10 rounded" />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -517,12 +545,7 @@ function StoryView({
   }, [route.format, route.storyId]);
 
   if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <Loader2 className="animate-spin text-accent" />
-        <span className="ml-2 text-sm text-text-secondary">正在打开作品</span>
-      </div>
-    );
+    return <SquareDetailSkeleton />;
   }
 
   if (!detail) {
@@ -573,6 +596,70 @@ function StoryView({
   };
 
   return <Reader key={`${detail.id}:${detail.format}`} detail={detail} chapterId={current.id} onBack={backToDetail} />;
+}
+
+function SquareDetailSkeleton() {
+  return (
+    <main
+      className="fanqie-detail-shell flex min-h-0 flex-1 overflow-y-auto"
+      role="status"
+      aria-busy="true"
+      aria-label="正在打开作品"
+    >
+      <span className="sr-only">正在打开作品…</span>
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <Skeleton className="mb-5 h-5 w-20 rounded-md" />
+        <section className="fanqie-paper-card overflow-hidden">
+          <div className="grid gap-8 border-b border-border/80 px-5 py-6 sm:px-8 sm:py-8 xl:grid-cols-[200px_minmax(0,1fr)_240px]">
+            <Skeleton className="h-[240px] w-[172px] rounded-[22px] sm:h-[280px] sm:w-[198px]" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Skeleton className="h-6 w-12 rounded-full" />
+                <Skeleton className="h-6 w-14 rounded-full" />
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+              <Skeleton className="mt-4 h-10 w-3/4 rounded-lg sm:h-12" />
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className="h-[74px] rounded-2xl" />
+                ))}
+              </div>
+              <Skeleton className="mt-5 h-[92px] rounded-2xl" />
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Skeleton className="h-11 w-32 rounded-xl" />
+                <Skeleton className="h-11 w-28 rounded-xl" />
+              </div>
+            </div>
+            <div className="hidden space-y-3 xl:block">
+              <Skeleton className="h-40 rounded-2xl" />
+              <Skeleton className="h-24 rounded-2xl" />
+            </div>
+          </div>
+          <div className="px-5 py-6 sm:px-8 sm:py-7">
+            <Skeleton className="h-6 w-24 rounded-md" />
+            <div className="mt-5 space-y-3">
+              <Skeleton className="h-4 w-full rounded" />
+              <Skeleton className="h-4 w-11/12 rounded" />
+              <Skeleton className="h-4 w-2/3 rounded" />
+            </div>
+          </div>
+        </section>
+        <section className="fanqie-paper-card mt-6 overflow-hidden">
+          <div className="border-b border-border/80 px-5 py-6 sm:px-8">
+            <Skeleton className="h-6 w-28 rounded-md" />
+          </div>
+          <div className="grid gap-x-8 px-5 pb-3 pt-2 sm:px-8 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="space-y-2 border-b border-border/75 py-4">
+                <Skeleton className="h-3 w-16 rounded" />
+                <Skeleton className="h-4 w-3/4 rounded" />
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
 }
 
 function Detail({

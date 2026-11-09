@@ -228,12 +228,12 @@ public class AutomationService {
     private AutomationDefinition modelDefinition(MangaAgentRuntimeContext context,AutomationDefinition definition) {
         if(definition==null||definition.payload()==null||"IMAGE_GEN".equals(definition.executorKey()))throw bad("对话计划只支持当前作品的 Agent 与章节生图任务");
         return new AutomationDefinition(definition.name(),definition.taskType(),definition.executorKey(),definition.instruction(),definition.schedule(),definition.payload(),definition.limits(),
-                definition.misfirePolicy(),definition.overlapPolicy(),definition.maxLatenessSeconds(),null,"CONVERSATION",context.conversationId());
+                definition.misfirePolicy(),definition.overlapPolicy(),definition.maxLatenessSeconds(),null,"CONVERSATION",context.conversationId(),definition.permissionMode());
     }
     private AutomationDefinition commandInput(AutomationDefinition definition,Long version) {
         var payload=definition.payload().deepCopy(); if(payload.isObject())((com.fasterxml.jackson.databind.node.ObjectNode)payload).remove("chapterSnapshots");
         return new AutomationDefinition(definition.name(),definition.taskType(),definition.executorKey(),definition.instruction(),definition.schedule(),payload,definition.limits(),
-                definition.misfirePolicy(),definition.overlapPolicy(),definition.maxLatenessSeconds(),version,definition.origin(),definition.sourceConversationId());
+                definition.misfirePolicy(),definition.overlapPolicy(),definition.maxLatenessSeconds(),version,definition.origin(),definition.sourceConversationId(),definition.permissionMode());
     }
     private void requireStoryScope(Long story,long actor,AutomationDefinition definition) {
         if(story==null||definition==null||definition.payload()==null||"IMAGE_GEN".equals(definition.executorKey()))throw bad("计划缺少当前作品范围");
@@ -693,7 +693,7 @@ public class AutomationService {
         if(!Set.of("RUN_LATEST","SKIP").contains(misfire)||!"SKIP".equals(Objects.toString(input.overlapPolicy(),"SKIP")))throw bad("不支持此补跑或重叠策略");
         if(input.maxLatenessSeconds()!=null&&(input.maxLatenessSeconds()<0||input.maxLatenessSeconds()>604800))throw bad("最大延迟必须为 0 至 604800 秒");
         var normalized=new AutomationDefinition(name,taskType,input.executorKey(),instruction,schedules.normalize(input.schedule()),input.payload(),limits,misfire,"SKIP",input.maxLatenessSeconds(),null,
-                Set.of("TASK_CENTER","CHAPTER","IMAGE_GEN","CONVERSATION").contains(Objects.toString(input.origin(),""))?input.origin():"TASK_CENTER",input.sourceConversationId());
+                Set.of("TASK_CENTER","CHAPTER","IMAGE_GEN","CONVERSATION").contains(Objects.toString(input.origin(),""))?input.origin():"TASK_CENTER",input.sourceConversationId(),input.permissionMode());
         return inputs.validateAndNormalize(userId,normalized);
     }
     private int bound(Integer value,int fallback,int min,int max) { int actual=value==null?fallback:value;if(actual<min||actual>max)throw bad("任务执行上限超出允许范围");return actual; }

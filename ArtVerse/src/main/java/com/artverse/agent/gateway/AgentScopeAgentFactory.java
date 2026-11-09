@@ -4,10 +4,12 @@ import com.artverse.agent.AgentModelSpec;
 import com.artverse.agent.AgentRunRequest;
 import com.artverse.agent.AgentTaskType;
 import com.artverse.agent.AgentWorkspaceService;
+import com.artverse.agent.AiPermissionMode;
 import com.artverse.agent.ArtVerseSkillRepository;
 import com.artverse.agent.BusinessSkillSelection;
 import com.artverse.agent.MangaAgentPromptProvider;
 import com.artverse.agent.PostgresAgentWorkspaceStore;
+import com.artverse.application.AiPermissionService;
 import com.artverse.application.ArtVerseSkillRegistry;
 import com.artverse.application.MangaAgentRunService;
 import com.artverse.common.BusinessException;
@@ -48,10 +50,16 @@ public class AgentScopeAgentFactory {
 
     private final Map<HarnessAgent, ReviewExpertSupport.Scope> reviewScopes = new ConcurrentHashMap<>();
     private ReviewExpertSupport reviewExpertSupport;
+    private AiPermissionService aiPermissions;
 
     @org.springframework.beans.factory.annotation.Autowired
     public void setReviewExpertSupport(ReviewExpertSupport support) {
         this.reviewExpertSupport = java.util.Objects.requireNonNull(support);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setAiPermissions(AiPermissionService permissions) {
+        this.aiPermissions = java.util.Objects.requireNonNull(permissions);
     }
 
     private final CompactionConfig compactionConfig;
@@ -149,14 +157,17 @@ public class AgentScopeAgentFactory {
                 || (request.businessSkillSelection() == null && selection.isEmpty()) ? request : new AgentRunRequest(request.userId(), request.storyId(), request.chapterId(), request.taskType(),
                 request.messages(), request.variables(), request.modelSpec(), request.llmApiKey(), request.requestId(),
                 request.conversationId(), selection);
+        AiPermissionMode permissionMode = identity == null ? resolvePermissionMode(request) : AiPermissionMode.FULL;
+        String systemPrompt = identity == null ? Boolean.TRUE.equals(request.variables().get("review_completed"))
+                ? promptProvider.reviewSummaryPrompt() : promptProvider.promptFor(request.taskType())
+                : com.artverse.agent.MangaReviewSubagentDeclarations.all().stream()
+                .filter(declaration -> identity.expertId().equals(declaration.getName())).findFirst()
+                .orElseThrow(() -> new BusinessException(403, "未知审查专家")).getInlineAgentsBody();
+        if (identity == null) systemPrompt = systemPrompt + permissionMode.promptNote();
         HarnessAgent.Builder builder = HarnessAgent.builder()
                 // Per-run toolkit and permissions; durable conversation state remains in AgentStateStore.
                 .name("artverse-" + request.taskType().sessionSuffix())
-                .sysPrompt(identity == null ? Boolean.TRUE.equals(request.variables().get("review_completed"))
-                        ? promptProvider.reviewSummaryPrompt() : promptProvider.promptFor(request.taskType())
-                        : com.artverse.agent.MangaReviewSubagentDeclarations.all().stream()
-                        .filter(declaration -> identity.expertId().equals(declaration.getName())).findFirst()
-                        .orElseThrow(() -> new BusinessException(403, "未知审查专家")).getInlineAgentsBody())
+                .sysPrompt(systemPrompt)
                 .model(toolBoundary.budgetedModel(effectiveModel, budgetRequest, properties))
                 .workspace(requestWorkspace)
                 .abstractFilesystem(new RemoteFilesystem(
@@ -208,6 +219,7 @@ public class AgentScopeAgentFactory {
             expertScope.install(toolkit);
             builder.middleware(expertScope.middleware());
         }
+        if (identity == null) applyPermissionMode(toolkit, permissionMode);
         if ((!toolkit.getToolNames().isEmpty() || !selection.isEmpty()) && request.modelSpec() != null
                 && !request.modelSpec().capabilities().toolCalling())
             throw new BusinessException(400, "当前模型尚未声明工具调用能力，请配置服务端 model-capabilities");
@@ -245,6 +257,21 @@ public class AgentScopeAgentFactory {
         } catch (RuntimeException error) {
             agent.close();
             throw error;
+        }
+    }
+
+    private AiPermissionMode resolvePermissionMode(AgentRunRequest request) {
+        if (aiPermissions == null) return AiPermissionMode.FULL;
+        AiPermissionMode mode = aiPermissions.resolve(request);
+        return mode == null ? AiPermissionMode.FULL : mode;
+    }
+
+    /** 权限模式只裁剪业务工具；框架级 DONT_ASK 与产品审核流程保持不变。 */
+    private static void applyPermissionMode(Toolkit toolkit, AiPermissionMode mode) {
+        if (mode == AiPermissionMode.FULL) return;
+        for (String name : java.util.List.copyOf(toolkit.getToolNames())) {
+            var tool = toolkit.getTool(name);
+            if (tool != null && !mode.allows(name, tool.isReadOnly())) toolkit.removeTool(name);
         }
     }
 

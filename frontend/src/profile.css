@@ -1,4 +1,4 @@
-.account-avatar { display: inline-flex; width: 40px; height: 40px; flex: 0 0 auto; align-items: center; justify-content: center; overflow: hidden; border-radius: 12px; background: #365747; color: #faf7ed; font-size: 17px; font-weight: 600; }
+.account-avatar { display: inline-flex; width: 40px; height: 40px; flex: 0 0 auto; align-items: center; justify-content: center; overflow: hidden; border-radius: 12px; background: var(--color-accent); color: var(--color-accent-ink); font-size: 17px; font-weight: 600; }
 .account-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .account-avatar.is-large { width: 76px; height: 76px; border-radius: 21px; font-size: 30px; }
 .account-trigger { display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 7px; border: 1px solid transparent; border-radius: 13px; text-align: left; transition: background .2s, border-color .2s; }
@@ -54,14 +54,14 @@
 .profile-avatar-editor p { margin-top: 10px; font-size: 10px; color: var(--color-text-muted); }
 .profile-page label { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 500; }
 .profile-page input:not([type='file']) { width: 100%; min-width: 0; height: 40px; border: 1px solid var(--color-border-strong); border-radius: 7px; padding: 0 12px; font-size: 12px; color: var(--color-text-primary); background: var(--color-bg-surface); outline: none; }
-.profile-page input:focus { border-color: var(--color-accent-secondary); box-shadow: 0 0 0 3px var(--studio-note-bg); }
+.profile-page input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent); }
 .profile-page input[readonly] { background: var(--color-bg-raised); color: var(--color-text-secondary); }
 .profile-hint { margin: 9px 0 18px; font-size: 10px; color: var(--color-text-muted); line-height: 1.9; }
 .profile-readonly { margin-left: 4px; font-size: 9px; color: var(--color-text-muted); }
 .profile-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 13px; padding-top: 20px; margin-top: auto; }
 .profile-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 7px; min-height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; font-size: 11px; font-weight: 500; cursor: pointer; transition: background .2s; }
-.profile-button.primary { background: #a75134; color: #fffaf5; }
-.profile-button.primary:hover { background: #8e4027; }
+.profile-button.primary { background: var(--color-accent); color: var(--color-accent-ink); }
+.profile-button.primary:hover { background: var(--color-accent-hover); }
 .profile-button.secondary { border-color: var(--color-border-strong); background: var(--color-bg-surface); color: var(--color-text-secondary); }
 .profile-button.secondary:hover { background: var(--color-bg-raised); }
 .profile-page button:disabled, .account-popover button:disabled { opacity: .45; cursor: default; }
